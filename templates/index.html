@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="text-center py-16 bg-white rounded-lg shadow-lg">
+    <h2 class="text-5xl font-extrabold text-gray-900 mb-6">Bem-vindo ao SIGA!</h2>
+    <p class="text-xl text-gray-700 mb-8 max-w-2xl mx-auto">
+        Seu Sistema Integrado de Gestão Analítica para consultas e relatórios do ERP.
+        Obtenha insights valiosos dos seus dados de forma rápida e eficiente.
+    </p>
+    <div class="space-y-4 md:space-y-0 md:space-x-6 flex flex-col md:flex-row justify-center">
+        <a href="{{ url_for('relatorios.espelho_notas') }}"
+           class="inline-flex items-center justify-center px-8 py-4 border border-transparent text-lg font-medium rounded-full shadow-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300 ease-in-out transform hover:scale-105">
+            <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            Ver Relatórios
+        </a>
+        <a href="#"
+           class="inline-flex items-center justify-center px-8 py-4 border border-blue-600 text-lg font-medium rounded-full shadow-lg text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300 ease-in-out transform hover:scale-105">
+            <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Sobre o SIGA
+        </a>
+    </div>
+</div>
+{% endblock %}

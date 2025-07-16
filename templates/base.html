@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIGA - Sistema Integrado de Gestão Analítica</title>
+    <!-- Carrega o Tailwind CSS via CDN para estilização rápida e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Configuração da fonte Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+    <header class="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-4 shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-3xl font-bold">
+                <a href="{{ url_for('index') }}" class="hover:text-blue-200 transition duration-300">
+                    SIGA
+                </a>
+            </h1>
+            <nav>
+                <ul class="flex space-x-6">
+                    <li><a href="{{ url_for('index') }}" class="hover:text-blue-200 transition duration-300 text-lg font-medium">Início</a></li>
+                    <li><a href="{{ url_for('relatorios.espelho_notas') }}" class="hover:text-blue-200 transition duration-300 text-lg font-medium">Espelho de Notas</a></li>
+                    <!-- Adicionar mais itens de menu aqui conforme novos relatórios forem criados -->
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-6 flex-grow">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-gray-800 text-white p-4 text-center mt-auto shadow-inner">
+        <div class="container mx-auto">
+            <p>&copy; {{ datetime.now().year }} SIGA - Sistema Integrado de Gestão Analítica. Todos os direitos reservados.</p>
+        </div>
+    </footer>
+
+    <!-- Script para ícones Lucide React (apenas para referência, não usado diretamente em HTML puro) -->
+    <!-- <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide-react.js"></script> -->
+    <script>
+        // Script JS geral, se necessário
+    </script>
+</body>
+</html>
