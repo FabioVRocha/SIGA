@@ -1,9 +1,11 @@
 # siga_erp/app.py
 
-from flask import Flask, render_template, redirect, url_for
+from flask import Flask, render_template, redirect, url_for, g
 from config import Config
-from routes.relatorios import relatorios_bp # Importa o Blueprint de relatórios
-from datetime import datetime # Importa o módulo datetime
+from routes.relatorios import relatorios_bp
+from routes.configuracoes import configuracoes_bp # Importa o Blueprint de configurações
+from database import DBManager # Importa a classe DBManager
+from datetime import datetime
 
 # Inicializa o aplicativo Flask
 app = Flask(__name__)
@@ -11,8 +13,15 @@ app = Flask(__name__)
 # Carrega as configurações da classe Config
 app.config.from_object(Config)
 
+# Inicializa os DBManagers para ambos os bancos de dados
+# Eles serão acessados via current_app.db_erp e current_app.db_siga
+app.db_erp = DBManager(app.config['ERP_DATABASE_URI'])
+app.db_siga = DBManager(app.config['SIGA_DATABASE_URI'])
+
+
 # Registra os Blueprints
 app.register_blueprint(relatorios_bp, url_prefix='/relatorios')
+app.register_blueprint(configuracoes_bp, url_prefix='/configuracoes') # Registra o Blueprint de configurações
 
 @app.route('/')
 def index():
@@ -35,4 +44,3 @@ if __name__ == '__main__':
     # Executa o aplicativo Flask
     # Em produção, use um servidor WSGI como Gunicorn ou uWSGI
     app.run(debug=True)
-
