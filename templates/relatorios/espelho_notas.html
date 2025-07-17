@@ -24,18 +24,28 @@
                    placeholder="Digite o nome..."
                    class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
-        <!-- Novos campos de filtro para opera e transa -->
+        {# CAMPO DE FILTRO: Lote de Carga #}
         <div>
-            <label for="descricao_operacao" class="block text-sm font-medium text-gray-700 mb-2">Descrição da Operação:</label>
-            <input type="text" id="descricao_operacao" name="descricao_operacao" value="{{ descricao_operacao }}"
-                   placeholder="Digite a descrição da operação..."
-                   class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            <label for="lote_carga" class="block text-sm font-medium text-gray-700 mb-2">Número do Lote de Carga:</label>
+            <div class="flex items-center space-x-2">
+                <input type="text" id="lote_carga" name="lote_carga" value="{{ lote_carga }}"
+                       placeholder="Digite o lote..."
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                {% if descricao_lote_carga %}
+                    <span class="text-sm text-gray-600">({{ descricao_lote_carga }})</span>
+                {% endif %}
+            </div>
         </div>
+        {# NOVO CAMPO DE FILTRO: Linha #}
         <div>
-            <label for="nome_transacao" class="block text-sm font-medium text-gray-700 mb-2">Nome da Transação:</label>
-            <input type="text" id="nome_transacao" name="nome_transacao" value="{{ nome_transacao }}"
-                   placeholder="Digite o nome da transação..."
-                   class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            <label for="filtro_linha" class="block text-sm font-medium text-gray-700 mb-2">Linha de Produto:</label>
+            <select id="filtro_linha" name="filtro_linha"
+                    class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="TODOS" {% if filtro_linha == "TODOS" %}selected{% endif %}>Todas as Linhas</option>
+                {% for linha in linhas_disponiveis %}
+                    <option value="{{ linha }}" {% if filtro_linha == linha %}selected{% endif %}>{{ linha }}</option>
+                {% endfor %}
+            </select>
         </div>
         <div class="md:col-span-3 flex justify-center mt-4">
             <button type="submit"
@@ -91,12 +101,40 @@
         </table>
     </div>
 
+    <!-- NOVO: Seção de Totais/Somas - MOVIDA PARA CIMA DA PAGINAÇÃO -->
+    <div class="mt-8 p-6 bg-blue-50 rounded-lg shadow-inner grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
+        <div class="text-center">
+            <p class="text-sm font-medium text-gray-700">Cubagem (m³):</p>
+            <p class="text-2xl font-bold text-blue-800">{{ "%.2f"|format(soma_cubagem|float) }}</p>
+        </div>
+        <div class="text-center">
+            <p class="text-sm font-medium text-gray-700">Peso Bruto (Kg):</p>
+            <p class="text-2xl font-bold text-blue-800">{{ "%.2f"|format(soma_peso_bruto|float) }}</p>
+        </div>
+        <div class="text-center">
+            <p class="text-sm font-medium text-gray-700">Volumes:</p>
+            <p class="text-2xl font-bold text-blue-800">{{ soma_volumes|int }}</p>
+        </div>
+        <div class="text-center">
+            <p class="text-sm font-medium text-gray-700">Quantidade:</p>
+            <p class="text-2xl font-bold text-blue-800">{{ "%.2f"|format(soma_quantidade|float) }}</p>
+        </div>
+        <div class="text-center">
+            <p class="text-sm font-medium text-gray-700">Valor do Frete (R$):</p>
+            <p class="text-2xl font-bold text-blue-800">{{ "%.2f"|format(soma_valor_frete|float) }}</p>
+        </div>
+        <div class="text-center">
+            <p class="text-sm font-medium text-gray-700">Valor Total (R$):</p>
+            <p class="text-2xl font-bold text-blue-800">{{ "%.2f"|format(soma_valor_total|float) }}</p>
+        </div>
+    </div>
+
     <!-- Paginação -->
     <div class="mt-8 flex justify-between items-center">
         <p class="text-gray-700">Mostrando {{ (page - 1) * per_page + 1 }} a {{ (page * per_page) if (page * per_page) < total_notas else total_notas }} de {{ total_notas }} notas.</p>
         <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
             {% if page > 1 %}
-            <a href="{{ url_for('relatorios.espelho_notas', page=page-1, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, descricao_operacao=descricao_operacao, nome_transacao=nome_transacao) }}"
+            <a href="{{ url_for('relatorios.espelho_notas', page=page-1, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, lote_carga=lote_carga, filtro_linha=filtro_linha) }}"
                class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
                 <span class="sr-only">Anterior</span>
                 <!-- Heroicon name: solid/chevron-left -->
@@ -107,14 +145,14 @@
             {% endif %}
 
             {% for p in range(1, total_pages + 1) %}
-                <a href="{{ url_for('relatorios.espelho_notas', page=p, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, descricao_operacao=descricao_operacao, nome_transacao=nome_transacao) }}"
+                <a href="{{ url_for('relatorios.espelho_notas', page=p, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, lote_carga=lote_carga, filtro_linha=filtro_linha) }}"
                    class="{% if p == page %}z-10 bg-blue-50 border-blue-500 text-blue-600{% else %}bg-white border-gray-300 text-gray-700 hover:bg-gray-50{% endif %} relative inline-flex items-center px-4 py-2 border text-sm font-medium">
                     {{ p }}
                 </a>
             {% endfor %}
 
             {% if page < total_pages %}
-            <a href="{{ url_for('relatorios.espelho_notas', page=page+1, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, descricao_operacao=descricao_operacao, nome_transacao=nome_transacao) }}"
+            <a href="{{ url_for('relatorios.espelho_notas', page=page+1, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, lote_carga=lote_carga, filtro_linha=filtro_linha) }}"
                class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
                 <span class="sr-only">Próxima</span>
                 <!-- Heroicon name: solid/chevron-right -->
@@ -130,4 +168,3 @@
     {% endif %}
 </div>
 {% endblock %}
-
