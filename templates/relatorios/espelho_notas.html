@@ -269,7 +269,7 @@
                     <!-- Sub-item para "Consultar Notas Fiscais" -->
                     <ul class="ml-8 mt-1">
                         <li>
-                            <a href="#" class="sidebar-nav-item text-sm">
+                            <a href="{{ url_for('relatorios.espelho_notas') }}" class="sidebar-nav-item text-sm">
                                 <i class="fas fa-file-invoice"></i> Consultar Notas Fiscais
                             </a>
                         </li>
@@ -426,7 +426,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main max-w-xs overflow-hidden text-ellipsis">Pedido padrão</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">Pendente</td>
                         </tr>
-                        <!-- {% endfor %} -->
+                        {# {% endfor %} #}
                     </tbody>
                 </table>
             </div>
