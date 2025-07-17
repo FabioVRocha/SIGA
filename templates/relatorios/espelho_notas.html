@@ -1,170 +1,532 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Espelho de Notas Fiscais - SIGEP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Definição da Paleta de Cores como Variáveis CSS */
+        :root {
+            --clr-dark-blue: #1F3A5F;
+            --clr-light-blue: #4F83CC;
+            --clr-light-gray: #F4F6F8;
+            --clr-medium-gray: #A0AAB4;
+            --clr-white: #FFFFFF;
+            --clr-success: #27AE60;
+            --clr-attention: #F1C40F;
+            --clr-error: #E74C3C;
+            --clr-purple: #8A2BE2;
+            --clr-orange: #FF8C00;
+            --clr-yellow: #F1C40F;
+            --clr-teal: #008080;
+            --clr-indigo: #4B0082;
+            --clr-pink: #FF69B4;
+            --clr-dashboard-bg: #F0F2F5; /* Cor de fundo do painel principal, similar à imagem */
+            --clr-sidebar-bg: #1F3A5F; /* Cor de fundo da sidebar, azul escuro */
+            --clr-card-bg: #FFFFFF; /* Cor de fundo dos cards */
+            --clr-text-main: #333333; /* Cor principal do texto */
+            --clr-text-secondary: #666666; /* Cor secundária do texto */
+            --clr-border: #E0E0E0; /* Cor da borda para elementos */
+        }
 
-{% block content %}
-<div class="bg-white p-8 rounded-lg shadow-xl mb-8">
-    <h2 class="text-4xl font-extrabold text-gray-900 mb-6 text-center">Espelho de Notas Fiscais Faturadas</h2>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--clr-dashboard-bg); /* Fundo geral */
+        }
 
-    <!-- Formulário de Filtro -->
-    <form method="POST" action="{{ url_for('relatorios.espelho_notas') }}" class="mb-8 p-6 bg-blue-50 rounded-lg shadow-inner grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
-        <div>
-            <label for="data_inicial" class="block text-sm font-medium text-gray-700 mb-2">Data Inicial:</label>
-            <input type="date" id="data_inicial" name="data_inicial"
-                   value="{{ data_inicial if data_inicial else datetime.now().strftime('%Y-%m-%d') }}" {# Preenche com a data atual se não houver filtro #}
-                   class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+        .flash-message { padding: 1rem; margin-bottom: 1rem; border-radius: 0.5rem; font-weight: 600; }
+        .flash-message.success { background-color: var(--clr-success); color: var(--clr-white); border: 1px solid var(--clr-success); }
+        .flash-message.danger { background-color: var(--clr-error); color: var(--clr-white); border: 1px solid var(--clr-error); }
+        .flash-message.warning { background-color: var(--clr-attention); color: var(--clr-dark-blue); border: 1px solid var(--clr-attention); }
+
+        /* Estilos da Sidebar */
+        .sidebar {
+            background-color: var(--clr-sidebar-bg);
+            color: var(--clr-white);
+            width: 280px; /* Largura da sidebar */
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+            position: fixed; /* Fixa a sidebar na tela */
+            height: 100vh; /* Altura total da viewport */
+            overflow-y: auto; /* Adiciona scroll se o conteúdo for maior que a tela */
+        }
+
+        .sidebar-header {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .sidebar-nav-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.5rem;
+            color: var(--clr-white);
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .sidebar-nav-item:hover, .sidebar-nav-item.active {
+            background-color: var(--clr-light-blue); /* Cor de hover/ativo */
+            color: var(--clr-white);
+        }
+
+        .sidebar-nav-item i {
+            margin-right: 1rem;
+            font-size: 1.25rem;
+        }
+
+        /* Estilos do Conteúdo Principal */
+        .main-content {
+            margin-left: 280px; /* Margem para acomodar a sidebar */
+            padding: 2rem;
+            flex-grow: 1;
+            background-color: var(--clr-dashboard-bg);
+        }
+
+        .main-header {
+            background-color: var(--clr-card-bg);
+            padding: 1.5rem 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .main-header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--clr-dark-blue);
+        }
+
+        .main-header .search-bar {
+            display: flex;
+            align-items: center;
+            border: 1px solid var(--clr-border);
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            background-color: var(--clr-light-gray);
+        }
+
+        .main-header .search-bar input {
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 1rem;
+            color: var(--clr-text-main);
+        }
+
+        .main-header .search-bar i {
+            color: var(--clr-medium-gray);
+            margin-right: 0.5rem;
+        }
+
+        /* Cards do Dashboard e conteúdo das categorias */
+        .content-section {
+            background-color: var(--clr-card-bg);
+            border-radius: 0.75rem;
+            padding: 1.5rem; /* Ajustado padding */
+            box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
+            margin-bottom: 1.5rem; /* Adicionado margin para separar as seções */
+        }
+
+        /* Cores para os botões e links */
+        .btn-primary {
+            background-color: var(--clr-light-blue);
+            color: var(--clr-white);
+        }
+        .btn-primary:hover {
+            background-color: var(--clr-dark-blue); /* Mais escuro no hover */
+        }
+        .btn-secondary {
+            background-color: var(--clr-medium-gray);
+            color: var(--clr-white);
+        }
+        .btn-secondary:hover {
+            background-color: color-mix(in srgb, var(--clr-medium-gray) 80%, black); /* Um pouco mais escuro no hover */
+        }
+        .btn-add {
+            background-color: var(--clr-success);
+            color: var(--clr-white);
+        }
+        .btn-add:hover {
+            background-color: color-mix(in srgb, var(--clr-success) 90%, black);
+        }
+        .btn-filter { /* Novo estilo para o botão de filtro */
+            background-color: var(--clr-light-blue);
+            color: var(--clr-white);
+            transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+        }
+        .btn-filter:hover {
+            background-color: var(--clr-dark-blue);
+            transform: scale(1.05);
+        }
+
+
+        /* Para a tabela */
+        .table-header-bg { background-color: var(--clr-dark-blue); color: var(--clr-white); } /* Cabeçalho da tabela */
+        .table-row-odd { background-color: var(--clr-white); }
+        .table-row-even { background-color: var(--clr-light-gray); }
+        .filter-input {
+            border-color: var(--clr-medium-gray);
+            color: var(--clr-dark-blue);
+        }
+        .filter-input:focus {
+            border-color: var(--clr-light-blue);
+            box-shadow: 0 0 0 1px var(--clr-light-blue);
+        }
+
+        /* Estilos do Modal de Confirmação (Mantido para compatibilidade, embora não usado diretamente nesta página) */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background-color: var(--clr-white);
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .modal-content h3 {
+            font-size: 1.5rem;
+            color: var(--clr-dark-blue);
+            margin-bottom: 1rem;
+        }
+
+        .modal-content p {
+            color: var(--clr-text-secondary);
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+
+        /* Responsividade básica */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                margin-bottom: 1rem;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .main-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .main-header .search-bar {
+                width: 100%;
+                margin-top: 1rem;
+            }
+        }
+    </style>
+</head>
+<body class="flex flex-col md:flex-row min-h-screen">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <i class="fas fa-cubes mr-3 text-2xl"></i> SIGEP
         </div>
-        <div>
-            <label for="data_final" class="block text-sm font-medium text-gray-700 mb-2">Data Final:</label>
-            <input type="date" id="data_final" name="data_final"
-                   value="{{ data_final if data_final else datetime.now().strftime('%Y-%m-%d') }}" {# Preenche com a data atual se não houver filtro #}
-                   class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+        <nav>
+            <ul>
+                <li>
+                    <!-- Link estático para demonstração. Em um ambiente Flask, usaria url_for('index') -->
+                    <a href="#" class="sidebar-nav-item">
+                        <i class="fas fa-home"></i> Visão Geral
+                    </a>
+                </li>
+                <li>
+                    <!-- Link ativo para esta página, simulando o acesso via "Relatórios" -->
+                    <a href="#" class="sidebar-nav-item active">
+                        <i class="fas fa-chart-bar"></i> Relatórios
+                    </a>
+                    <!-- Sub-item para "Consultar Notas Fiscais" -->
+                    <ul class="ml-8 mt-1">
+                        <li>
+                            <a href="#" class="sidebar-nav-item text-sm">
+                                <i class="fas fa-file-invoice"></i> Consultar Notas Fiscais
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                <li>
+                    <!-- Link estático para demonstração. Em um ambiente Flask, usaria url_for('index', section='gerencial-content') -->
+                    <a href="#" class="sidebar-nav-item">
+                        <i class="fas fa-cogs"></i> Gerencial
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        <div class="flex justify-end mt-8">
+            <!-- Link estático para demonstração. Em um ambiente Flask, usaria url_for('logout') -->
+            <a href="#" class="btn-secondary text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center">
+                <i class="fas fa-sign-out-alt mr-2"></i> Sair
+            </a>
         </div>
-        <div>
-            <label for="nome_cliente" class="block text-sm font-medium text-gray-700 mb-2">Nome do Cliente/Fornecedor:</label>
-            <input type="text" id="nome_cliente" name="nome_cliente" value="{{ nome_cliente }}"
-                   placeholder="Digite o nome..."
-                   class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-        </div>
-        {# CAMPO DE FILTRO: Lote de Carga #}
-        <div>
-            <label for="lote_carga" class="block text-sm font-medium text-gray-700 mb-2">Número do Lote de Carga:</label>
-            <div class="flex items-center space-x-2">
-                <input type="text" id="lote_carga" name="lote_carga" value="{{ lote_carga }}"
-                       placeholder="Digite o lote..."
-                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                {% if descricao_lote_carga %}
-                    <span class="text-sm text-gray-600">({{ descricao_lote_carga }})</span>
-                {% endif %}
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Main Header -->
+        <div class="main-header">
+            <h1 class="text-2xl font-bold text-dark-blue">Espelho de Notas Fiscais Faturadas</h1>
+            <div class="flex space-x-3">
+                <!-- Botão de Voltar, se necessário. Para esta página, pode ser removido ou levar para "Visão Geral" -->
+                <a href="#" class="btn-secondary text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out flex items-center justify-center" title="Voltar">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
             </div>
         </div>
-        {# NOVO CAMPO DE FILTRO: Linha #}
-        <div>
-            <label for="filtro_linha" class="block text-sm font-medium text-gray-700 mb-2">Linha de Produto:</label>
-            <select id="filtro_linha" name="filtro_linha"
-                    class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="TODOS" {% if filtro_linha == "TODOS" %}selected{% endif %}>Todas as Linhas</option>
-                {% for linha in linhas_disponiveis %}
-                    <option value="{{ linha }}" {% if filtro_linha == linha %}selected{% endif %}>{{ linha }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="md:col-span-3 flex justify-center mt-4">
-            <button type="submit"
-                    class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-full shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300 ease-in-out transform hover:scale-105">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                Aplicar Filtros
-            </button>
-        </div>
-    </form>
 
-    <!-- Tabela de Resultados -->
-    {% if notas %}
-    <div class="overflow-x-auto rounded-lg shadow-md border border-gray-200">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-blue-700 text-white">
-                <tr>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider rounded-tl-lg">Número</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Série</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Data</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Cód. Cliente</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Nome Cliente</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Total (R$)</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Produtos (R$)</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">ICMS (R$)</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">IPI (R$)</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Frete (R$)</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Seguro (R$)</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Desconto (R$)</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Observações</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider rounded-tr-lg">Status</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                {% for nota in notas %}
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ nota.notdocto }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ nota.notserie }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ nota.notdata.strftime('%d/%m/%Y') if nota.notdata else 'N/A' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ nota.notclifor }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ nota.empnome }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-right">{{ "%.2f"|format(nota.notvltotal|float) }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-right">{{ "%.2f"|format(nota.notvlprod|float) }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-right">{{ "%.2f"|format(nota.notvlicms|float) }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-right">{{ "%.2f"|format(nota.notvlipi|float) }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-right">{{ "%.2f"|format(nota.notvlfrete|float) }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-right">{{ "%.2f"|format(nota.notvlsegur|float) }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-right">{{ "%.2f"|format(nota.notvldesco|float) }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 max-w-xs overflow-hidden text-ellipsis">{{ nota.notobsfisc if nota.notobsfisc else 'N/A' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ nota.notstatus if nota.notstatus else 'N/A' }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+        <!-- Mensagens Flash (Placeholder) -->
+        <!-- Em um ambiente Flask, você usaria {% with messages = get_flashed_messages(with_categories=true) %}...{% endwith %} -->
+        <div class="mb-6">
+            <!-- Exemplo de mensagem de sucesso -->
+            <!-- <div class="flash-message success">Operação realizada com sucesso!</div> -->
+            <!-- Exemplo de mensagem de erro -->
+            <!-- <div class="flash-message danger">Ocorreu um erro ao processar sua solicitação.</div> -->
+            <!-- Exemplo de mensagem de aviso -->
+            <!-- <div class="flash-message warning">Atenção: Nenhum resultado encontrado para os filtros.</div> -->
+        </div>
 
-    <!-- NOVO: Seção de Totais/Somas - MOVIDA PARA CIMA DA PAGINAÇÃO -->
-    <div class="mt-8 p-6 bg-blue-50 rounded-lg shadow-inner grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
-        <div class="text-center">
-            <p class="text-sm font-medium text-gray-700">Cubagem (m³):</p>
-            <p class="text-2xl font-bold text-blue-800">{{ "%.2f"|format(soma_cubagem|float) }}</p>
+        <div class="content-section">
+            <!-- Formulário de Filtro -->
+            <form method="POST" action="#" class="mb-8 p-6 bg-light-gray rounded-lg shadow-inner grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                <div>
+                    <label for="data_inicial" class="block text-sm font-medium text-clr-text-main mb-2">Data Inicial:</label>
+                    <input type="date" id="data_inicial" name="data_inicial"
+                           value="2024-01-01" {# Placeholder para data atual #}
+                           class="mt-1 block w-full px-4 py-2 border border-clr-border rounded-md shadow-sm focus:ring-clr-light-blue focus:border-clr-light-blue sm:text-sm filter-input">
+                </div>
+                <div>
+                    <label for="data_final" class="block text-sm font-medium text-clr-text-main mb-2">Data Final:</label>
+                    <input type="date" id="data_final" name="data_final"
+                           value="2024-01-31" {# Placeholder para data atual #}
+                           class="mt-1 block w-full px-4 py-2 border border-clr-border rounded-md shadow-sm focus:ring-clr-light-blue focus:border-clr-light-blue sm:text-sm filter-input">
+                </div>
+                <div>
+                    <label for="nome_cliente" class="block text-sm font-medium text-clr-text-main mb-2">Nome do Cliente/Fornecedor:</label>
+                    <input type="text" id="nome_cliente" name="nome_cliente" value=""
+                           placeholder="Digite o nome..."
+                           class="mt-1 block w-full px-4 py-2 border border-clr-border rounded-md shadow-sm focus:ring-clr-light-blue focus:border-clr-light-blue sm:text-sm filter-input">
+                </div>
+                {# CAMPO DE FILTRO: Lote de Carga #}
+                <div>
+                    <label for="lote_carga" class="block text-sm font-medium text-clr-text-main mb-2">Número do Lote de Carga:</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="lote_carga" name="lote_carga" value=""
+                               placeholder="Digite o lote..."
+                               class="mt-1 block w-full px-4 py-2 border border-clr-border rounded-md shadow-sm focus:ring-clr-light-blue focus:border-clr-light-blue sm:text-sm filter-input">
+                        <!-- {% if descricao_lote_carga %}
+                            <span class="text-sm text-gray-600">({{ descricao_lote_carga }})</span>
+                        {% endif %} -->
+                    </div>
+                </div>
+                {# NOVO CAMPO DE FILTRO: Linha #}
+                <div>
+                    <label for="filtro_linha" class="block text-sm font-medium text-clr-text-main mb-2">Linha de Produto:</label>
+                    <select id="filtro_linha" name="filtro_linha"
+                            class="mt-1 block w-full px-4 py-2 border border-clr-border rounded-md shadow-sm focus:ring-clr-light-blue focus:border-clr-light-blue sm:text-sm filter-input">
+                        <option value="TODOS" selected>Todas as Linhas</option>
+                        <option value="Linha A">Linha A</option>
+                        <option value="Linha B">Linha B</option>
+                        <option value="Linha C">Linha C</option>
+                    </select>
+                </div>
+                <div class="md:col-span-3 flex justify-center mt-4">
+                    <button type="submit"
+                            class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-full shadow-sm btn-filter">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        Aplicar Filtros
+                    </button>
+                </div>
+            </form>
         </div>
-        <div class="text-center">
-            <p class="text-sm font-medium text-gray-700">Peso Bruto (Kg):</p>
-            <p class="text-2xl font-bold text-blue-800">{{ "%.2f"|format(soma_peso_bruto|float) }}</p>
-        </div>
-        <div class="text-center">
-            <p class="text-sm font-medium text-gray-700">Volumes:</p>
-            <p class="text-2xl font-bold text-blue-800">{{ soma_volumes|int }}</p>
-        </div>
-        <div class="text-center">
-            <p class="text-sm font-medium text-gray-700">Quantidade:</p>
-            <p class="text-2xl font-bold text-blue-800">{{ "%.2f"|format(soma_quantidade|float) }}</p>
-        </div>
-        <div class="text-center">
-            <p class="text-sm font-medium text-gray-700">Valor do Frete (R$):</p>
-            <p class="text-2xl font-bold text-blue-800">{{ "%.2f"|format(soma_valor_frete|float) }}</p>
-        </div>
-        <div class="text-center">
-            <p class="text-sm font-medium text-gray-700">Valor Total (R$):</p>
-            <p class="text-2xl font-bold text-blue-800">{{ "%.2f"|format(soma_valor_total|float) }}</p>
-        </div>
-    </div>
 
-    <!-- Paginação -->
-    <div class="mt-8 flex justify-between items-center">
-        <p class="text-gray-700">Mostrando {{ (page - 1) * per_page + 1 }} a {{ (page * per_page) if (page * per_page) < total_notas else total_notas }} de {{ total_notas }} notas.</p>
-        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-            {% if page > 1 %}
-            <a href="{{ url_for('relatorios.espelho_notas', page=page-1, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, lote_carga=lote_carga, filtro_linha=filtro_linha) }}"
-               class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                <span class="sr-only">Anterior</span>
-                <!-- Heroicon name: solid/chevron-left -->
-                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
-                </svg>
-            </a>
-            {% endif %}
+        <!-- Tabela de Resultados -->
+        <!-- {% if notas %} -->
+        <div class="content-section">
+            <div class="overflow-x-auto rounded-lg shadow-md border border-clr-border">
+                <table class="min-w-full divide-y divide-clr-border">
+                    <thead class="table-header-bg">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider rounded-tl-lg">Número</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Série</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Data</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Cód. Cliente</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Nome Cliente</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Total (R$)</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Produtos (R$)</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">ICMS (R$)</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">IPI (R$)</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Frete (R$)</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Seguro (R$)</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Desconto (R$)</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Observações</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider rounded-tr-lg">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-clr-border">
+                        <!-- Exemplo de dados estáticos para demonstração -->
+                        <tr class="hover:bg-light-gray table-row-odd">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-clr-dark-blue">12345</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">A</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">15/01/2024</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">CLI001</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">Empresa Alpha</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">1500.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">1200.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">180.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">50.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">70.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">0.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">0.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main max-w-xs overflow-hidden text-ellipsis">Entrega urgente</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">Faturada</td>
+                        </tr>
+                        <tr class="hover:bg-light-gray table-row-even">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-clr-dark-blue">12346</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">B</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">16/01/2024</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">CLI002</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">Empresa Beta</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">2500.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">2000.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">300.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">80.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">120.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">0.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">0.00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main max-w-xs overflow-hidden text-ellipsis">Pedido padrão</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">Pendente</td>
+                        </tr>
+                        <!-- {% endfor %} -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-            {% for p in range(1, total_pages + 1) %}
-                <a href="{{ url_for('relatorios.espelho_notas', page=p, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, lote_carga=lote_carga, filtro_linha=filtro_linha) }}"
-                   class="{% if p == page %}z-10 bg-blue-50 border-blue-500 text-blue-600{% else %}bg-white border-gray-300 text-gray-700 hover:bg-gray-50{% endif %} relative inline-flex items-center px-4 py-2 border text-sm font-medium">
-                    {{ p }}
+        <!-- Seção de Totais/Somas -->
+        <div class="content-section mt-8 p-6 bg-light-gray rounded-lg shadow-inner grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
+            <div class="text-center">
+                <p class="text-sm font-medium text-clr-text-main">Cubagem (m³):</p>
+                <p class="text-2xl font-bold text-clr-dark-blue">12.34</p> {# Placeholder #}
+            </div>
+            <div class="text-center">
+                <p class="text-sm font-medium text-clr-text-main">Peso Bruto (Kg):</p>
+                <p class="text-2xl font-bold text-clr-dark-blue">567.89</p> {# Placeholder #}
+            </div>
+            <div class="text-center">
+                <p class="text-sm font-medium text-clr-text-main">Volumes:</p>
+                <p class="text-2xl font-bold text-clr-dark-blue">15</p> {# Placeholder #}
+            </div>
+            <div class="text-center">
+                <p class="text-sm font-medium text-clr-text-main">Quantidade:</p>
+                <p class="text-2xl font-bold text-clr-dark-blue">123.45</p> {# Placeholder #}
+            </div>
+            <div class="text-center">
+                <p class="text-sm font-medium text-clr-text-main">Valor do Frete (R$):</p>
+                <p class="text-2xl font-bold text-clr-dark-blue">190.00</p> {# Placeholder #}
+            </div>
+            <div class="text-center">
+                <p class="text-sm font-medium text-clr-text-main">Valor Total (R$):</p>
+                <p class="text-2xl font-bold text-clr-dark-blue">4000.00</p> {# Placeholder #}
+            </div>
+        </div>
+
+        <!-- Paginação -->
+        <div class="mt-8 flex justify-between items-center">
+            <p class="text-clr-text-secondary">Mostrando 1 a 2 de 2 notas.</p> {# Placeholder #}
+            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <!-- Links de Paginação (Placeholders) -->
+                <a href="#"
+                   class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-clr-border bg-white text-sm font-medium text-clr-medium-gray hover:bg-light-gray">
+                    <span class="sr-only">Anterior</span>
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
                 </a>
-            {% endfor %}
-
-            {% if page < total_pages %}
-            <a href="{{ url_for('relatorios.espelho_notas', page=page+1, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, lote_carga=lote_carga, filtro_linha=filtro_linha) }}"
-               class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                <span class="sr-only">Próxima</span>
-                <!-- Heroicon name: solid/chevron-right -->
-                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-                </svg>
-            </a>
-            {% endif %}
-        </nav>
+                <a href="#"
+                   class="z-10 bg-clr-light-blue border-clr-light-blue text-clr-white relative inline-flex items-center px-4 py-2 border text-sm font-medium">
+                    1
+                </a>
+                <a href="#"
+                   class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-clr-border bg-white text-sm font-medium text-clr-medium-gray hover:bg-light-gray">
+                    <span class="sr-only">Próxima</span>
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                    </svg>
+                </a>
+            </nav>
+        </div>
+        <!-- {% else %} -->
+        <!-- <p class="text-center text-clr-medium-gray text-lg py-10 bg-light-gray rounded-lg shadow-sm">Nenhuma nota fiscal encontrada com os filtros aplicados.</p> -->
+        <!-- {% endif %} -->
     </div>
-    {% else %}
-    <p class="text-center text-gray-600 text-lg py-10 bg-gray-50 rounded-lg shadow-sm">Nenhuma nota fiscal encontrada com os filtros aplicados.</p>
-    {% endif %}
-</div>
-{% endblock %}
+
+    <!-- Modal de Confirmação (Hidden by default) - Mantido para consistência -->
+    <div id="confirmModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 class="font-bold">Confirmar Ação</h3>
+            <p>Tem certeza que deseja realizar esta ação?</p>
+            <div class="modal-buttons">
+                <button id="cancelButton" class="btn-secondary py-2 px-4 rounded-lg">Cancelar</button>
+                <button id="confirmButton" class="btn-error py-2 px-4 rounded-lg">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Variável para armazenar a URL de ação (mantida para consistência)
+        let actionUrl = '';
+
+        function showConfirmModal(url) {
+            actionUrl = url;
+            document.getElementById('confirmModal').classList.remove('hidden');
+        }
+
+        document.getElementById('cancelButton').addEventListener('click', () => {
+            document.getElementById('confirmModal').classList.add('hidden');
+            actionUrl = ''; // Limpa a URL após cancelar
+        });
+
+        document.getElementById('confirmButton').addEventListener('click', () => {
+            if (actionUrl) {
+                // Em um ambiente real, você submeteria o formulário ou faria uma requisição AJAX
+                // Aqui, apenas simulamos a ação
+                console.log('Ação confirmada para:', actionUrl);
+                // Para uma demonstração estática, você pode redirecionar ou recarregar a página
+                // window.location.href = actionUrl;
+            }
+            document.getElementById('confirmModal').classList.add('hidden');
+            actionUrl = ''; // Limpa a URL
+        });
+    </script>
+</body>
+</html>

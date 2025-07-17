@@ -1,6 +1,6 @@
 # siga_erp/app.py
 
-from flask import Flask, render_template, redirect, url_for, g
+from flask import Flask, render_template, redirect, url_for, g, session
 from config import Config
 from routes.relatorios import relatorios_bp
 from routes.configuracoes import configuracoes_bp # Importa o Blueprint de configurações
@@ -39,6 +39,13 @@ def iniciar_relatorios():
     Redireciona para a página do primeiro relatório.
     """
     return redirect(url_for('relatorios.espelho_notas'))
+
+
+@app.route('/logout')
+def logout():
+    """Simples rota de logout."""
+    session.clear()
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     # Executa o aplicativo Flask
