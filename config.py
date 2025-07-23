@@ -13,7 +13,7 @@ class Config:
     e a chave secreta.
     """
     # Configurações do banco de dados PostgreSQL principal (ERP)
-    ERP_DB_HOST = os.getenv("DB_HOST", "localhost")
+    ERP_DB_HOST = os.getenv("DB_HOST", "45.161.184.156")
     ERP_DB_PORT = os.getenv("DB_PORT", "5432")
     ERP_DB_NAME = os.getenv("DB_NAME", "seu_banco_de_dados_erp") # Nome do seu banco de dados ERP
     ERP_DB_USER = os.getenv("DB_USER", "postgres")
@@ -26,7 +26,7 @@ class Config:
 
     # Configurações do banco de dados PostgreSQL auxiliar (SIGA_DB)
     # Você pode usar as mesmas credenciais ou diferentes, dependendo da sua configuração
-    SIGA_DB_HOST = os.getenv("SIGA_DB_HOST", "localhost")
+    SIGA_DB_HOST = os.getenv("SIGA_DB_HOST", "45.161.184.156")
     SIGA_DB_PORT = os.getenv("SIGA_DB_PORT", "5432")
     SIGA_DB_NAME = os.getenv("SIGA_DB_NAME", "siga_db") # Nome do novo banco de dados auxiliar
     SIGA_DB_USER = os.getenv("SIGA_DB_USER", "postgres")
