@@ -317,22 +317,22 @@
 
         <div class="content-section">
             <!-- Formulário de Filtro -->
-            <form method="POST" action="#" class="mb-8 p-6 bg-light-gray rounded-lg shadow-inner grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+            <form method="POST" action="{{ url_for('relatorios.espelho_notas') }}" class="mb-8 p-6 bg-light-gray rounded-lg shadow-inner grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
                 <div>
                     <label for="data_inicial" class="block text-sm font-medium text-clr-text-main mb-2">Data Inicial:</label>
                     <input type="date" id="data_inicial" name="data_inicial"
-                           value="2024-01-01" {# Placeholder para data atual #}
+                           value="{{ data_inicial }}"
                            class="mt-1 block w-full px-4 py-2 border border-clr-border rounded-md shadow-sm focus:ring-clr-light-blue focus:border-clr-light-blue sm:text-sm filter-input">
                 </div>
                 <div>
                     <label for="data_final" class="block text-sm font-medium text-clr-text-main mb-2">Data Final:</label>
                     <input type="date" id="data_final" name="data_final"
-                           value="2024-01-31" {# Placeholder para data atual #}
+                           value="{{ data_final }}"
                            class="mt-1 block w-full px-4 py-2 border border-clr-border rounded-md shadow-sm focus:ring-clr-light-blue focus:border-clr-light-blue sm:text-sm filter-input">
                 </div>
                 <div>
                     <label for="nome_cliente" class="block text-sm font-medium text-clr-text-main mb-2">Nome do Cliente/Fornecedor:</label>
-                    <input type="text" id="nome_cliente" name="nome_cliente" value=""
+                    <input type="text" id="nome_cliente" name="nome_cliente" value="{{ nome_cliente }}"
                            placeholder="Digite o nome..."
                            class="mt-1 block w-full px-4 py-2 border border-clr-border rounded-md shadow-sm focus:ring-clr-light-blue focus:border-clr-light-blue sm:text-sm filter-input">
                 </div>
@@ -340,12 +340,12 @@
                 <div>
                     <label for="lote_carga" class="block text-sm font-medium text-clr-text-main mb-2">Número do Lote de Carga:</label>
                     <div class="flex items-center space-x-2">
-                        <input type="text" id="lote_carga" name="lote_carga" value=""
+                        <input type="text" id="lote_carga" name="lote_carga" value="{{ lote_carga }}"
                                placeholder="Digite o lote..."
                                class="mt-1 block w-full px-4 py-2 border border-clr-border rounded-md shadow-sm focus:ring-clr-light-blue focus:border-clr-light-blue sm:text-sm filter-input">
-                        <!-- {% if descricao_lote_carga %}
+                        {% if descricao_lote_carga %}
                             <span class="text-sm text-gray-600">({{ descricao_lote_carga }})</span>
-                        {% endif %} -->
+                        {% endif %}
                     </div>
                 </div>
                 {# NOVO CAMPO DE FILTRO: Linha #}
@@ -353,10 +353,10 @@
                     <label for="filtro_linha" class="block text-sm font-medium text-clr-text-main mb-2">Linha de Produto:</label>
                     <select id="filtro_linha" name="filtro_linha"
                             class="mt-1 block w-full px-4 py-2 border border-clr-border rounded-md shadow-sm focus:ring-clr-light-blue focus:border-clr-light-blue sm:text-sm filter-input">
-                        <option value="TODOS" selected>Todas as Linhas</option>
-                        <option value="Linha A">Linha A</option>
-                        <option value="Linha B">Linha B</option>
-                        <option value="Linha C">Linha C</option>
+                        <option value="TODOS" {% if filtro_linha == 'TODOS' %}selected{% endif %}>Todas as Linhas</option>
+                        {% for linha in linhas_disponiveis %}
+                        <option value="{{ linha }}" {% if linha == filtro_linha %}selected{% endif %}>{{ linha }}</option>
+                        {% endfor %}
                     </select>
                 </div>
                 <div class="md:col-span-3 flex justify-center mt-4">
@@ -393,40 +393,31 @@
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-clr-border">
-                        <!-- Exemplo de dados estáticos para demonstração -->
-                        <tr class="hover:bg-light-gray table-row-odd">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-clr-dark-blue">12345</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">A</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">15/01/2024</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">CLI001</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">Empresa Alpha</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">1500.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">1200.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">180.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">50.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">70.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">0.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">0.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main max-w-xs overflow-hidden text-ellipsis">Entrega urgente</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">Faturada</td>
+                        {% if notas %}
+                        {% for nota in notas %}
+                        <tr class="hover:bg-light-gray {{ 'table-row-odd' if loop.index0 % 2 == 0 else 'table-row-even' }}">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-clr-dark-blue">{{ nota.notdocto }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">{{ nota.notserie }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">{{ nota.notdata.strftime('%d/%m/%Y') if nota.notdata else '' }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">{{ nota.notclifor }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">{{ nota.empnome }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvltotal }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvlprod }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvlicms }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvlipi }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvlfrete }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvlsegur }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvldesco }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main max-w-xs overflow-hidden text-ellipsis">{{ nota.notobsfisc }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">{{ nota.notstatus }}</td>
                         </tr>
                         <tr class="hover:bg-light-gray table-row-even">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-clr-dark-blue">12346</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">B</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">16/01/2024</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">CLI002</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">Empresa Beta</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">2500.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">2000.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">300.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">80.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">120.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">0.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">0.00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main max-w-xs overflow-hidden text-ellipsis">Pedido padrão</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">Pendente</td>
+                            {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="14" class="px-6 py-4 text-center text-sm text-clr-medium-gray">Nenhuma nota fiscal encontrada com os filtros aplicados.</td>
                         </tr>
-                        {# {% endfor %} #}
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
@@ -436,53 +427,60 @@
         <div class="content-section mt-8 p-6 bg-light-gray rounded-lg shadow-inner grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
             <div class="text-center">
                 <p class="text-sm font-medium text-clr-text-main">Cubagem (m³):</p>
-                <p class="text-2xl font-bold text-clr-dark-blue">12.34</p> {# Placeholder #}
+                <p class="text-2xl font-bold text-clr-dark-blue">{{ soma_cubagem }}</p>
             </div>
             <div class="text-center">
                 <p class="text-sm font-medium text-clr-text-main">Peso Bruto (Kg):</p>
-                <p class="text-2xl font-bold text-clr-dark-blue">567.89</p> {# Placeholder #}
+                <p class="text-2xl font-bold text-clr-dark-blue">{{ soma_peso_bruto }}</p>
             </div>
             <div class="text-center">
                 <p class="text-sm font-medium text-clr-text-main">Volumes:</p>
-                <p class="text-2xl font-bold text-clr-dark-blue">15</p> {# Placeholder #}
+                <p class="text-2xl font-bold text-clr-dark-blue">{{ soma_volumes }}</p>
             </div>
             <div class="text-center">
                 <p class="text-sm font-medium text-clr-text-main">Quantidade:</p>
-                <p class="text-2xl font-bold text-clr-dark-blue">123.45</p> {# Placeholder #}
+                <p class="text-2xl font-bold text-clr-dark-blue">{{ soma_quantidade }}</p>
             </div>
             <div class="text-center">
                 <p class="text-sm font-medium text-clr-text-main">Valor do Frete (R$):</p>
-                <p class="text-2xl font-bold text-clr-dark-blue">190.00</p> {# Placeholder #}
+                <p class="text-2xl font-bold text-clr-dark-blue">{{ soma_valor_frete }}</p>
             </div>
             <div class="text-center">
                 <p class="text-sm font-medium text-clr-text-main">Valor Total (R$):</p>
-                <p class="text-2xl font-bold text-clr-dark-blue">4000.00</p> {# Placeholder #}
+                <p class="text-2xl font-bold text-clr-dark-blue">{{ soma_valor_total }}</p>
             </div>
         </div>
 
         <!-- Paginação -->
         <div class="mt-8 flex justify-between items-center">
-            <p class="text-clr-text-secondary">Mostrando 1 a 2 de 2 notas.</p> {# Placeholder #}
+            {% set start = ((page - 1) * per_page) + 1 if total_notas > 0 else 0 %}
+            {% set end = ((page - 1) * per_page) + notas|length %}
+            <p class="text-clr-text-secondary">Mostrando {{ start }} a {{ end }} de {{ total_notas }} notas.</p>
             <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                <!-- Links de Paginação (Placeholders) -->
-                <a href="#"
+                {% if page > 1 %}
+                <a href="{{ url_for('relatorios.espelho_notas', page=page-1, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, lote_carga=lote_carga, filtro_linha=filtro_linha) }}"
                    class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-clr-border bg-white text-sm font-medium text-clr-medium-gray hover:bg-light-gray">
                     <span class="sr-only">Anterior</span>
                     <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                         <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
                     </svg>
                 </a>
-                <a href="#"
-                   class="z-10 bg-clr-light-blue border-clr-light-blue text-clr-white relative inline-flex items-center px-4 py-2 border text-sm font-medium">
-                    1
+                {% endif %}
+                {% for p in range(1, total_pages + 1) %}
+                <a href="{{ url_for('relatorios.espelho_notas', page=p, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, lote_carga=lote_carga, filtro_linha=filtro_linha) }}"
+                   class="{% if p == page %}z-10 bg-clr-light-blue border-clr-light-blue text-clr-white{% else %}relative inline-flex items-center px-4 py-2 border border-clr-border bg-white text-sm font-medium text-clr-medium-gray hover:bg-light-gray{% endif %}">
+                    {{ p }}
                 </a>
-                <a href="#"
+                {% endfor %}
+                {% if page < total_pages %}
+                <a href="{{ url_for('relatorios.espelho_notas', page=page+1, data_inicial=data_inicial, data_final=data_final, nome_cliente=nome_cliente, lote_carga=lote_carga, filtro_linha=filtro_linha) }}"
                    class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-clr-border bg-white text-sm font-medium text-clr-medium-gray hover:bg-light-gray">
                     <span class="sr-only">Próxima</span>
                     <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                         <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
                     </svg>
                 </a>
+                {% endif %}
             </nav>
         </div>
         <!-- {% else %} -->
