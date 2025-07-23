@@ -300,3 +300,34 @@ def espelho_notas():
         soma_valor_total=soma_valor_total,
         datetime=datetime # Passa o objeto datetime para o template
     )
+# new route for regcar percent
+@relatorios_bp.route('/regcar_percent', methods=['GET'])
+def regcar_percent():
+    """Exibe os percentuais de frete da tabela regcar."""
+    db_erp = current_app.db_erp
+    regcar_data = []
+    try:
+        db_erp.connect()
+        query = """
+            SELECT
+                rgccod,
+                rgcdes,
+                CAST(SUBSTRING(rgcdes FROM 'P([^;]+)') AS NUMERIC) AS p,
+                CAST(SUBSTRING(rgcdes FROM 'M([^;]+)') AS NUMERIC) AS m,
+                CAST(SUBSTRING(rgcdes FROM 'G([^;]+)') AS NUMERIC) AS g,
+                CAST(SUBSTRING(rgcdes FROM '#([^;]+)') AS NUMERIC) AS hash,
+                CAST(SUBSTRING(rgcdes FROM 'V([^;]+)') AS NUMERIC) AS v,
+                CAST(SUBSTRING(rgcdes FROM 'S([^;]+)') AS NUMERIC) AS s,
+                CAST(SUBSTRING(rgcdes FROM '\\$([^;]+)') AS NUMERIC) AS m3
+            FROM regcar
+            ORDER BY rgccod
+        """
+        rows = db_erp.fetch_all(query)
+        column_names = ['rgccod', 'rgcdes', 'p', 'm', 'g', 'hash', 'v', 's', 'm3']
+        regcar_data = [dict(zip(column_names, r)) for r in rows]
+    except Exception as e:
+        current_app.logger.error(f"Erro ao buscar dados de regcar: {e}")
+    finally:
+        db_erp.disconnect()
+
+    return render_template('relatorios/regcar_percent.html', regcar_data=regcar_data, datetime=datetime)
