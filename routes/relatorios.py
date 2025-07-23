@@ -107,21 +107,33 @@ def espelho_notas():
             "WHEN g.grunome ILIKE '%GARLAND%' AND p.ref IN ('PF','PT','AL','MA','MC') THEN CAST(SUBSTRING(rc.rgcdes FROM '#([^;]+)') AS NUMERIC) "
             "ELSE NULL END"
         )
-        perc_frete_agg = f"COALESCE(MAX({perc_frete_case}), 0)"
+
+        perc_subquery = f"""
+            SELECT
+                tm.itecontrol AS controle,
+                COALESCE(MAX({perc_frete_case}), 0) AS perc_frete
+            FROM toqmovi tm
+            LEFT JOIN produto p ON tm.priproduto = p.produto
+            LEFT JOIN grupo g ON p.grupo = g.grupo
+            LEFT JOIN regcar rc ON tm.rgccod = rc.rgccod
+            GROUP BY tm.itecontrol
+        """
 
         query_base = f"""
             SELECT
                 d.notdocto, d.notserie, d.notdata, d.notclifor, e.empnome,
                 d.notvltotal, d.notvlprod, d.notvlicms, d.notvlipi,
                 d.notvlfrete, d.notvlsegur, d.notvldesco, d.notobsfisc, d.notstatus,
-                {perc_frete_agg} AS perc_frete,
-                d.notvlprod * {perc_frete_agg} / 100.0 AS valor_frete_calc
+                COALESCE(perc.perc_frete, 0) AS perc_frete,
+                d.notvlprod * COALESCE(perc.perc_frete, 0) / 100.0 AS valor_frete_calc
             FROM
                 doctos d
             JOIN
                 empresa e ON d.notclifor = e.empresa
             LEFT JOIN
                 toqmovi tm ON d.controle = tm.itecontrol
+            LEFT JOIN
+                ({perc_subquery}) perc ON perc.controle = d.controle
             LEFT JOIN
                 opera o ON tm.operacao = o.operacao
             LEFT JOIN
@@ -132,11 +144,9 @@ def espelho_notas():
                 produto p ON tm.priproduto = p.produto
             LEFT JOIN
                 grupo g ON p.grupo = g.grupo
-            LEFT JOIN
-                regcar rc ON tm.rgccod = rc.rgccod
             WHERE 1=1
         """
-        count_query_base = """
+        count_query_base = f"""
             SELECT
                 COUNT(DISTINCT d.controle)
             FROM
@@ -146,6 +156,8 @@ def espelho_notas():
             LEFT JOIN
                 toqmovi tm ON d.controle = tm.itecontrol
             LEFT JOIN
+                ({perc_subquery}) perc ON perc.controle = d.controle
+            LEFT JOIN
                 opera o ON tm.operacao = o.operacao
             LEFT JOIN
                 transa t ON o.opetransac = t.transacao
@@ -155,8 +167,6 @@ def espelho_notas():
                 produto p ON tm.priproduto = p.produto
             LEFT JOIN
                 grupo g ON p.grupo = g.grupo
-            LEFT JOIN
-                regcar rc ON tm.rgccod = rc.rgccod
             WHERE 1=1
         """
 
@@ -164,7 +174,7 @@ def espelho_notas():
         summary_query_base = f"""
             SELECT
                 SUM(d.notvltotal) AS total_geral,
-                SUM(d.notvlprod * ({perc_frete_case}) / 100.0) AS total_frete,
+                SUM(d.notvlprod * COALESCE(perc.perc_frete, 0) / 100.0) AS total_frete,
                 SUM(d.volquanti) AS total_volumes,
                 SUM(d.volpesbru) AS total_peso_bruto,
                 SUM(lc.lcam3) AS total_cubagem
@@ -175,6 +185,8 @@ def espelho_notas():
             LEFT JOIN
                 toqmovi tm ON d.controle = tm.itecontrol
             LEFT JOIN
+                ({perc_subquery}) perc ON perc.controle = d.controle
+            LEFT JOIN
                 opera o ON tm.operacao = o.operacao
             LEFT JOIN
                 transa t ON o.opetransac = t.transacao
@@ -184,8 +196,6 @@ def espelho_notas():
                 produto p ON tm.priproduto = p.produto
             LEFT JOIN
                 grupo g ON p.grupo = g.grupo
-            LEFT JOIN
-                regcar rc ON tm.rgccod = rc.rgccod
             WHERE 1=1
         """
 
