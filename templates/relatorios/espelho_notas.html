@@ -370,7 +370,6 @@
         </div>
 
         <!-- Tabela de Resultados -->
-        <!-- {% if notas %} -->
         <div class="content-section">
             <div class="overflow-x-auto rounded-lg shadow-md border border-clr-border">
                 <table class="min-w-full divide-y divide-clr-border">
@@ -415,8 +414,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main max-w-xs overflow-hidden text-ellipsis">{{ nota.notobsfisc }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main">{{ nota.notstatus }}</td>
                         </tr>
-                        <tr class="hover:bg-light-gray table-row-even">
-                            {% endfor %}
+                        {% endfor %}
                         {% else %}
                         <tr>
                             <td colspan="16" class="px-6 py-4 text-center text-sm text-clr-medium-gray">Nenhuma nota fiscal encontrada com os filtros aplicados.</td>
