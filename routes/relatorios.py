@@ -111,11 +111,14 @@ def espelho_notas():
         perc_subquery = f"""
             SELECT
                 tm.itecontrol AS controle,
-                COALESCE(MAX({perc_frete_case}), 0) AS perc_frete
+                COALESCE(MAX({perc_frete_case}), 0) AS perc_frete,
+                MAX(t.transacao) AS transacao
             FROM toqmovi tm
             LEFT JOIN produto p ON tm.priproduto = p.produto
             LEFT JOIN grupo g ON p.grupo = g.grupo
             LEFT JOIN regcar rc ON tm.rgccod = rc.rgccod
+            LEFT JOIN opera o ON tm.operacao = o.operacao
+            LEFT JOIN transa t ON o.opetransac = t.transacao
             GROUP BY tm.itecontrol
         """
 
@@ -131,19 +134,9 @@ def espelho_notas():
             JOIN
                 empresa e ON d.notclifor = e.empresa
             LEFT JOIN
-                toqmovi tm ON d.controle = tm.itecontrol
-            LEFT JOIN
                 ({perc_subquery}) perc ON perc.controle = d.controle
             LEFT JOIN
-                opera o ON tm.operacao = o.operacao
-            LEFT JOIN
-                transa t ON o.opetransac = t.transacao
-            LEFT JOIN
                 lotecar lc ON d.vollcacod = lc.lcacod
-            LEFT JOIN
-                produto p ON tm.priproduto = p.produto
-            LEFT JOIN
-                grupo g ON p.grupo = g.grupo
             WHERE 1=1
         """
         count_query_base = f"""
@@ -154,19 +147,9 @@ def espelho_notas():
             JOIN
                 empresa e ON d.notclifor = e.empresa
             LEFT JOIN
-                toqmovi tm ON d.controle = tm.itecontrol
-            LEFT JOIN
                 ({perc_subquery}) perc ON perc.controle = d.controle
             LEFT JOIN
-                opera o ON tm.operacao = o.operacao
-            LEFT JOIN
-                transa t ON o.opetransac = t.transacao
-            LEFT JOIN
                 lotecar lc ON d.vollcacod = lc.lcacod
-            LEFT JOIN
-                produto p ON tm.priproduto = p.produto
-            LEFT JOIN
-                grupo g ON p.grupo = g.grupo
             WHERE 1=1
         """
 
@@ -183,19 +166,9 @@ def espelho_notas():
             JOIN
                 empresa e ON d.notclifor = e.empresa
             LEFT JOIN
-                toqmovi tm ON d.controle = tm.itecontrol
-            LEFT JOIN
                 ({perc_subquery}) perc ON perc.controle = d.controle
             LEFT JOIN
-                opera o ON tm.operacao = o.operacao
-            LEFT JOIN
-                transa t ON o.opetransac = t.transacao
-            LEFT JOIN
                 lotecar lc ON d.vollcacod = lc.lcacod
-            LEFT JOIN
-                produto p ON tm.priproduto = p.produto
-            LEFT JOIN
-                grupo g ON p.grupo = g.grupo
             WHERE 1=1
         """
 
@@ -240,7 +213,8 @@ def espelho_notas():
                 for pattern in line_patterns:
                     line_conditions.append("g.grunome ILIKE %s")
                     params.append(pattern)
-                filter_clauses.append(f" AND ({' OR '.join(line_conditions)})")
+                exists_clause = f" AND EXISTS (SELECT 1 FROM toqmovi tm2 JOIN produto p ON tm2.priproduto = p.produto JOIN grupo g ON p.grupo = g.grupo WHERE tm2.itecontrol = d.controle AND ({' OR '.join(line_conditions)}))"
+                filter_clauses.append(exists_clause)
             elif filtro_linha == "OUTROS":
                 all_defined_patterns = []
                 for key, patterns in LINHA_MAPPING.items():
@@ -252,12 +226,13 @@ def espelho_notas():
                     for pattern in all_defined_patterns:
                         not_in_conditions.append("g.grunome NOT ILIKE %s")
                         params.append(pattern)
-                    filter_clauses.append(f" AND ({' AND '.join(not_in_conditions)} OR g.grunome IS NULL)")
+                    exists_clause = f" AND EXISTS (SELECT 1 FROM toqmovi tm2 JOIN produto p ON tm2.priproduto = p.produto JOIN grupo g ON p.grupo = g.grupo WHERE tm2.itecontrol = d.controle AND ({' AND '.join(not_in_conditions)} OR g.grunome IS NULL))"
+                    filter_clauses.append(exists_clause)
 
         # Aplica o filtro de tipos de transação permitidos da configuração
         if permitidos_list:
             placeholders = ', '.join(['%s'] * len(permitidos_list))
-            filter_clauses.append(f" AND t.transacao IN ({placeholders})")
+            filter_clauses.append(f" AND perc.transacao IN ({placeholders})")
             params.extend(permitidos_list)
 
 
