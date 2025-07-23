@@ -107,14 +107,15 @@ def espelho_notas():
             "WHEN g.grunome ILIKE '%GARLAND%' AND p.ref IN ('PF','PT','AL','MA','MC') THEN CAST(SUBSTRING(rc.rgcdes FROM '#([^;]+)') AS NUMERIC) "
             "ELSE NULL END"
         )
+        perc_frete_agg = f"COALESCE(MAX({perc_frete_case}), 0)"
 
         query_base = f"""
             SELECT
                 d.notdocto, d.notserie, d.notdata, d.notclifor, e.empnome,
                 d.notvltotal, d.notvlprod, d.notvlicms, d.notvlipi,
                 d.notvlfrete, d.notvlsegur, d.notvldesco, d.notobsfisc, d.notstatus,
-                MAX({perc_frete_case}) AS perc_frete,
-                d.notvlprod * MAX({perc_frete_case}) / 100.0 AS valor_frete_calc
+                {perc_frete_agg} AS perc_frete,
+                d.notvlprod * {perc_frete_agg} / 100.0 AS valor_frete_calc
             FROM
                 doctos d
             JOIN
