@@ -386,6 +386,8 @@
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">ICMS (R$)</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">IPI (R$)</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Frete (R$)</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">% Frete</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Frete Calc (R$)</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Seguro (R$)</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Desconto (R$)</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Observações</th>
@@ -406,6 +408,8 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvlicms }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvlipi }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvlfrete }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.perc_frete }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.valor_frete_calc }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvlsegur }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main text-right">{{ nota.notvldesco }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-clr-text-main max-w-xs overflow-hidden text-ellipsis">{{ nota.notobsfisc }}</td>
@@ -415,7 +419,7 @@
                             {% endfor %}
                         {% else %}
                         <tr>
-                            <td colspan="14" class="px-6 py-4 text-center text-sm text-clr-medium-gray">Nenhuma nota fiscal encontrada com os filtros aplicados.</td>
+                            <td colspan="16" class="px-6 py-4 text-center text-sm text-clr-medium-gray">Nenhuma nota fiscal encontrada com os filtros aplicados.</td>
                         </tr>
                         {% endif %}
                     </tbody>

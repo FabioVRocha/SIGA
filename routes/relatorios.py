@@ -97,11 +97,24 @@ def espelho_notas():
                 descricao_lote_carga = lote_desc_result[0]
 
         # Constrói a consulta SQL base para os dados das notas
-        query_base = """
+        perc_frete_case = (
+            "CASE "
+            "WHEN g.grunome ILIKE '%MADRESILVA%' THEN CAST(SUBSTRING(rc.rgcdes FROM 'M([^;]+)') AS NUMERIC) "
+            "WHEN g.grunome ILIKE '%PETRA%' THEN CAST(SUBSTRING(rc.rgcdes FROM 'P([^;]+)') AS NUMERIC) "
+            "WHEN g.grunome ILIKE '%SOLARE%' THEN CAST(SUBSTRING(rc.rgcdes FROM 'S([^;]+)') AS NUMERIC) "
+            "WHEN g.grunome ILIKE '%GLASS%' THEN CAST(SUBSTRING(rc.rgcdes FROM 'V([^;]+)') AS NUMERIC) "
+            "WHEN g.grunome ILIKE '%GARLAND%' AND p.ref IN ('SF','NM','RC','CH') THEN CAST(SUBSTRING(rc.rgcdes FROM 'G([^;]+)') AS NUMERIC) "
+            "WHEN g.grunome ILIKE '%GARLAND%' AND p.ref IN ('PF','PT','AL','MA','MC') THEN CAST(SUBSTRING(rc.rgcdes FROM '#([^;]+)') AS NUMERIC) "
+            "ELSE NULL END"
+        )
+
+        query_base = f"""
             SELECT
                 d.notdocto, d.notserie, d.notdata, d.notclifor, e.empnome,
                 d.notvltotal, d.notvlprod, d.notvlicms, d.notvlipi,
-                d.notvlfrete, d.notvlsegur, d.notvldesco, d.notobsfisc, d.notstatus
+                d.notvlfrete, d.notvlsegur, d.notvldesco, d.notobsfisc, d.notstatus,
+                MAX({perc_frete_case}) AS perc_frete,
+                d.notvlprod * MAX({perc_frete_case}) / 100.0 AS valor_frete_calc
             FROM
                 doctos d
             JOIN
@@ -118,6 +131,8 @@ def espelho_notas():
                 produto p ON tm.priproduto = p.produto
             LEFT JOIN
                 grupo g ON p.grupo = g.grupo
+            LEFT JOIN
+                regcar rc ON tm.rgccod = rc.rgccod
             WHERE 1=1
         """
         count_query_base = """
@@ -139,14 +154,16 @@ def espelho_notas():
                 produto p ON tm.priproduto = p.produto
             LEFT JOIN
                 grupo g ON p.grupo = g.grupo
+            LEFT JOIN
+                regcar rc ON tm.rgccod = rc.rgccod
             WHERE 1=1
         """
 
         # NOVO: Consulta SQL base para as somas
-        summary_query_base = """
+        summary_query_base = f"""
             SELECT
                 SUM(d.notvltotal) AS total_geral,
-                SUM(d.notvlfrete) AS total_frete,
+                SUM(d.notvlprod * ({perc_frete_case}) / 100.0) AS total_frete,
                 SUM(d.volquanti) AS total_volumes,
                 SUM(d.volpesbru) AS total_peso_bruto,
                 SUM(lc.lcam3) AS total_cubagem
@@ -166,6 +183,8 @@ def espelho_notas():
                 produto p ON tm.priproduto = p.produto
             LEFT JOIN
                 grupo g ON p.grupo = g.grupo
+            LEFT JOIN
+                regcar rc ON tm.rgccod = rc.rgccod
             WHERE 1=1
         """
 
@@ -254,7 +273,8 @@ def espelho_notas():
         column_names = [
             'notdocto', 'notserie', 'notdata', 'notclifor', 'empnome',
             'notvltotal', 'notvlprod', 'notvlicms', 'notvlipi',
-            'notvlfrete', 'notvlsegur', 'notvldesco', 'notobsfisc', 'notstatus'
+            'notvlfrete', 'notvlsegur', 'notvldesco', 'notobsfisc', 'notstatus',
+            'perc_frete', 'valor_frete_calc'
         ]
         notas = [dict(zip(column_names, row)) for row in raw_notas]
 
