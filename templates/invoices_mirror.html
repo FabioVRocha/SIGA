@@ -6,10 +6,17 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold text-gray-800">Notas Fiscais</h2>
+        <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+            <i class="fas fa-filter mr-2"></i> Filtrar
+        </button>
+    </div>
+
     {% if invoices %}
     <div class="overflow-x-auto rounded-lg shadow-md">
         <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-800 text-white">
+            <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
                 <tr>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tl-lg">Controle</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Documento</th>
@@ -47,4 +54,159 @@
     <p class="no-data text-center p-8 text-gray-600 text-lg">Nenhuma nota fiscal faturada encontrada.</p>
     {% endif %}
 </div>
+
+<!-- Filter Modal -->
+<div id="filterModal" class="modal flex items-center justify-center">
+    <div class="modal-content">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-800">Filtros de Notas Fiscais</h2>
+            <button id="closeFilterModalBtn" class="close-button">&times;</button>
+        </div>
+        <form id="filterForm" action="{{ url_for('invoices_mirror') }}" method="GET" class="space-y-4">
+            <div class="form-group">
+                <label for="start_date" class="form-label">Data Inicial:</label>
+                <input type="date" id="start_date" name="start_date" class="form-input" value="{{ filters.start_date if filters.start_date }}">
+            </div>
+            <div class="form-group">
+                <label for="end_date" class="form-label">Data Final:</label>
+                <input type="date" id="end_date" name="end_date" class="form-input" value="{{ filters.end_date if filters.end_date }}">
+            </div>
+            <div class="form-group">
+                <label for="client_name" class="form-label">Cliente:</label>
+                <input type="text" id="client_name" name="client_name" placeholder="Nome do Cliente" class="form-input" value="{{ filters.client_name if filters.client_name }}">
+            </div>
+            <div class="form-group">
+                <label for="document_number" class="form-label">Documento:</label>
+                <input type="text" id="document_number" name="document_number" placeholder="Número do Documento" class="form-input" value="{{ filters.document_number if filters.document_number }}">
+            </div>
+            <div class="form-group">
+                <label for="lotecar_code" class="form-label">Lote de Carga:</label>
+                <div class="flex items-center space-x-2">
+                    <input type="text" id="lotecar_code" name="lotecar_code" placeholder="Código do Lote" class="form-input flex-grow" value="{{ filters.lotecar_code if filters.lotecar_code }}">
+                    <span id="lotecar_description" class="text-sm text-gray-600 w-1/2 overflow-hidden text-ellipsis whitespace-nowrap"></span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="product_line" class="form-label">Linha de Produto:</label>
+                <select id="product_line" name="product_line" class="form-select">
+                    <option value="">Todas</option>
+                    {% for line in product_lines %}
+                    <option value="{{ line }}" {% if filters.product_line == line %}selected{% endif %}>{{ line }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex justify-end space-x-4 mt-6">
+                <button type="button" id="clearFiltersBtn" class="btn-secondary">Limpar Filtros</button>
+                <button type="submit" class="btn-primary">Aplicar Filtros</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const filterModal = document.getElementById('filterModal');
+        const openFilterModalBtn = document.getElementById('openFilterModalBtn');
+        const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+        const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+        const filterForm = document.getElementById('filterForm');
+        const startDateInput = document.getElementById('start_date');
+        const endDateInput = document.getElementById('end_date');
+        const lotecarCodeInput = document.getElementById('lotecar_code');
+        const lotecarDescriptionSpan = document.getElementById('lotecar_description');
+        const productLineSelect = document.getElementById('product_line'); // Novo select
+
+        // Ensure the modal is hidden when the page loads
+        filterModal.style.display = 'none';
+
+        // Function to open the modal
+        function openModal() {
+            filterModal.style.display = 'flex';
+            // Set default dates to today if they are empty
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+            const day = String(today.getDate()).padStart(2, '0');
+            const formattedToday = `${year}-${month}-${day}`;
+
+            if (!startDateInput.value) {
+                startDateInput.value = formattedToday;
+            }
+            if (!endDateInput.value) {
+                endDateInput.value = formattedToday;
+            }
+
+            // Load lotecar description if code is already present
+            if (lotecarCodeInput.value) {
+                fetchLotecarDescription(lotecarCodeInput.value);
+            } else {
+                lotecarDescriptionSpan.textContent = ''; // Clear if no code
+            }
+        }
+
+        // Function to close the modal
+        function closeModal() {
+            filterModal.style.display = 'none';
+        }
+
+        // Function to fetch lotecar description
+        async function fetchLotecarDescription(code) {
+            if (!code) {
+                lotecarDescriptionSpan.textContent = '';
+                return;
+            }
+            try {
+                const response = await fetch(`/api/get_lotecar_description/${code}`);
+                const data = await response.json();
+                lotecarDescriptionSpan.textContent = data.description || 'Não encontrado';
+            } catch (error) {
+                console.error('Erro ao buscar descrição do lote de carga:', error);
+                lotecarDescriptionSpan.textContent = 'Erro ao carregar';
+            }
+        }
+
+        // Event listeners
+        openFilterModalBtn.addEventListener('click', openModal);
+        closeFilterModalBtn.addEventListener('click', closeModal);
+        window.addEventListener('click', (event) => {
+            if (event.target == filterModal) {
+                closeModal();
+            }
+        });
+
+        clearFiltersBtn.addEventListener('click', () => {
+            filterForm.reset(); // Resets all form fields
+            // Manually clear client, document, lotecar, and product line as reset() might not clear values from URL params
+            document.getElementById('client_name').value = '';
+            document.getElementById('document_number').value = '';
+            lotecarCodeInput.value = ''; // Clear lotecar code
+            lotecarDescriptionSpan.textContent = ''; // Clear lotecar description
+            productLineSelect.value = ''; // Clear product line selection
+            // Submete o formulário para limpar os filtros da URL e recarregar a página
+            filterForm.submit();
+        });
+
+        // Add event listener to close modal on form submission
+        filterForm.addEventListener('submit', (event) => {
+            event.preventDefault(); // Previne a submissão padrão do formulário
+            closeModal(); // Fecha o modal
+            // Pequeno atraso para garantir que o modal seja visualmente fechado antes de recarregar a página
+            setTimeout(() => {
+                filterForm.submit(); // Submete o formulário manualmente
+            }, 50); // 50ms de atraso, pode ser ajustado se necessário
+        });
+
+        // Event listener for lotecar code input changes
+        lotecarCodeInput.addEventListener('input', (event) => {
+            fetchLotecarDescription(event.target.value);
+        });
+
+        // Initial load of lotecar description if already present in URL params
+        if (lotecarCodeInput.value) {
+            fetchLotecarDescription(lotecarCodeInput.value);
+        }
+    });
+</script>
 {% endblock %}
