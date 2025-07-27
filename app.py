@@ -289,11 +289,6 @@ def calculate_freight_percentage(product_line, product_ref, regcar_parsed_data):
     elif product_line == "GLASSMADRE":
         return regcar_parsed_data.get('V', 0.0)
     elif product_line == "GARLAND":
-        # Corrigido: A lógica DAX original usava OR, então se qualquer uma das condições for verdadeira,
-        # ele retorna regcar[G] ou regcar[#].
-        # A forma como estava antes (product_ref_upper in ["SF", "NM", "RC", "CH"] or product_ref_upper in ["PF", "PT", "AL", "MA", "MC"])
-        # sempre avaliaria a primeira parte se fosse verdadeira, e a segunda parte só se a primeira fosse falsa.
-        # A lógica DAX é mais sequencial e encadeada.
         if product_ref_upper in ["SF", "NM", "RC", "CH"]:
             return regcar_parsed_data.get('G', 0.0)
         elif product_ref_upper in ["PF", "PT", "AL", "MA", "MC"]:
@@ -415,12 +410,11 @@ def invoices_mirror():
             if where_clauses:
                 sql_query += " WHERE " + " AND ".join(where_clauses)
 
-            # GROUP BY ajustado para agregar por nota fiscal
-            # Inclui todos os campos não agregados do SELECT
+            # GROUP BY ajustado para agregar por nota fiscal, removendo as colunas agregadas
             sql_query += """
                 GROUP BY
                     d.controle, d.notdocto, d.notdata, d.notvltotal, e.empnome,
-                    d.notvlipi, rgcdes_agg, pronome_agg, grunome_agg
+                    d.notvlipi
             """
             sql_query += " ORDER BY d.notdata DESC, d.controle DESC;"
 
@@ -463,6 +457,11 @@ def invoices_mirror():
 
                 # Adicionar o percentual de frete ao dicionário da fatura
                 invoice['freight_percentage'] = freight_percentage * 100 # Multiplicar por 100 para exibir como percentual
+
+                # Calcular o Valor do Frete
+                # Converta total_privltotal para float antes da multiplicação
+                valor_frete = (invoice['freight_percentage'] / 100) * float(invoice['total_privltotal'] if invoice['total_privltotal'] is not None else 0)
+                invoice['valor_frete'] = valor_frete
 
                 invoices_data.append(invoice)
 
