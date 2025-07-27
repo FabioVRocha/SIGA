@@ -8,6 +8,7 @@ import datetime # Para formatar datas
 from functools import wraps # Para criar um decorador de login
 # Importa as funções para hashing de senhas
 from werkzeug.security import generate_password_hash, check_password_hash
+import re # Para expressões regulares, usado para parsear rgcdes
 
 # Importa as configurações do arquivo config.py
 from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME
@@ -231,6 +232,68 @@ def get_distinct_product_lines():
                 conn.close()
     return sorted(list(product_lines))
 
+def parse_regcar_description(rgcdes_string):
+    """
+    Parses the rgcdes string to extract freight percentages and M³ value.
+    Replicates the Power Query M script logic.
+    Example: "P0.05;M0.03;G0.02;#0.01;V0.04;S0.06;$1.2"
+    """
+    data = {
+        'P': 0.0, 'M': 0.0, 'G': 0.0, '#': 0.0, 'V': 0.0, 'S': 0.0, 'M3': 0.0
+    }
+    if not rgcdes_string:
+        return data
+
+    # Use regex to find patterns like [LETTER][NUMBER]; or $[NUMBER]
+    # This regex is more robust for variations in spacing or format.
+    # It captures the number between the letter and the semicolon (or end of string if no semicolon)
+    patterns = {
+        'P': r"P([\d.]+)(?:;|$)",
+        'M': r"M([\d.]+)(?:;|$)",
+        'G': r"G([\d.]+)(?:;|$)",
+        '#': r"#([\d.]+)(?:;|$)",
+        'V': r"V([\d.]+)(?:;|$)",
+        'S': r"S([\d.]+)(?:;|$)",
+        'M3': r"\$([\d.]+)"
+    }
+
+    for key, pattern in patterns.items():
+        match = re.search(pattern, rgcdes_string)
+        if match:
+            try:
+                value = float(match.group(1))
+                data[key] = value
+            except ValueError:
+                pass # If conversion to float fails, keep default 0.0
+    return data
+
+def calculate_freight_percentage(product_line, product_ref, regcar_parsed_data):
+    """
+    Calculates the freight percentage based on product line, product reference,
+    and parsed regcar data, replicating the DAX formula.
+    """
+    if not regcar_parsed_data:
+        return 0.0
+
+    product_ref_upper = product_ref.upper() if product_ref else ""
+
+    print(f"Calculating freight: Line='{product_line}', Ref='{product_ref_upper}', RegcarData={regcar_parsed_data}") # DEBUG
+
+    if product_line == "MADRESILVA":
+        return regcar_parsed_data.get('M', 0.0)
+    elif product_line == "PETRA":
+        return regcar_parsed_data.get('P', 0.0)
+    elif product_line == "SOLARE":
+        return regcar_parsed_data.get('S', 0.0)
+    elif product_line == "GLASSMADRE":
+        return regcar_parsed_data.get('V', 0.0)
+    elif product_line == "GARLAND":
+        if product_ref_upper in ["SF", "NM", "RC", "CH"]:
+            return regcar_parsed_data.get('G', 0.0)
+        elif product_ref_upper in ["PF", "PT", "AL", "MA", "MC"]:
+            return regcar_parsed_data.get('#', 0.0)
+    print(f"No matching freight rule, returning 0.0") # DEBUG
+    return 0.0 # Default if no condition matches
 
 @app.route('/invoices_mirror')
 @login_required
@@ -239,7 +302,7 @@ def invoices_mirror():
     Rota que exibe o espelho das notas fiscais faturadas com filtros.
     """
     conn = get_erp_db_connection() # Conecta ao DB do ERP
-    invoices = []
+    invoices_data = [] # Para armazenar os dados processados
 
     # Get current date for default filter values
     today = datetime.date.today().isoformat() # Format as YYYY-MM-DD for HTML input type="date"
@@ -251,7 +314,7 @@ def invoices_mirror():
         'client_name': request.args.get('client_name'),
         'document_number': request.args.get('document_number'),
         'lotecar_code': request.args.get('lotecar_code'),
-        'product_line': request.args.get('product_line') # Novo filtro: linha de produto
+        'product_line': request.args.get('product_line')
     }
 
     # If no date filters are provided, set them to today's date
@@ -266,6 +329,9 @@ def invoices_mirror():
         try:
             cur = conn.cursor()
             # Base SQL query
+            # Ajustado para AGREGAR no nível da nota fiscal
+            # COALESCE(MAX(rc.rgcdes), '') garante que rgcdes_agg não seja NULL para parse_regcar_description
+            # COALESCE(MAX(p.pronome), '') e COALESCE(MAX(g.grunome), '') para pronome_agg e grunome_agg
             sql_query = """
                 SELECT
                     d.controle,
@@ -274,8 +340,11 @@ def invoices_mirror():
                     d.notvltotal,
                     e.empnome AS client_name,
                     d.notvlipi,
-                    COALESCE(SUM(tm.privltotal), 0) AS total_privltotal, -- Corrigido para toqmovi.privltotal
-                    COALESCE(SUM(tm.privlsubst), 0) AS total_privlsubst
+                    COALESCE(SUM(tm.privltotal), 0) AS total_privltotal,
+                    COALESCE(SUM(tm.privlsubst), 0) AS total_privlsubst,
+                    COALESCE(MAX(rc.rgcdes), '') AS rgcdes_agg,
+                    COALESCE(MAX(p.pronome), '') AS pronome_agg,
+                    COALESCE(MAX(g.grunome), '') AS grunome_agg
                 FROM
                     doctos d
                 JOIN
@@ -284,6 +353,14 @@ def invoices_mirror():
                     lotecar lc ON d.vollcacod = lc.lcacod
                 LEFT JOIN
                     toqmovi tm ON d.controle = tm.itecontrol
+                LEFT JOIN
+                    cidade c ON d.noscidade = c.cidade
+                LEFT JOIN
+                    regcar rc ON c.rgccicod = rc.rgccod
+                LEFT JOIN
+                    produto p ON tm.priproduto = p.produto
+                LEFT JOIN
+                    grupo g ON p.grupo = g.grupo
             """
             query_params = []
             where_clauses = []
@@ -304,57 +381,92 @@ def invoices_mirror():
                 where_clauses.append("lc.lcacod = %s")
                 query_params.append(filters['lotecar_code'])
             
-            # Adiciona filtro por linha de produto
+            # Filtro por linha de produto (agora mais integrado na query principal)
             if filters['product_line']:
-                # Primeiro, encontre todos os códigos de grupo que correspondem à linha de produto selecionada
                 matching_group_codes = []
-                temp_conn = get_erp_db_connection()
-                if temp_conn:
+                temp_conn_for_groups = get_erp_db_connection()
+                if temp_conn_for_groups:
                     try:
-                        temp_cur = temp_conn.cursor()
-                        temp_cur.execute("SELECT grupo, grunome FROM grupo;")
-                        all_groups_data = temp_cur.fetchall()
-                        temp_cur.close()
+                        temp_cur_for_groups = temp_conn_for_groups.cursor()
+                        temp_cur_for_groups.execute("SELECT grupo, grunome FROM grupo;")
+                        all_groups_data = temp_cur_for_groups.fetchall()
+                        temp_cur_for_groups.close()
                         for group_code, group_name in all_groups_data:
                             if get_product_line(group_name) == filters['product_line']:
                                 matching_group_codes.append(group_code)
                     except Error as e:
                         print(f"Erro ao buscar grupos para filtro de linha de produto: {e}")
                     finally:
-                        if temp_conn:
-                            temp_conn.close()
+                        if temp_conn_for_groups:
+                            temp_conn_for_groups.close()
 
                 if matching_group_codes:
-                    # Agora, junte com toqmovi, produto e grupo para filtrar
-                    sql_query += """
-                        LEFT JOIN produto p ON tm.priproduto = p.produto
-                        LEFT JOIN grupo g ON p.grupo = g.grupo
-                    """
-                    # Use IN para filtrar pelos códigos de grupo encontrados
                     where_clauses.append("g.grupo IN %s")
                     query_params.append(tuple(matching_group_codes))
                 else:
-                    # Se nenhuma linha de produto corresponder, retorne um conjunto vazio para não mostrar resultados
                     where_clauses.append("FALSE")
-
 
             if where_clauses:
                 sql_query += " WHERE " + " AND ".join(where_clauses)
 
-            # Ajuste no GROUP BY: 'd.notvlprod' foi removido e 'COALESCE(SUM(tm.privltotal), 0)' é uma agregação
-            sql_query += " GROUP BY d.controle, d.notdocto, d.notdata, d.notvltotal, e.empnome, d.notvlipi"
+            # GROUP BY ajustado para agregar por nota fiscal
+            # Inclui todos os campos não agregados do SELECT
+            sql_query += """
+                GROUP BY
+                    d.controle, d.notdocto, d.notdata, d.notvltotal, e.empnome,
+                    d.notvlipi
+            """
             sql_query += " ORDER BY d.notdata DESC, d.controle DESC;"
 
             cur.execute(sql_query, tuple(query_params))
-            invoices = cur.fetchall()
+            raw_invoices = cur.fetchall()
             cur.close()
+
+            # Processar os dados para adicionar o percentual de frete
+            for row in raw_invoices:
+                # Mapear os campos da query para variáveis nomeadas
+                # Os índices aqui devem corresponder à ordem do SELECT
+                invoice = {
+                    'controle': row[0],
+                    'notdocto': row[1],
+                    'notdata': row[2],
+                    'notvltotal': row[3],
+                    'client_name': row[4],
+                    'notvlipi': row[5],
+                    'total_privltotal': row[6], # Valor Produtos
+                    'total_privlsubst': row[7], # Valor ST
+                    'rgcdes': row[8], # rgcdes_agg
+                    'pronome': row[9], # pronome_agg
+                    'grunome': row[10] # grunome_agg
+                }
+                print(f"Processing invoice {invoice['controle']}: rgcdes='{invoice['rgcdes']}', pronome='{invoice['pronome']}', grunome='{invoice['grunome']}'") # DEBUG
+
+                # Calcular a linha do produto
+                product_line = get_product_line(invoice['grunome'])
+                
+                # Extrair a referência do produto (primeiros 2 caracteres do pronome)
+                product_ref = invoice['pronome'][:2] if invoice['pronome'] else ""
+
+                # Parsear a descrição da região de frete
+                regcar_data = parse_regcar_description(invoice['rgcdes'])
+                print(f"Parsed regcar data: {regcar_data}") # DEBUG
+
+                # Calcular o percentual de frete
+                freight_percentage = calculate_freight_percentage(product_line, product_ref, regcar_data)
+                print(f"Calculated freight percentage: {freight_percentage}") # DEBUG
+
+                # Adicionar o percentual de frete ao dicionário da fatura
+                invoice['freight_percentage'] = freight_percentage * 100 # Multiplicar por 100 para exibir como percentual
+
+                invoices_data.append(invoice)
+
         except Error as e:
             print(f"Erro ao executar a consulta: {e}")
             flash(f"Erro ao carregar notas fiscais: {e}", "danger")
         finally:
             if conn:
                 conn.close()
-    return render_template('invoices_mirror.html', invoices=invoices, filters=filters, product_lines=product_lines, system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+    return render_template('invoices_mirror.html', invoices=invoices_data, filters=filters, product_lines=product_lines, system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
 
 @app.route('/api/get_lotecar_description/<string:lotecar_code>')
 @login_required
