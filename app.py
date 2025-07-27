@@ -270,21 +270,20 @@ def invoices_mirror():
                 SELECT
                     d.controle,
                     d.notdocto,
-                    d.notserie,
                     d.notdata,
                     d.notvltotal,
                     e.empnome AS client_name,
-                    d.notcondica,
-                    d.notobsfisc,
-                    d.notdtalt,
-                    d.nothralt,
-                    d.notusalt
+                    d.notvlipi,
+                    d.notvlprod,
+                    COALESCE(SUM(tm.privlsubst), 0) AS total_privlsubst -- Adicionado: Valor ST
                 FROM
                     doctos d
                 JOIN
                     empresa e ON d.notclifor = e.empresa
                 LEFT JOIN
                     lotecar lc ON d.vollcacod = lc.lcacod
+                LEFT JOIN
+                    toqmovi tm ON d.controle = tm.itecontrol -- Novo JOIN para toqmovi
             """
             query_params = []
             where_clauses = []
@@ -328,7 +327,6 @@ def invoices_mirror():
                 if matching_group_codes:
                     # Agora, junte com toqmovi, produto e grupo para filtrar
                     sql_query += """
-                        LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
                         LEFT JOIN produto p ON tm.priproduto = p.produto
                         LEFT JOIN grupo g ON p.grupo = g.grupo
                     """
@@ -343,6 +341,7 @@ def invoices_mirror():
             if where_clauses:
                 sql_query += " WHERE " + " AND ".join(where_clauses)
 
+            sql_query += " GROUP BY d.controle, d.notdocto, d.notdata, d.notvltotal, e.empnome, d.notvlipi, d.notvlprod" # Necessário para SUM
             sql_query += " ORDER BY d.notdata DESC, d.controle DESC;"
 
             cur.execute(sql_query, tuple(query_params))
