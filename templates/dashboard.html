@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Visão Geral{% endblock %}
+
+{% block page_title %}Visão Geral do SIGA{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <!-- Exemplo de Card no Dashboard -->
+    <div class="dashboard-card">
+        <div class="dashboard-card-header">
+            <i class="fas fa-chart-line text-icon-blue"></i>
+            <span>Vendas Faturadas (Mês)</span>
+        </div>
+        <p class="text-3xl font-bold text-gray-900">R$ 150.000,00</p>
+        <p class="text-sm text-gray-600 mt-2">Aumento de 10% em relação ao mês anterior.</p>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="dashboard-card-header">
+            <i class="fas fa-file-invoice-dollar text-icon-green"></i>
+            <span>Notas Fiscais Emitidas</span>
+        </div>
+        <p class="text-3xl font-bold text-gray-900">520</p>
+        <p class="text-sm text-gray-600 mt-2">Total de notas fiscais faturadas neste mês.</p>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="dashboard-card-header">
+            <i class="fas fa-boxes text-icon-purple"></i>
+            <span>Produtos em Estoque</span>
+        </div>
+        <p class="text-3xl font-bold text-gray-900">1.250</p>
+        <p class="text-sm text-gray-600 mt-2">Itens únicos disponíveis.</p>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="dashboard-card-header">
+            <i class="fas fa-users text-icon-orange"></i>
+            <span>Novos Clientes (Mês)</span>
+        </div>
+        <p class="text-3xl font-bold text-gray-900">15</p>
+        <p class="text-sm text-gray-600 mt-2">Novos cadastros de clientes este mês.</p>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="dashboard-card-header">
+            <i class="fas fa-money-bill-wave text-icon-error"></i>
+            <span>Contas a Pagar (Próximos 7 dias)</span>
+        </div>
+        <p class="text-3xl font-bold text-gray-900">R$ 25.000,00</p>
+        <p class="text-sm text-gray-600 mt-2">Total de contas a pagar nos próximos 7 dias.</p>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="dashboard-card-header">
+            <i class="fas fa-hand-holding-usd text-icon-teal"></i>
+            <span>Contas a Receber (Próximos 7 dias)</span>
+        </div>
+        <p class="text-3xl font-bold text-gray-900">R$ 40.000,00</p>
+        <p class="text-sm text-gray-600 mt-2">Total de contas a receber nos próximos 7 dias.</p>
+    </div>
+</div>
+
+<div class="mt-8">
+    <h2 class="text-2xl font-bold text-gray-800 mb-4">Avisos e Notificações</h2>
+    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md" role="alert">
+        <p class="font-bold">Atenção:</p>
+        <p>Verifique o estoque dos produtos "Parafuso M8" e "Tubo PVC 100mm", estão abaixo do mínimo.</p>
+    </div>
+    <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 rounded-md mt-4" role="alert">
+        <p class="font-bold">Informação:</p>
+        <p>Nova atualização do sistema disponível. Clique <a href="#" class="underline text-blue-800 hover:text-blue-900">aqui</a> para mais detalhes.</p>
+    </div>
+</div>
+{% endblock %}

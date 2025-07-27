@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Espelho de Notas Fiscais{% endblock %}
+
+{% block page_title %}Espelho de Notas Fiscais Faturadas{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
+    {% if invoices %}
+    <div class="overflow-x-auto rounded-lg shadow-md">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-800 text-white">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tl-lg">Controle</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Documento</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Série</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Data</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor Total</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Cliente/Fornecedor</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Condição</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Obs. Fiscal</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Dt. Alt.</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Hr. Alt.</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tr-lg">Usuário Alt.</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for invoice in invoices %}
+                <tr class="hover:bg-blue-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ invoice[0] if invoice[0] is not none else 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[1] if invoice[1] is not none else 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[2] if invoice[2] is not none else 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[3].strftime('%d/%m/%Y') if invoice[3] is not none else 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice[4]).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice[4] is not none else '0,00' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[5] if invoice[5] is not none else 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[6] if invoice[6] is not none else 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[7] if invoice[7] is not none else 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[8].strftime('%d/%m/%Y') if invoice[8] is not none else 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[9] if invoice[9] is not none else 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[10] if invoice[10] is not none else 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="no-data text-center p-8 text-gray-600 text-lg">Nenhuma nota fiscal faturada encontrada.</p>
+    {% endif %}
+</div>
+{% endblock %}
