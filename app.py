@@ -244,9 +244,10 @@ def parse_regcar_description(rgcdes_string):
     if not rgcdes_string:
         return data
 
+    # Substitui vírgulas por pontos para garantir a conversão correta para float
+    rgcdes_string = rgcdes_string.replace(',', '.')
+
     # Use regex to find patterns like [LETTER][NUMBER]; or $[NUMBER]
-    # This regex is more robust for variations in spacing or format.
-    # It captures the number between the letter and the semicolon (or end of string if no semicolon)
     patterns = {
         'P': r"P([\d.]+)(?:;|$)",
         'M': r"M([\d.]+)(?:;|$)",
@@ -288,6 +289,11 @@ def calculate_freight_percentage(product_line, product_ref, regcar_parsed_data):
     elif product_line == "GLASSMADRE":
         return regcar_parsed_data.get('V', 0.0)
     elif product_line == "GARLAND":
+        # Corrigido: A lógica DAX original usava OR, então se qualquer uma das condições for verdadeira,
+        # ele retorna regcar[G] ou regcar[#].
+        # A forma como estava antes (product_ref_upper in ["SF", "NM", "RC", "CH"] or product_ref_upper in ["PF", "PT", "AL", "MA", "MC"])
+        # sempre avaliaria a primeira parte se fosse verdadeira, e a segunda parte só se a primeira fosse falsa.
+        # A lógica DAX é mais sequencial e encadeada.
         if product_ref_upper in ["SF", "NM", "RC", "CH"]:
             return regcar_parsed_data.get('G', 0.0)
         elif product_ref_upper in ["PF", "PT", "AL", "MA", "MC"]:
@@ -414,7 +420,7 @@ def invoices_mirror():
             sql_query += """
                 GROUP BY
                     d.controle, d.notdocto, d.notdata, d.notvltotal, e.empnome,
-                    d.notvlipi
+                    d.notvlipi, rgcdes_agg, pronome_agg, grunome_agg
             """
             sql_query += " ORDER BY d.notdata DESC, d.controle DESC;"
 
@@ -491,6 +497,108 @@ def get_lotecar_description(lotecar_code):
                 conn.close()
     return jsonify({'description': description})
 
+@app.route('/api/get_invoice_details/<int:controle>')
+@login_required
+def get_invoice_details(controle):
+    """
+    Rota de API para buscar detalhes de uma nota fiscal específica (cabeçalho e itens).
+    """
+    print(f"DEBUG: get_invoice_details called for controle: {controle}") # DEBUG
+    conn = get_erp_db_connection()
+    invoice_header = {}
+    invoice_items = []
+    
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            # Buscar dados do cabeçalho da nota fiscal
+            cur.execute("""
+                SELECT
+                    d.notdocto,
+                    d.notclifor,
+                    e.empnome,
+                    d.operacao,
+                    d.notdata,
+                    d.notvltotal
+                FROM
+                    doctos d
+                JOIN
+                    empresa e ON d.notclifor = e.empresa
+                WHERE
+                    d.controle = %s
+            """, (controle,))
+            header_data = cur.fetchone()
+            print(f"DEBUG: Header data for controle {controle}: {header_data}") # DEBUG
+            if header_data:
+                invoice_header = {
+                    'notdocto': header_data[0],
+                    'notclifor': header_data[1],
+                    'empnome': header_data[2],
+                    'operacao': header_data[3],
+                    'notdata': header_data[4].strftime('%d/%m/%Y') if header_data[4] else 'N/A',
+                    'notvltotal': header_data[5]
+                }
+
+            # Buscar itens de produto da nota fiscal
+            cur.execute("""
+                SELECT
+                    tm.prisequen,
+                    tm.priproduto,
+                    p.pronome,
+                    p.unimedida,
+                    tm.priquanti,
+                    tm.pritmpuni,
+                    tm.privltotal,
+                    tm.prialqipi,
+                    tm.privlipi,
+                    tm.privlsubst
+                FROM
+                    toqmovi tm
+                JOIN
+                    produto p ON tm.priproduto = p.produto
+                WHERE
+                    tm.itecontrol = %s
+                ORDER BY
+                    tm.prisequen
+            """, (controle,))
+            items_data = cur.fetchall()
+            print(f"DEBUG: Items data for controle {controle}: {items_data}") # DEBUG
+
+            for item in items_data:
+                item_privltotal = item[6] if item[6] is not None else 0
+                item_privlipi = item[8] if item[8] is not None else 0
+                item_privlsubst = item[9] if item[9] is not None else 0
+                
+                valor_total_item = item_privltotal + item_privlipi + item_privlsubst
+
+                invoice_items.append({
+                    'prisequen': item[0],
+                    'priproduto': item[1],
+                    'pronome': item[2],
+                    'unimedida': item[3],
+                    'priquanti': item[4],
+                    'pritmpuni': item[5],
+                    'privltotal': item_privltotal,
+                    'prialqipi': item[7],
+                    'privlipi': item_privlipi,
+                    'privlsubst': item_privlsubst,
+                    'valor_total_item': valor_total_item
+                })
+            cur.close()
+
+        except Error as e:
+            print(f"ERRO ao buscar detalhes da nota fiscal no backend: {e}") # DEBUG
+            return jsonify({'error': str(e)}), 500
+        finally:
+            if conn:
+                conn.close()
+    
+    print(f"DEBUG: Returning details for controle {controle}: Header={invoice_header}, Items count={len(invoice_items)}") # DEBUG
+    return jsonify({
+        'header': invoice_header,
+        'items': invoice_items
+    })
 
 @app.route('/api/get_group_product_line/<string:group_name>')
 @login_required

@@ -336,6 +336,24 @@
             border-color: var(--clr-light-blue);
             box-shadow: 0 0 0 2px rgba(79, 131, 204, 0.25);
         }
+
+        /* Estilo para botões de ícone discretos */
+        .icon-button {
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            font-size: 1.25rem; /* Ajuste o tamanho do ícone conforme necessário */
+            display: inline-flex; /* Para alinhar o ícone */
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s ease-in-out; /* Transição suave para a cor */
+        }
+        .icon-button:focus {
+            outline: none; /* Remove o outline de foco padrão */
+            box-shadow: 0 0 0 2px rgba(79, 131, 204, 0.25); /* Adiciona um anel de foco discreto */
+            border-radius: 0.25rem; /* Opcional: arredonda o anel de foco */
+        }
     </style>
 </head>
 <body class="flex flex-col md:flex-row min-h-screen">
