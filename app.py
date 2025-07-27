@@ -274,8 +274,8 @@ def invoices_mirror():
                     d.notvltotal,
                     e.empnome AS client_name,
                     d.notvlipi,
-                    d.notvlprod,
-                    COALESCE(SUM(tm.privlsubst), 0) AS total_privlsubst -- Adicionado: Valor ST
+                    COALESCE(SUM(tm.privltotal), 0) AS total_privltotal, -- Corrigido para toqmovi.privltotal
+                    COALESCE(SUM(tm.privlsubst), 0) AS total_privlsubst
                 FROM
                     doctos d
                 JOIN
@@ -283,7 +283,7 @@ def invoices_mirror():
                 LEFT JOIN
                     lotecar lc ON d.vollcacod = lc.lcacod
                 LEFT JOIN
-                    toqmovi tm ON d.controle = tm.itecontrol -- Novo JOIN para toqmovi
+                    toqmovi tm ON d.controle = tm.itecontrol
             """
             query_params = []
             where_clauses = []
@@ -341,7 +341,8 @@ def invoices_mirror():
             if where_clauses:
                 sql_query += " WHERE " + " AND ".join(where_clauses)
 
-            sql_query += " GROUP BY d.controle, d.notdocto, d.notdata, d.notvltotal, e.empnome, d.notvlipi, d.notvlprod" # Necessário para SUM
+            # Ajuste no GROUP BY: 'd.notvlprod' foi removido e 'COALESCE(SUM(tm.privltotal), 0)' é uma agregação
+            sql_query += " GROUP BY d.controle, d.notdocto, d.notdata, d.notvltotal, e.empnome, d.notvlipi"
             sql_query += " ORDER BY d.notdata DESC, d.controle DESC;"
 
             cur.execute(sql_query, tuple(query_params))

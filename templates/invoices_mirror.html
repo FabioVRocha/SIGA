@@ -22,10 +22,10 @@
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Documento</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Data</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Cliente/Fornecedor</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor Total</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor IPI</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor Produtos</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tr-lg">Valor ST</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor IPI</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor ST</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tr-lg">Valor Total</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -35,10 +35,11 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[1] if invoice[1] is not none else 'N/A' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[2].strftime('%d/%m/%Y') if invoice[2] is not none else 'N/A' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice[4] if invoice[4] is not none else 'N/A' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice[3]).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice[3] is not none else '0,00' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice[5]).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice[5] is not none else '0,00' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice[6]).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice[6] is not none else '0,00' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice[7]).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice[7] is not none else '0,00' }}</td>
+                    {# Nova ordem das colunas de valores #}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice[6]).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice[6] is not none else '0,00' }}</td> {# Valor Produtos (privltotal) #}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice[5]).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice[5] is not none else '0,00' }}</td> {# Valor IPI (notvlipi) #}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice[7]).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice[7] is not none else '0,00' }}</td> {# Valor ST (privlsubst) #}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice[3]).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice[3] is not none else '0,00' }}</td> {# Valor Total (notvltotal) #}
                 </tr>
                 {% endfor %}
             </tbody>
