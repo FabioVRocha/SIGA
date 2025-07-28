@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Parâmetros do Sistema{% endblock %}
+
+{% block page_title %}Parâmetros do Sistema{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
+    <h2 class="text-xl font-semibold text-gray-800 mb-4">Configurações de Transações para Notas Fiscais</h2>
+    <form action="{{ url_for('gerencial_parameters') }}" method="POST" class="space-y-6">
+        <div class="form-group">
+            <label class="form-label text-lg font-medium">Transações a serem exibidas no Espelho de Notas Fiscais:</label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-2">
+                {% for transacao in all_transactions %}
+                <div class="flex items-center">
+                    <input type="checkbox" id="transacao_{{ transacao.transacao }}" name="selected_transactions" value="{{ transacao.transacao }}"
+                           class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                           {% if transacao.is_selected %}checked{% endif %}>
+                    <label for="transacao_{{ transacao.transacao }}" class="ml-2 text-gray-700">{{ transacao.trsnome }} ({{ transacao.transacao }})</label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="flex justify-end mt-6">
+            <button type="submit" class="btn btn-primary">Salvar Parâmetros</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -12,6 +12,9 @@ DB_PORT = "5433" # Porta do PostgreSQL (padrão é 5432)
 # Este banco será usado para tabelas auxiliares como usuários do sistema.
 SIGA_DB_NAME = "siga_db" # Nome do seu banco de dados auxiliar SIGA
 
+# Nome da tabela para armazenar parâmetros de usuário
+USER_PARAMETERS_TABLE = "user_parameters"
+
 # Chave secreta para sessões e mensagens flash (IMPORTANTE: Mude para um valor complexo e seguro em produção)
 SECRET_KEY = 'sua_chave_secreta_muito_segura_e_complexa_aqui'
 

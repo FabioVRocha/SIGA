@@ -9,9 +9,10 @@ from functools import wraps # Para criar um decorador de login
 # Importa as funções para hashing de senhas
 from werkzeug.security import generate_password_hash, check_password_hash
 import re # Para expressões regulares, usado para parsear rgcdes
+import json # Para lidar com dados JSON (para parâmetros de usuário)
 
 # Importa as configurações do arquivo config.py
-from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME
+from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE
 
 # Inicializa a aplicação Flask
 app = Flask(__name__)
@@ -34,7 +35,7 @@ def get_erp_db_connection():
         return conn
     except Error as e:
         print(f"Erro ao conectar ao banco de dados PostgreSQL do ERP: {e}")
-        flash(f"Erro ao conectar ao banco de dados do ERP: {e}", "danger")
+        # flash(f"Erro ao conectar ao banco de dados do ERP: {e}", "danger") # Removido flash em função de conexão
         return None
 
 def get_siga_db_connection():
@@ -53,17 +54,18 @@ def get_siga_db_connection():
         return conn
     except Error as e:
         print(f"Erro ao conectar ao banco de dados auxiliar SIGA_DB: {e}")
-        flash(f"Erro ao conectar ao banco de dados auxiliar: {e}", "danger")
+        # flash(f"Erro ao conectar ao banco de dados auxiliar: {e}", "danger") # Removido flash em função de conexão
         return None
 
 def init_siga_db():
     """
-    Inicializa o banco de dados auxiliar, criando a tabela de usuários se ela não existir.
+    Inicializa o banco de dados auxiliar, criando a tabela de usuários e parâmetros se elas não existirem.
     """
     conn = get_siga_db_connection()
     if conn:
         try:
             cur = conn.cursor()
+            # Cria a tabela de usuários
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
@@ -71,12 +73,23 @@ def init_siga_db():
                     password_hash VARCHAR(128) NOT NULL
                 );
             """)
+            # Cria a tabela de parâmetros de usuário
+            cur.execute(f"""
+                CREATE TABLE IF NOT EXISTS {USER_PARAMETERS_TABLE} (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    param_name VARCHAR(100) NOT NULL,
+                    param_value TEXT,
+                    UNIQUE(user_id, param_name),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
+            """)
             conn.commit()
             cur.close()
-            print("Tabela 'users' verificada/criada com sucesso no siga_db.")
+            print("Tabelas 'users' e 'user_parameters' verificadas/criadas com sucesso no siga_db.")
         except Error as e:
             print(f"Erro ao inicializar o siga_db: {e}")
-            flash(f"Erro ao inicializar o banco de dados auxiliar: {e}", "danger")
+            # flash(f"Erro ao inicializar o banco de dados auxiliar: {e}", "danger") # Removido flash em init_siga_db
         finally:
             if conn:
                 conn.close()
@@ -95,7 +108,57 @@ def login_required(f):
             flash('Você precisa fazer login para acessar esta página.', 'danger')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
+        # Em um ambiente de produção, você também verificaria a validade da sessão, etc.
     return decorated_function
+
+def get_user_parameters(user_id, param_name):
+    """
+    Busca um parâmetro específico para um usuário.
+    Retorna o valor do parâmetro ou None se não encontrado.
+    """
+    conn = get_siga_db_connection()
+    param_value = None
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(f"SELECT param_value FROM {USER_PARAMETERS_TABLE} WHERE user_id = %s AND param_name = %s", (user_id, param_name))
+            result = cur.fetchone()
+            if result:
+                param_value = result[0]
+            cur.close()
+        except Error as e:
+            print(f"Erro ao buscar parâmetro '{param_name}' para o usuário {user_id}: {e}")
+            # flash(f"Erro ao buscar parâmetro: {e}", "danger") # Removido flash em get_user_parameters
+        finally:
+            if conn:
+                conn.close()
+    return param_value
+
+def save_user_parameters(user_id, param_name, param_value):
+    """
+    Salva ou atualiza um parâmetro para um usuário.
+    """
+    conn = get_siga_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(f"""
+                INSERT INTO {USER_PARAMETERS_TABLE} (user_id, param_name, param_value)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, param_name) DO UPDATE SET param_value = EXCLUDED.param_value;
+            """, (user_id, param_name, param_value))
+            conn.commit()
+            cur.close()
+            return True
+        except Error as e:
+            print(f"Erro ao salvar parâmetro '{param_name}' para o usuário {user_id}: {e}")
+            flash(f"Erro ao salvar parâmetros: {e}", "danger") # Manter flash aqui, pois ocorre em contexto de requisição
+            return False
+        finally:
+            if conn:
+                conn.close()
+    return False
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -119,6 +182,7 @@ def login():
                 if user and check_password_hash(user[2], password): # user[2] é o password_hash
                     session['logged_in'] = True
                     session['username'] = user[1] # user[1] é o username
+                    session['user_id'] = user[0] # Armazena o ID do usuário na sessão
                     flash('Login realizado com sucesso!', 'success')
                     return redirect(url_for('dashboard'))
                 else:
@@ -326,13 +390,18 @@ def invoices_mirror():
     # Get distinct product lines for the filter combobox
     product_lines = get_distinct_product_lines()
 
+    # Obter transações selecionadas pelo usuário
+    user_id = session.get('user_id')
+    selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
+    selected_transactions = []
+    if selected_transactions_str:
+        selected_transactions = selected_transactions_str.split(',')
+        print(f"DEBUG: Transações selecionadas para o usuário {user_id}: {selected_transactions}")
+
     if conn:
         try:
             cur = conn.cursor()
             # Base SQL query
-            # Ajustado para AGREGAR no nível da nota fiscal
-            # COALESCE(MAX(rc.rgcdes), '') garante que rgcdes_agg não seja NULL para parse_regcar_description
-            # COALESCE(MAX(p.pronome), '') e COALESCE(MAX(g.grunome), '') para pronome_agg e grunome_agg
             sql_query = """
                 SELECT
                     d.controle,
@@ -345,7 +414,8 @@ def invoices_mirror():
                     COALESCE(SUM(tm.privlsubst), 0) AS total_privlsubst,
                     COALESCE(MAX(rc.rgcdes), '') AS rgcdes_agg,
                     COALESCE(MAX(p.pronome), '') AS pronome_agg,
-                    COALESCE(MAX(g.grunome), '') AS grunome_agg
+                    COALESCE(MAX(g.grunome), '') AS grunome_agg,
+                    d.operacao
                 FROM
                     doctos d
                 JOIN
@@ -382,7 +452,7 @@ def invoices_mirror():
                 where_clauses.append("lc.lcacod = %s")
                 query_params.append(filters['lotecar_code'])
             
-            # Filtro por linha de produto (agora mais integrado na query principal)
+            # Filtro por linha de produto
             if filters['product_line']:
                 matching_group_codes = []
                 temp_conn_for_groups = get_erp_db_connection()
@@ -406,15 +476,23 @@ def invoices_mirror():
                     query_params.append(tuple(matching_group_codes))
                 else:
                     where_clauses.append("FALSE")
+            
+            # Novo filtro por transações selecionadas
+            if selected_transactions:
+                valid_transactions = [t for t in selected_transactions if t]
+                if valid_transactions:
+                    where_clauses.append("d.operacao IN %s")
+                    query_params.append(tuple(valid_transactions))
+                else:
+                    where_clauses.append("FALSE")
 
             if where_clauses:
                 sql_query += " WHERE " + " AND ".join(where_clauses)
 
-            # GROUP BY ajustado para agregar por nota fiscal, removendo as colunas agregadas
             sql_query += """
                 GROUP BY
                     d.controle, d.notdocto, d.notdata, d.notvltotal, e.empnome,
-                    d.notvlipi
+                    d.notvlipi, d.operacao
             """
             sql_query += " ORDER BY d.notdata DESC, d.controle DESC;"
 
@@ -422,10 +500,7 @@ def invoices_mirror():
             raw_invoices = cur.fetchall()
             cur.close()
 
-            # Processar os dados para adicionar o percentual de frete
             for row in raw_invoices:
-                # Mapear os campos da query para variáveis nomeadas
-                # Os índices aqui devem corresponder à ordem do SELECT
                 invoice = {
                     'controle': row[0],
                     'notdocto': row[1],
@@ -437,29 +512,20 @@ def invoices_mirror():
                     'total_privlsubst': row[7], # Valor ST
                     'rgcdes': row[8], # rgcdes_agg
                     'pronome': row[9], # pronome_agg
-                    'grunome': row[10] # grunome_agg
+                    'grunome': row[10], # grunome_agg
+                    'operacao': row[11] # Transação
                 }
                 print(f"Processing invoice {invoice['controle']}: rgcdes='{invoice['rgcdes']}', pronome='{invoice['pronome']}', grunome='{invoice['grunome']}'") # DEBUG
 
-                # Calcular a linha do produto
                 product_line = get_product_line(invoice['grunome'])
-                
-                # Extrair a referência do produto (primeiros 2 caracteres do pronome)
                 product_ref = invoice['pronome'][:2] if invoice['pronome'] else ""
-
-                # Parsear a descrição da região de frete
                 regcar_data = parse_regcar_description(invoice['rgcdes'])
                 print(f"Parsed regcar data: {regcar_data}") # DEBUG
 
-                # Calcular o percentual de frete
                 freight_percentage = calculate_freight_percentage(product_line, product_ref, regcar_data)
                 print(f"Calculated freight percentage: {freight_percentage}") # DEBUG
 
-                # Adicionar o percentual de frete ao dicionário da fatura
-                invoice['freight_percentage'] = freight_percentage * 100 # Multiplicar por 100 para exibir como percentual
-
-                # Calcular o Valor do Frete
-                # Converta total_privltotal para float antes da multiplicação
+                invoice['freight_percentage'] = freight_percentage * 100
                 valor_frete = (invoice['freight_percentage'] / 100) * float(invoice['total_privltotal'] if invoice['total_privltotal'] is not None else 0)
                 invoice['valor_frete'] = valor_frete
 
@@ -736,10 +802,58 @@ def report_financial_summary():
 
 
 # --- Rotas de Placeholder para o Menu (Gerencial) ---
-@app.route('/backup_db')
+@app.route('/gerencial/parameters', methods=['GET', 'POST'])
 @login_required
-def backup_db():
-    return render_template('placeholder.html', page_title="Backup do Banco de Dados", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+def gerencial_parameters():
+    """
+    Rota para a tela de parâmetros do sistema.
+    Permite ao usuário selecionar transações que devem ser apresentadas no Espelho de Notas Fiscais.
+    """
+    user_id = session.get('user_id')
+    
+    conn_erp = get_erp_db_connection()
+    all_transactions = []
+    if conn_erp:
+        try:
+            cur_erp = conn_erp.cursor()
+            cur_erp.execute("SELECT transacao, trsnome FROM transa ORDER BY trsnome;")
+            all_transactions = [{'transacao': t[0], 'trsnome': t[1]} for t in cur_erp.fetchall()]
+            cur_erp.close()
+        except Error as e:
+            print(f"Erro ao buscar transações: {e}")
+            flash(f"Erro ao carregar transações: {e}", "danger")
+        finally:
+            if conn_erp:
+                conn_erp.close()
+
+    if request.method == 'POST':
+        selected_transactions = request.form.getlist('selected_transactions')
+        selected_transactions_str = ','.join(selected_transactions)
+        
+        if save_user_parameters(user_id, 'selected_invoice_transactions', selected_transactions_str):
+            flash('Parâmetros de transação salvos com sucesso!', 'success')
+        else:
+            flash('Falha ao salvar parâmetros de transação.', 'danger')
+        return redirect(url_for('gerencial_parameters'))
+    
+    # GET request: Load current selected transactions
+    current_selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
+    current_selected_transactions = []
+    if current_selected_transactions_str:
+        current_selected_transactions = current_selected_transactions_str.split(',')
+
+    # Marcar as transações que já estão selecionadas
+    for trans in all_transactions:
+        trans['is_selected'] = trans['transacao'] in current_selected_transactions
+
+    return render_template(
+        'parameters.html',
+        page_title="Parâmetros do Sistema",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
+        all_transactions=all_transactions
+    )
+
 
 @app.route('/users_list')
 @login_required
@@ -784,9 +898,13 @@ def logout():
     """
     session.pop('logged_in', None)
     session.pop('username', None)
+    session.pop('user_id', None) # Limpa o user_id também
     flash('Você foi desconectado.', 'info')
     return redirect(url_for('login'))
 
-# Executa a aplicação Flask se o script for o principal
+# Adiciona um print para depuração do mapa de URLs
 if __name__ == '__main__':
+    print("Flask URL Map:")
+    for rule in app.url_map.iter_rules():
+        print(f"Endpoint: {rule.endpoint}, Methods: {rule.methods}, Rule: {rule.rule}")
     app.run(debug=True)
