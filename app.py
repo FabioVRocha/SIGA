@@ -142,11 +142,21 @@ def save_user_parameters(user_id, param_name, param_value):
     if conn:
         try:
             cur = conn.cursor()
-            cur.execute(f"""
-                INSERT INTO {USER_PARAMETERS_TABLE} (user_id, param_name, param_value)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (user_id, param_name) DO UPDATE SET param_value = EXCLUDED.param_value;
-            """, (user_id, param_name, param_value))
+            # Tenta atualizar o registro existente
+            update_query = (
+                f"UPDATE {USER_PARAMETERS_TABLE} SET param_value = %s "
+                "WHERE user_id = %s AND param_name = %s"
+            )
+            cur.execute(update_query, (param_value, user_id, param_name))
+
+            # Se nenhuma linha foi atualizada, insere um novo registro
+            if cur.rowcount == 0:
+                insert_query = (
+                    f"INSERT INTO {USER_PARAMETERS_TABLE} "
+                    "(user_id, param_name, param_value) VALUES (%s, %s, %s)"
+                )
+                cur.execute(insert_query, (user_id, param_name, param_value))
+
             conn.commit()
             cur.close()
             return True
@@ -479,7 +489,14 @@ def invoices_mirror():
             
             # Novo filtro por transações selecionadas
             if selected_transactions:
-                valid_transactions = [t for t in selected_transactions if t]
+                # Convert stored strings back to integers for the SQL filter
+                valid_transactions = []
+                for t in selected_transactions:
+                    if t:
+                        try:
+                            valid_transactions.append(int(t))
+                        except ValueError:
+                            pass
                 if valid_transactions:
                     where_clauses.append("d.operacao IN %s")
                     query_params.append(tuple(valid_transactions))
@@ -802,6 +819,12 @@ def report_financial_summary():
 
 
 # --- Rotas de Placeholder para o Menu (Gerencial) ---
+@app.route('/backup_db')
+@login_required
+def backup_db():
+    """Rota placeholder para backup do banco de dados."""
+    return render_template('placeholder.html', page_title="Backup do Banco de Dados", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+
 @app.route('/gerencial/parameters', methods=['GET', 'POST'])
 @login_required
 def gerencial_parameters():
