@@ -425,7 +425,7 @@ def invoices_mirror():
                     COALESCE(MAX(rc.rgcdes), '') AS rgcdes_agg,
                     COALESCE(MAX(p.pronome), '') AS pronome_agg,
                     COALESCE(MAX(g.grunome), '') AS grunome_agg,
-                    d.operacao
+                    op.opetransac
                 FROM
                     doctos d
                 JOIN
@@ -442,6 +442,8 @@ def invoices_mirror():
                     produto p ON tm.priproduto = p.produto
                 LEFT JOIN
                     grupo g ON p.grupo = g.grupo
+                LEFT JOIN
+                    opera op ON d.operacao = op.operacao
             """
             query_params = []
             where_clauses = []
@@ -494,7 +496,7 @@ def invoices_mirror():
                 valid_transactions = [t for t in selected_transactions if t]
                 if valid_transactions:
                     placeholders = ','.join(['%s'] * len(valid_transactions))
-                    where_clauses.append(f"d.operacao IN ({placeholders})")
+                    where_clauses.append(f"op.opetransac IN ({placeholders})")
                     query_params.extend(valid_transactions)
                 else:
                     where_clauses.append("FALSE")
@@ -505,7 +507,7 @@ def invoices_mirror():
             sql_query += """
                 GROUP BY
                     d.controle, d.notdocto, d.notdata, d.notvltotal, e.empnome,
-                    d.notvlipi, d.operacao
+                    d.notvlipi, op.opetransac
             """
             sql_query += " ORDER BY d.notdata DESC, d.controle DESC;"
 
@@ -526,7 +528,7 @@ def invoices_mirror():
                     'rgcdes': row[8], # rgcdes_agg
                     'pronome': row[9], # pronome_agg
                     'grunome': row[10], # grunome_agg
-                    'operacao': row[11] # Transação
+                    'operacao': row[11] # Código da transação
                 }
                 print(f"Processing invoice {invoice['controle']}: rgcdes='{invoice['rgcdes']}', pronome='{invoice['pronome']}', grunome='{invoice['grunome']}'") # DEBUG
 
@@ -596,13 +598,15 @@ def get_invoice_details(controle):
                     d.notdocto,
                     d.notclifor,
                     e.empnome,
-                    d.operacao,
+                    op.opetransac,
                     d.notdata,
                     d.notvltotal
                 FROM
                     doctos d
                 JOIN
                     empresa e ON d.notclifor = e.empresa
+                LEFT JOIN
+                    opera op ON d.operacao = op.operacao
                 WHERE
                     d.controle = %s
             """, (controle,))
@@ -613,7 +617,7 @@ def get_invoice_details(controle):
                     'notdocto': header_data[0],
                     'notclifor': header_data[1],
                     'empnome': header_data[2],
-                    'operacao': header_data[3],
+                    'operacao': header_data[3],  # Código da transação
                     'notdata': header_data[4].strftime('%d/%m/%Y') if header_data[4] else 'N/A',
                     'notvltotal': header_data[5]
                 }
