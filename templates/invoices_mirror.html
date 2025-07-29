@@ -385,7 +385,7 @@
         // Event listener for "Detalhes" buttons
         document.querySelectorAll('.view-details-btn').forEach(button => {
             button.addEventListener('click', (event) => {
-                const controle = event.target.dataset.controle;
+                const controle = event.currentTarget.dataset.controle;
                 fetchInvoiceDetails(controle);
             });
         });
