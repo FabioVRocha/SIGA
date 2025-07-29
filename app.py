@@ -482,24 +482,20 @@ def invoices_mirror():
                             temp_conn_for_groups.close()
 
                 if matching_group_codes:
-                    where_clauses.append("g.grupo IN %s")
-                    query_params.append(tuple(matching_group_codes))
+                    placeholders = ','.join(['%s'] * len(matching_group_codes))
+                    where_clauses.append(f"g.grupo IN ({placeholders})")
+                    query_params.extend(matching_group_codes)
                 else:
                     where_clauses.append("FALSE")
             
             # Novo filtro por transações selecionadas
             if selected_transactions:
-                # Keep transactions as strings to match the column type
-                valid_transactions = []
-                for t in selected_transactions:
-                    if t:
-                        try:
-                            valid_transactions.append(int(t))
-                        except ValueError:
-                            pass
+                # Mantém as transações como strings para corresponder ao tipo da coluna
+                valid_transactions = [t for t in selected_transactions if t]
                 if valid_transactions:
-                    where_clauses.append("d.operacao IN %s")
-                    query_params.append(tuple(valid_transactions))
+                    placeholders = ','.join(['%s'] * len(valid_transactions))
+                    where_clauses.append(f"d.operacao IN ({placeholders})")
+                    query_params.extend(valid_transactions)
                 else:
                     where_clauses.append("FALSE")
 
