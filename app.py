@@ -489,7 +489,7 @@ def invoices_mirror():
             
             # Novo filtro por transações selecionadas
             if selected_transactions:
-                # Convert stored strings back to integers for the SQL filter
+                # Keep transactions as strings to match the column type
                 valid_transactions = []
                 for t in selected_transactions:
                     if t:
@@ -840,7 +840,8 @@ def gerencial_parameters():
         try:
             cur_erp = conn_erp.cursor()
             cur_erp.execute("SELECT transacao, trsnome FROM transa ORDER BY trsnome;")
-            all_transactions = [{'transacao': t[0], 'trsnome': t[1]} for t in cur_erp.fetchall()]
+            # Ensure transacao values are stored as strings to match form inputs
+            all_transactions = [{'transacao': str(t[0]), 'trsnome': t[1]} for t in cur_erp.fetchall()]
             cur_erp.close()
         except Error as e:
             print(f"Erro ao buscar transações: {e}")
