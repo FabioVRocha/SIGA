@@ -303,17 +303,19 @@
                     row.className = 'hover:bg-blue-50';
 
                     const formatCurrency = (value) => {
-                        return (value !== null && value !== undefined) ? `R$ ${value.toFixed(2).replace('.', ',')}` : '0,00';
+                        const num = parseFloat(value);
+                        return (!isNaN(num)) ? `R$ ${num.toFixed(2).replace('.', ',')}` : '0,00';
                     };
                     const formatPercentage = (value) => {
-                        return (value !== null && value !== undefined) ? `${value.toFixed(2).replace('.', ',')}%` : 'N/A';
+                        const num = parseFloat(value);
+                        return (!isNaN(num)) ? `${num.toFixed(2).replace('.', ',')}%` : 'N/A';
                     };
 
                     row.insertCell().textContent = item.prisequen || 'N/A';
                     row.insertCell().textContent = item.priproduto || 'N/A';
                     row.insertCell().textContent = item.pronome || 'N/A';
                     row.insertCell().textContent = item.unimedida || 'N/A';
-                    row.insertCell().textContent = item.priquanti || '0';
+                    row.insertCell().textContent = (!isNaN(parseFloat(item.priquanti))) ? parseFloat(item.priquanti).toFixed(2).replace('.', ',') : '0,00';
                     row.insertCell().textContent = formatCurrency(item.pritmpuni);
                     row.insertCell().textContent = formatCurrency(item.privltotal);
                     row.insertCell().textContent = formatPercentage(item.prialqipi);
@@ -322,11 +324,11 @@
                     row.insertCell().textContent = formatCurrency(item.valor_total_item);
 
                     // Accumulate totals
-                    totalQuantidade += (item.priquanti || 0);
-                    totalValorProdutos += (item.privltotal || 0);
-                    totalValorIPI += (item.privlipi || 0);
-                    totalValorST += (item.privlsubst || 0);
-                    totalValorTotalItens += (item.valor_total_item || 0);
+                    totalQuantidade += parseFloat(item.priquanti) || 0;
+                    totalValorProdutos += parseFloat(item.privltotal) || 0;
+                    totalValorIPI += parseFloat(item.privlipi) || 0;
+                    totalValorST += parseFloat(item.privlsubst) || 0;
+                    totalValorTotalItens += parseFloat(item.valor_total_item) || 0;
                 });
 
                 // Populate Totals Footer

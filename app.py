@@ -619,7 +619,7 @@ def get_invoice_details(controle):
                     'empnome': header_data[2],
                     'operacao': header_data[3],  # Código da transação
                     'notdata': header_data[4].strftime('%d/%m/%Y') if header_data[4] else 'N/A',
-                    'notvltotal': header_data[5]
+                    'notvltotal': float(header_data[5]) if header_data[5] is not None else 0.0
                 }
 
             # Buscar itens de produto da nota fiscal
@@ -659,13 +659,13 @@ def get_invoice_details(controle):
                     'priproduto': item[1],
                     'pronome': item[2],
                     'unimedida': item[3],
-                    'priquanti': item[4],
-                    'pritmpuni': item[5],
-                    'privltotal': item_privltotal,
-                    'prialqipi': item[7],
-                    'privlipi': item_privlipi,
-                    'privlsubst': item_privlsubst,
-                    'valor_total_item': valor_total_item
+                    'priquanti': float(item[4]) if item[4] is not None else 0.0,
+                    'pritmpuni': float(item[5]) if item[5] is not None else 0.0,
+                    'privltotal': float(item_privltotal),
+                    'prialqipi': float(item[7]) if item[7] is not None else 0.0,
+                    'privlipi': float(item_privlipi),
+                    'privlsubst': float(item_privlsubst),
+                    'valor_total_item': float(valor_total_item)
                 })
             cur.close()
 
