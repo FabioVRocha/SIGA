@@ -249,7 +249,9 @@
                 return;
             }
             try {
-                const response = await fetch(`/api/get_lotecar_description/${code}`);
+                const response = await fetch(`/api/get_lotecar_description/${code}`, {
+                    credentials: 'same-origin'
+                });
                 const data = await response.json();
                 lotecarDescriptionSpan.textContent = data.description || 'Não encontrado';
             } catch (error) {
@@ -261,14 +263,20 @@
         // Function to fetch and display invoice details
         async function fetchInvoiceDetails(controle) {
             try {
-                const response = await fetch(`/api/get_invoice_details/${controle}`);
+                const response = await fetch(`/api/get_invoice_details/${controle}`, {
+                    credentials: 'same-origin'
+                });
 
                 if (!response.ok) {
+                    const text = await response.text();
+                    console.error('Unexpected response while fetching details:', text);
                     throw new Error(`HTTP status ${response.status}`);
                 }
 
                 const contentType = response.headers.get('content-type') || '';
                 if (!contentType.includes('application/json')) {
+                    const text = await response.text();
+                    console.error('Unexpected content while fetching details:', text);
                     throw new Error('Unexpected response');
                 }
 
