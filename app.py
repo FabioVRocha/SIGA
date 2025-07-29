@@ -370,6 +370,65 @@ def calculate_freight_percentage(product_line, product_ref, regcar_parsed_data):
     print(f"No matching freight rule, returning 0.0") # DEBUG
     return 0.0 # Default if no condition matches
 
+def calculate_invoice_freight(controle):
+    """Calcula o percentual e o valor de frete de uma nota fiscal com base
+    nos itens da nota."""
+    conn = get_erp_db_connection()
+    total_produtos = 0.0
+    total_frete = 0.0
+    freight_percentage = 0.0
+
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            # Recupera o rgcdes da nota para calcular o frete
+            cur.execute(
+                """
+                SELECT COALESCE(rc.rgcdes, '')
+                FROM doctos d
+                LEFT JOIN cidade c ON d.noscidade = c.cidade
+                LEFT JOIN regcar rc ON c.rgccicod = rc.rgccod
+                WHERE d.controle = %s
+                """,
+                (controle,)
+            )
+            rgcdes_row = cur.fetchone()
+            rgcdes = rgcdes_row[0] if rgcdes_row else ''
+            regcar_data = parse_regcar_description(rgcdes)
+
+            # Busca os itens da nota
+            cur.execute(
+                """
+                SELECT tm.privltotal, p.pronome, g.grunome
+                FROM toqmovi tm
+                JOIN produto p ON tm.priproduto = p.produto
+                LEFT JOIN grupo g ON p.grupo = g.grupo
+                WHERE tm.itecontrol = %s
+                """,
+                (controle,),
+            )
+            items = cur.fetchall()
+
+            for privltotal, pronome, grunome in items:
+                item_valor = float(privltotal or 0.0)
+                product_line = get_product_line(grunome)
+                product_ref = pronome[:2] if pronome else ''
+                perc_item = calculate_freight_percentage(
+                    product_line, product_ref, regcar_data
+                )
+                total_frete += perc_item * item_valor
+                total_produtos += item_valor
+
+            if total_produtos:
+                freight_percentage = (total_frete / total_produtos) * 100
+        except Error as e:
+            print(f"Erro ao calcular frete da nota {controle}: {e}")
+        finally:
+            conn.close()
+
+    return freight_percentage, total_frete
+
 @app.route('/invoices_mirror')
 @login_required
 def invoices_mirror():
@@ -530,18 +589,13 @@ def invoices_mirror():
                     'grunome': row[10], # grunome_agg
                     'operacao': row[11] # Código da transação
                 }
-                print(f"Processing invoice {invoice['controle']}: rgcdes='{invoice['rgcdes']}', pronome='{invoice['pronome']}', grunome='{invoice['grunome']}'") # DEBUG
+                print(
+                    f"Processing invoice {invoice['controle']}: rgcdes='{invoice['rgcdes']}', pronome='{invoice['pronome']}', grunome='{invoice['grunome']}'"
+                )  # DEBUG
 
-                product_line = get_product_line(invoice['grunome'])
-                product_ref = invoice['pronome'][:2] if invoice['pronome'] else ""
-                regcar_data = parse_regcar_description(invoice['rgcdes'])
-                print(f"Parsed regcar data: {regcar_data}") # DEBUG
+                freight_percentage, valor_frete = calculate_invoice_freight(invoice['controle'])
 
-                freight_percentage = calculate_freight_percentage(product_line, product_ref, regcar_data)
-                print(f"Calculated freight percentage: {freight_percentage}") # DEBUG
-
-                invoice['freight_percentage'] = freight_percentage * 100
-                valor_frete = (invoice['freight_percentage'] / 100) * float(invoice['total_privltotal'] if invoice['total_privltotal'] is not None else 0)
+                invoice['freight_percentage'] = freight_percentage
                 invoice['valor_frete'] = valor_frete
 
                 invoices_data.append(invoice)
@@ -600,13 +654,18 @@ def get_invoice_details(controle):
                     e.empnome,
                     op.opetransac,
                     d.notdata,
-                    d.notvltotal
+                    d.notvltotal,
+                    COALESCE(rc.rgcdes, '') AS rgcdes
                 FROM
                     doctos d
                 JOIN
                     empresa e ON d.notclifor = e.empresa
                 LEFT JOIN
                     opera op ON d.operacao = op.operacao
+                LEFT JOIN
+                    cidade c ON d.noscidade = c.cidade
+                LEFT JOIN
+                    regcar rc ON c.rgccicod = rc.rgccod
                 WHERE
                     d.controle = %s
             """, (controle,))
@@ -619,7 +678,8 @@ def get_invoice_details(controle):
                     'empnome': header_data[2],
                     'operacao': header_data[3],  # Código da transação
                     'notdata': header_data[4].strftime('%d/%m/%Y') if header_data[4] else 'N/A',
-                    'notvltotal': float(header_data[5]) if header_data[5] is not None else 0.0
+                    'notvltotal': float(header_data[5]) if header_data[5] is not None else 0.0,
+                    'rgcdes': header_data[6]
                 }
 
             # Buscar itens de produto da nota fiscal
@@ -634,11 +694,14 @@ def get_invoice_details(controle):
                     tm.privltotal,
                     tm.prialqipi,
                     tm.privlipi,
-                    tm.privlsubst
+                    tm.privlsubst,
+                    COALESCE(g.grunome, '') AS grunome
                 FROM
                     toqmovi tm
                 JOIN
                     produto p ON tm.priproduto = p.produto
+                LEFT JOIN
+                    grupo g ON p.grupo = g.grupo
                 WHERE
                     tm.itecontrol = %s
                 ORDER BY
@@ -647,12 +710,21 @@ def get_invoice_details(controle):
             items_data = cur.fetchall()
             print(f"DEBUG: Items data for controle {controle}: {items_data}") # DEBUG
 
+            regcar_data = parse_regcar_description(invoice_header.get('rgcdes', ''))
+
             for item in items_data:
                 item_privltotal = item[6] if item[6] is not None else 0
                 item_privlipi = item[8] if item[8] is not None else 0
                 item_privlsubst = item[9] if item[9] is not None else 0
                 
                 valor_total_item = item_privltotal + item_privlipi + item_privlsubst
+
+                product_line = get_product_line(item[10])
+                product_ref = item[2][:2] if item[2] else ""
+                freight_pct = calculate_freight_percentage(product_line, product_ref, regcar_data)
+
+                freight_percentage_display = freight_pct * 100
+                valor_frete_item = (freight_percentage_display / 100) * float(item_privltotal)
 
                 invoice_items.append({
                     'prisequen': item[0],
@@ -665,7 +737,9 @@ def get_invoice_details(controle):
                     'prialqipi': float(item[7]) if item[7] is not None else 0.0,
                     'privlipi': float(item_privlipi),
                     'privlsubst': float(item_privlsubst),
-                    'valor_total_item': float(valor_total_item)
+                    'valor_total_item': float(valor_total_item),
+                    'freight_percentage': freight_percentage_display,
+                    'valor_frete': valor_frete_item
                 })
             cur.close()
 
@@ -931,4 +1005,4 @@ if __name__ == '__main__':
     print("Flask URL Map:")
     for rule in app.url_map.iter_rules():
         print(f"Endpoint: {rule.endpoint}, Methods: {rule.methods}, Rule: {rule.rule}")
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=True)

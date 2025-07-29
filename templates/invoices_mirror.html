@@ -144,6 +144,8 @@
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor IPI</th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor ST</th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">% Frete</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Frete</th>
                             </tr>
                         </thead>
                         <tbody id="invoice_items_tbody" class="bg-white divide-y divide-gray-200">
@@ -306,18 +308,19 @@
                 let totalValorST = 0;
                 let totalValorTotalItens = 0;
 
+                // Helpers to format currency and percentage values
+                const formatCurrency = (value) => {
+                    const num = parseFloat(value);
+                    return (!isNaN(num)) ? `R$ ${num.toFixed(2).replace('.', ',')}` : '0,00';
+                };
+                const formatPercentage = (value) => {
+                    const num = parseFloat(value);
+                    return (!isNaN(num)) ? `${num.toFixed(2).replace('.', ',')}%` : 'N/A';
+                };
+
                 items.forEach(item => {
                     const row = invoiceItemsTbody.insertRow();
                     row.className = 'hover:bg-blue-50';
-
-                    const formatCurrency = (value) => {
-                        const num = parseFloat(value);
-                        return (!isNaN(num)) ? `R$ ${num.toFixed(2).replace('.', ',')}` : '0,00';
-                    };
-                    const formatPercentage = (value) => {
-                        const num = parseFloat(value);
-                        return (!isNaN(num)) ? `${num.toFixed(2).replace('.', ',')}%` : 'N/A';
-                    };
 
                     row.insertCell().textContent = item.prisequen || 'N/A';
                     row.insertCell().textContent = item.priproduto || 'N/A';
@@ -330,6 +333,8 @@
                     row.insertCell().textContent = formatCurrency(item.privlipi);
                     row.insertCell().textContent = formatCurrency(item.privlsubst);
                     row.insertCell().textContent = formatCurrency(item.valor_total_item);
+                    row.insertCell().textContent = formatPercentage(item.freight_percentage);
+                    row.insertCell().textContent = formatCurrency(item.valor_frete);
 
                     // Accumulate totals
                     totalQuantidade += parseFloat(item.priquanti) || 0;
