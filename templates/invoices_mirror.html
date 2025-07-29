@@ -262,6 +262,16 @@
         async function fetchInvoiceDetails(controle) {
             try {
                 const response = await fetch(`/api/get_invoice_details/${controle}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP status ${response.status}`);
+                }
+
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    throw new Error('Unexpected response');
+                }
+
                 const data = await response.json();
 
                 if (data.error) {
