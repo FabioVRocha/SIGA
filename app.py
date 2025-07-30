@@ -332,7 +332,6 @@ def fetch_monthly_revenue(year, filters):
                 FROM doctos d
                 LEFT JOIN empresa e ON d.notclifor = e.empresa
                 LEFT JOIN cidade c ON d.noscidade = c.cidade
-                LEFT JOIN vendedor v ON e.vendedor = v.vendedor
                 LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
@@ -341,18 +340,36 @@ def fetch_monthly_revenue(year, filters):
             """
             params = [year]
 
-            if filters.get('month'):
-                sql += " AND EXTRACT(MONTH FROM d.notdata) = %s"
-                params.append(int(filters['month']))
+            months = filters.get('month')
+            if months:
+                placeholders = ','.join(['%s'] * len(months))
+                month_param = filters['month']
+                if isinstance(month_param, str):
+                    month_tokens = [m.strip() for m in month_param.split(',') if m.strip()]
+                else:
+                    month_tokens = [str(month_param).strip()]
+
+                valid_months = []
+                for m in month_tokens:
+                    try:
+                        valid_months.append(int(m))
+                    except ValueError:
+                        continue
+
+                if valid_months:
+                    if len(valid_months) == 1:
+                        sql += " AND EXTRACT(MONTH FROM d.notdata) = %s"
+                        params.append(valid_months[0])
+                    else:
+                        placeholders = ','.join(['%s'] * len(valid_months))
+                        sql += f" AND EXTRACT(MONTH FROM d.notdata) IN ({placeholders})"
+                        params.extend(valid_months)
             if filters.get('state'):
                 sql += " AND c.uf = %s"
                 params.append(filters['state'])
             if filters.get('city'):
                 sql += " AND c.ciddes = %s"
                 params.append(filters['city'])
-            if filters.get('vendor'):
-                sql += " AND v.vendedor = %s"
-                params.append(filters['vendor'])
 
             if filters.get('line'):
                 matching_group_codes = []
@@ -1014,7 +1031,7 @@ def report_revenue_comparison():
     current_year = int(request.args.get('year', datetime.date.today().year))
     filters = {
         'year': current_year,
-        'month': request.args.get('month'),
+        'month': request.args.getlist('month'),
         'state': request.args.get('state'),
         'city': request.args.get('city'),
         'vendor': request.args.get('vendor'),
@@ -1022,20 +1039,23 @@ def report_revenue_comparison():
     }
 
     prev_year = current_year - 1
-    current_data = fetch_monthly_revenue(current_year, filters)
+    current_data_all = fetch_monthly_revenue(current_year, filters)
     prev_filters = filters.copy()
     prev_filters['year'] = prev_year
-    previous_data = fetch_monthly_revenue(prev_year, prev_filters)
+    previous_data_all = fetch_monthly_revenue(prev_year, prev_filters)
 
-    labels = [f"{str(m).zfill(2)}/{current_year}" for m in range(1,13)]
+    months_selected = [int(m) for m in filters['month']] if filters['month'] else list(range(1,13))
+    labels = [f"{str(m).zfill(2)}/{current_year}" for m in months_selected]
+    current_data = [current_data_all[m-1] for m in months_selected]
+    previous_data = [previous_data_all[m-1] for m in months_selected]
 
     current_total = sum(current_data)
     previous_total = sum(previous_data)
     totals = {
         'current_total': current_total,
-        'current_average': current_total / 12,
+        'current_average': current_total / len(months_selected) if months_selected else 0,
         'previous_total': previous_total,
-        'previous_average': previous_total / 12,
+        'previous_average': previous_total / len(months_selected) if months_selected else 0,
         'variation_percent': ((current_total - previous_total) / previous_total * 100) if previous_total else 0
     }
 
