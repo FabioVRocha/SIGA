@@ -4,15 +4,16 @@
 
 {% block page_title %}Comparativo de Faturamento Anual{% endblock %}
 
+{% block header_action %}
+<a href="{{ url_for('revenue_reports') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+    <i class="fas fa-arrow-left mr-2"></i> Voltar
+</a>
+{% endblock %}
+
 {% block content %}
 <div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
     <div class="flex justify-between items-center mb-4">
-        <div class="flex items-center space-x-4">
-            <a href="{{ url_for('revenue_reports') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
-                <i class="fas fa-arrow-left mr-2"></i> Voltar
-            </a>
-            <h2 class="text-xl font-semibold text-gray-800">{{ current_year_label }} x {{ previous_year_label }}</h2>
-        </div>
+        <h2 class="text-xl font-semibold text-gray-800">{{ current_year_label }} x {{ previous_year_label }}</h2>
         <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
             <i class="fas fa-filter mr-2"></i> Filtrar
         </button>

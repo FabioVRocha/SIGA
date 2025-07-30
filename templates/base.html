@@ -456,10 +456,12 @@
         <!-- Main Header -->
         <div class="main-header">
             <h1>{% block page_title %}{% endblock %}</h1>
+            {% block header_action %}
             <div class="search-bar">
                 <i class="fas fa-search"></i>
                 <input type="text" placeholder="Pesquisar...">
             </div>
+            {% endblock %}
         </div>
 
         <!-- Mensagens Flash -->
