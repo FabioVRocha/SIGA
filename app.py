@@ -319,9 +319,15 @@ def fetch_monthly_revenue(year, filters):
         try:
             cur = conn.cursor()
 
+            user_id = session.get('user_id')
+            selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
+            selected_transactions = []
+            if selected_transactions_str:
+                selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+
             sql = """
                 SELECT EXTRACT(MONTH FROM d.notdata) AS mes,
-                       SUM(d.notvltotal) AS total,
+                       SUM(tm.privltotal) AS total,
                        MAX(g.grunome) AS grunome
                 FROM doctos d
                 LEFT JOIN empresa e ON d.notclifor = e.empresa
@@ -330,6 +336,7 @@ def fetch_monthly_revenue(year, filters):
                 LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
+                LEFT JOIN opera op ON d.operacao = op.operacao
                 WHERE EXTRACT(YEAR FROM d.notdata) = %s
             """
             params = [year]
@@ -369,6 +376,13 @@ def fetch_monthly_revenue(year, filters):
                     params.extend(matching_group_codes)
                 else:
                     sql += " AND FALSE"
+
+            if selected_transactions:
+                placeholders = ','.join(['%s'] * len(selected_transactions))
+                sql += f" AND op.opetransac IN ({placeholders})"
+                params.extend(selected_transactions)
+            else:
+                sql += " AND FALSE"
 
             sql += " GROUP BY mes ORDER BY mes"
 
@@ -1019,9 +1033,9 @@ def report_revenue_comparison():
     previous_total = sum(previous_data)
     totals = {
         'current_total': current_total,
-        'current_average': current_total / 12 if 12 else 0,
+        'current_average': current_total / 12,
         'previous_total': previous_total,
-        'previous_average': previous_total / 12 if 12 else 0,
+        'previous_average': previous_total / 12,
         'variation_percent': ((current_total - previous_total) / previous_total * 100) if previous_total else 0
     }
 
