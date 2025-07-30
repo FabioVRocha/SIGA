@@ -454,6 +454,125 @@ def fetch_monthly_revenue(year, filters):
 
     return monthly_totals
 
+
+def fetch_revenue_by_cfop(filters):
+    """Retorna o faturamento agregado por CFOP."""
+    conn = get_erp_db_connection()
+    data = []
+
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            user_id = session.get('user_id')
+            transaction_signs = parse_transaction_signs(
+                get_user_parameters(user_id, 'invoice_transaction_signs')
+            )
+            selected_transactions = list(transaction_signs.keys())
+            if not selected_transactions:
+                selected_transactions_str = get_user_parameters(
+                    user_id, 'selected_invoice_transactions'
+                )
+                if selected_transactions_str:
+                    selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+                    transaction_signs = {t: '+' for t in selected_transactions}
+
+            sql = """
+                SELECT op.operacao,
+                       SUM(tm.privltotal + tm.privlipi + tm.privlsubst) AS valor_bruto,
+                       SUM(tm.privlipi) AS valor_ipi,
+                       SUM(tm.privlsubst) AS valor_st,
+                       SUM(tm.privltotal) AS valor_liquido,
+                       op.opetransac
+                FROM doctos d
+                LEFT JOIN empresa e ON d.notclifor = e.empresa
+                LEFT JOIN cidade c ON d.noscidade = c.cidade
+                LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
+                LEFT JOIN produto p ON tm.priproduto = p.produto
+                LEFT JOIN grupo g ON p.grupo = g.grupo
+                LEFT JOIN opera op ON d.operacao = op.operacao
+                WHERE EXTRACT(YEAR FROM d.notdata) = %s
+            """
+            params = [filters.get('year')]
+
+            months = filters.get('month')
+            if months:
+                month_tokens = months if isinstance(months, list) else [months]
+                valid_months = []
+                for m in month_tokens:
+                    try:
+                        valid_months.append(int(m))
+                    except ValueError:
+                        continue
+                if valid_months:
+                    if len(valid_months) == 1:
+                        sql += " AND EXTRACT(MONTH FROM d.notdata) = %s"
+                        params.append(valid_months[0])
+                    else:
+                        placeholders = ','.join(['%s'] * len(valid_months))
+                        sql += f" AND EXTRACT(MONTH FROM d.notdata) IN ({placeholders})"
+                        params.extend(valid_months)
+
+            if filters.get('state'):
+                sql += " AND c.uf = %s"
+                params.append(filters['state'])
+            if filters.get('city'):
+                sql += " AND c.ciddes = %s"
+                params.append(filters['city'])
+            if filters.get('vendor'):
+                sql += " AND d.notvendedor = %s"
+                params.append(filters['vendor'])
+
+            if filters.get('line'):
+                matching_group_codes = []
+                temp_conn = get_erp_db_connection()
+                if temp_conn:
+                    try:
+                        temp_cur = temp_conn.cursor()
+                        temp_cur.execute("SELECT grupo, grunome FROM grupo;")
+                        groups_data = temp_cur.fetchall()
+                        temp_cur.close()
+                        for code, name in groups_data:
+                            if get_product_line(name) == filters['line']:
+                                matching_group_codes.append(code)
+                    except Error as e:
+                        print(f'Erro ao buscar grupos para filtro de linha: {e}')
+                    finally:
+                        temp_conn.close()
+                if matching_group_codes:
+                    placeholders = ','.join(['%s'] * len(matching_group_codes))
+                    sql += f" AND g.grupo IN ({placeholders})"
+                    params.extend(matching_group_codes)
+                else:
+                    sql += " AND FALSE"
+
+            if selected_transactions:
+                placeholders = ','.join(['%s'] * len(selected_transactions))
+                sql += f" AND op.opetransac IN ({placeholders})"
+                params.extend(selected_transactions)
+
+            sql += " GROUP BY op.operacao, op.opetransac ORDER BY op.operacao"
+
+            cur.execute(sql, tuple(params))
+            results = cur.fetchall()
+            for cfop, bruto, ipi, st, liquido, transac in results:
+                sign = transaction_signs.get(str(transac), '+')
+                mult = -1 if sign == '-' else 1
+                data.append({
+                    'cfop': cfop,
+                    'valor_bruto': float(bruto or 0) * mult,
+                    'valor_ipi': float(ipi or 0) * mult,
+                    'valor_st': float(st or 0) * mult,
+                    'valor_liquido': float(liquido or 0) * mult
+                })
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar faturamento por CFOP: {e}')
+        finally:
+            conn.close()
+
+    return data
+
 def parse_regcar_description(rgcdes_string):
     """
     Parses the rgcdes string to extract freight percentages and M³ value.
@@ -1054,10 +1173,33 @@ def product_batches_list():
     return render_template('placeholder.html', page_title="Lotes de Produto", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
 
 # --- Rotas de Placeholder para o Menu (Relatórios) ---
-@app.route('/report_sales_by_product')
+@app.route('/report_revenue_by_cfop')
 @login_required
-def report_sales_by_product():
-    return render_template('placeholder.html', page_title="Relatório: Vendas por Produto", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+def report_revenue_by_cfop():
+    current_year = int(request.args.get('year', datetime.date.today().year))
+    filters = {
+        'year': current_year,
+        'month': request.args.getlist('month'),
+        'state': request.args.get('state'),
+        'city': request.args.get('city'),
+        'vendor': request.args.get('vendor'),
+        'line': request.args.get('line')
+    }
+    data = fetch_revenue_by_cfop(filters)
+    totals = {
+        'valor_bruto': sum(row['valor_bruto'] for row in data),
+        'valor_ipi': sum(row['valor_ipi'] for row in data),
+        'valor_st': sum(row['valor_st'] for row in data),
+        'valor_liquido': sum(row['valor_liquido'] for row in data)
+    }
+    return render_template(
+        'report_revenue_by_cfop.html',
+        data=data,
+        filters=filters,
+        totals=totals,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
 
 @app.route('/report_customer_sales')
 @login_required
