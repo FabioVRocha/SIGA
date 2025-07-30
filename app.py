@@ -306,6 +306,85 @@ def get_distinct_product_lines():
                 conn.close()
     return sorted(list(product_lines))
 
+def fetch_monthly_revenue(year, filters):
+    """Retorna o faturamento mensal para o ano especificado.
+
+    Esta função executa uma consulta agregada no ERP e pode aplicar
+    filtros opcionais de mês, estado, cidade, vendedor e linha de produto.
+    """
+    conn = get_erp_db_connection()
+    monthly_totals = [0.0] * 12
+
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            sql = """
+                SELECT EXTRACT(MONTH FROM d.notdata) AS mes,
+                       SUM(d.notvltotal) AS total,
+                       MAX(g.grunome) AS grunome
+                FROM doctos d
+                LEFT JOIN empresa e ON d.notclifor = e.empresa
+                LEFT JOIN cidade c ON d.noscidade = c.cidade
+                LEFT JOIN vendedor v ON d.vendedor = v.vendedor
+                LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
+                LEFT JOIN produto p ON tm.priproduto = p.produto
+                LEFT JOIN grupo g ON p.grupo = g.grupo
+                WHERE EXTRACT(YEAR FROM d.notdata) = %s
+            """
+            params = [year]
+
+            if filters.get('month'):
+                sql += " AND EXTRACT(MONTH FROM d.notdata) = %s"
+                params.append(int(filters['month']))
+            if filters.get('state'):
+                sql += " AND c.uf = %s"
+                params.append(filters['state'])
+            if filters.get('city'):
+                sql += " AND c.ciddes = %s"
+                params.append(filters['city'])
+            if filters.get('vendor'):
+                sql += " AND v.vendedor = %s"
+                params.append(filters['vendor'])
+
+            if filters.get('line'):
+                matching_group_codes = []
+                temp_conn = get_erp_db_connection()
+                if temp_conn:
+                    try:
+                        temp_cur = temp_conn.cursor()
+                        temp_cur.execute("SELECT grupo, grunome FROM grupo;")
+                        groups_data = temp_cur.fetchall()
+                        temp_cur.close()
+                        for code, name in groups_data:
+                            if get_product_line(name) == filters['line']:
+                                matching_group_codes.append(code)
+                    except Error as e:
+                        print(f'Erro ao buscar grupos para filtro de linha: {e}')
+                    finally:
+                        temp_conn.close()
+                if matching_group_codes:
+                    placeholders = ','.join(['%s'] * len(matching_group_codes))
+                    sql += f" AND g.grupo IN ({placeholders})"
+                    params.extend(matching_group_codes)
+                else:
+                    sql += " AND FALSE"
+
+            sql += " GROUP BY mes ORDER BY mes"
+
+            cur.execute(sql, tuple(params))
+            results = cur.fetchall()
+            for mes, total, _ in results:
+                idx = int(mes) - 1
+                monthly_totals[idx] = float(total)
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar faturamento mensal: {e}')
+        finally:
+            conn.close()
+
+    return monthly_totals
+
 def parse_regcar_description(rgcdes_string):
     """
     Parses the rgcdes string to extract freight percentages and M³ value.
@@ -912,6 +991,52 @@ def report_customer_sales():
 @login_required
 def report_financial_summary():
     return render_template('placeholder.html', page_title="Relatório: Resumo Financeiro", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+
+@app.route('/report_revenue_comparison')
+@login_required
+def report_revenue_comparison():
+    """Exibe um comparativo de faturamento anual (ano atual x ano anterior)."""
+
+    current_year = int(request.args.get('year', datetime.date.today().year))
+    filters = {
+        'year': current_year,
+        'month': request.args.get('month'),
+        'state': request.args.get('state'),
+        'city': request.args.get('city'),
+        'vendor': request.args.get('vendor'),
+        'line': request.args.get('line')
+    }
+
+    prev_year = current_year - 1
+    current_data = fetch_monthly_revenue(current_year, filters)
+    prev_filters = filters.copy()
+    prev_filters['year'] = prev_year
+    previous_data = fetch_monthly_revenue(prev_year, prev_filters)
+
+    labels = [f"{str(m).zfill(2)}/{current_year}" for m in range(1,13)]
+
+    current_total = sum(current_data)
+    previous_total = sum(previous_data)
+    totals = {
+        'current_total': current_total,
+        'current_average': current_total / 12 if 12 else 0,
+        'previous_total': previous_total,
+        'previous_average': previous_total / 12 if 12 else 0,
+        'variation_percent': ((current_total - previous_total) / previous_total * 100) if previous_total else 0
+    }
+
+    return render_template(
+        'report_revenue_comparison.html',
+        chart_labels=labels,
+        current_year_data=current_data,
+        previous_year_data=previous_data,
+        current_year_label=str(current_year),
+        previous_year_label=str(prev_year),
+        totals=totals,
+        filters=filters,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
 
 
 # --- Rotas de Placeholder para o Menu (Gerencial) ---
