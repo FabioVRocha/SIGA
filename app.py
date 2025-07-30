@@ -332,7 +332,7 @@ def fetch_monthly_revenue(year, filters):
                 FROM doctos d
                 LEFT JOIN empresa e ON d.notclifor = e.empresa
                 LEFT JOIN cidade c ON d.noscidade = c.cidade
-                LEFT JOIN vendedor v ON d.vendedor = v.vendedor
+                LEFT JOIN vendedor v ON e.vendedor = v.vendedor
                 LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
@@ -381,8 +381,8 @@ def fetch_monthly_revenue(year, filters):
                 placeholders = ','.join(['%s'] * len(selected_transactions))
                 sql += f" AND op.opetransac IN ({placeholders})"
                 params.extend(selected_transactions)
-            else:
-                sql += " AND FALSE"
+            # Quando nenhum parametro de transacao e definido pelo usuario o
+            # filtro nao e aplicado para permitir a exibicao de dados
 
             sql += " GROUP BY mes ORDER BY mes"
 
