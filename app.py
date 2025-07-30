@@ -1201,6 +1201,16 @@ def report_revenue_by_cfop():
         usuario_logado=session.get('username', 'Convidado')
     )
 
+@app.route('/report_sales_by_product')
+@login_required
+def report_sales_by_product():
+    return render_template(
+        'placeholder.html',
+        page_title="Relatório: Vendas por Produto",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
 @app.route('/report_customer_sales')
 @login_required
 def report_customer_sales():
