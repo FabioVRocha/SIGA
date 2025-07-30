@@ -5,10 +5,26 @@
 {% block page_title %}Relatórios de Faturamento{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
-    <h2 class="text-xl font-semibold text-gray-800 mb-4">Selecione um Relatório</h2>
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        <a href="{{ url_for('report_revenue_comparison') }}" class="btn btn-primary">Comparativo Faturamento</a>
-    </div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <a href="{{ url_for('report_revenue_comparison') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-blue mb-4"><i class="fas fa-chart-column fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Comparativo de Faturamento</h2>
+        <p class="text-medium-gray">Compare o faturamento entre períodos distintos.</p>
+    </a>
+    <a href="{{ url_for('report_sales_by_product') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-green mb-4"><i class="fas fa-chart-pie fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Vendas por Produto</h2>
+        <p class="text-medium-gray">Visualize o faturamento agrupado por produto.</p>
+    </a>
+    <a href="{{ url_for('report_customer_sales') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-orange mb-4"><i class="fas fa-users fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Vendas por Cliente</h2>
+        <p class="text-medium-gray">Veja o desempenho de vendas por cliente.</p>
+    </a>
+    <a href="{{ url_for('report_financial_summary') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-purple mb-4"><i class="fas fa-dollar-sign fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Resumo Financeiro</h2>
+        <p class="text-medium-gray">Obtenha uma visão geral das finanças.</p>
+    </a>
 </div>
 {% endblock %}
