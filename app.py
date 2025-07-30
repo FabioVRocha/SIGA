@@ -436,7 +436,14 @@ def invoices_mirror():
     Rota que exibe o espelho das notas fiscais faturadas com filtros.
     """
     conn = get_erp_db_connection() # Conecta ao DB do ERP
-    invoices_data = [] # Para armazenar os dados processados
+    invoices_data = []  # Para armazenar os dados processados
+    totals_summary = {
+        'valor_produtos': 0.0,
+        'valor_ipi': 0.0,
+        'valor_st': 0.0,
+        'valor_total': 0.0,
+        'valor_frete': 0.0
+    }
 
     # Get current date for default filter values
     today = datetime.date.today().isoformat() # Format as YYYY-MM-DD for HTML input type="date"
@@ -600,13 +607,28 @@ def invoices_mirror():
 
                 invoices_data.append(invoice)
 
+                # Acumula totais para o rodapé
+                totals_summary['valor_produtos'] += float(invoice['total_privltotal'] or 0)
+                totals_summary['valor_ipi'] += float(invoice['notvlipi'] or 0)
+                totals_summary['valor_st'] += float(invoice['total_privlsubst'] or 0)
+                totals_summary['valor_total'] += float(invoice['notvltotal'] or 0)
+                totals_summary['valor_frete'] += float(invoice['valor_frete'] or 0)
+
         except Error as e:
             print(f"Erro ao executar a consulta: {e}")
             flash(f"Erro ao carregar notas fiscais: {e}", "danger")
         finally:
             if conn:
                 conn.close()
-    return render_template('invoices_mirror.html', invoices=invoices_data, filters=filters, product_lines=product_lines, system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+    return render_template(
+        'invoices_mirror.html',
+        invoices=invoices_data,
+        filters=filters,
+        product_lines=product_lines,
+        totals=totals_summary,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
 
 @app.route('/api/get_lotecar_description/<string:lotecar_code>')
 @login_required
