@@ -182,6 +182,21 @@ def save_user_parameters(user_id, param_name, param_value):
     return False
 
 
+def parse_transaction_signs(signs_str):
+    """Converte string de sinais ('123:+,456:-') em dicionário."""
+    signs = {}
+    if signs_str:
+        for item in signs_str.split(','):
+            if ':' in item:
+                code, sign = item.split(':', 1)
+                code = code.strip()
+                sign = sign.strip()
+                if sign not in ['+', '-']:
+                    sign = '+'
+                signs[code] = sign
+    return signs
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """
@@ -332,15 +347,22 @@ def fetch_monthly_revenue(year, filters):
             cur = conn.cursor()
 
             user_id = session.get('user_id')
-            selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
-            selected_transactions = []
-            if selected_transactions_str:
-                selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+            transaction_signs = parse_transaction_signs(
+                get_user_parameters(user_id, 'invoice_transaction_signs')
+            )
+            selected_transactions = list(transaction_signs.keys())
+            if not selected_transactions:
+                selected_transactions_str = get_user_parameters(
+                    user_id, 'selected_invoice_transactions'
+                )
+                if selected_transactions_str:
+                    selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+                    transaction_signs = {t: '+' for t in selected_transactions}
 
             sql = """
                 SELECT EXTRACT(MONTH FROM d.notdata) AS mes,
                        SUM(tm.privltotal) AS total,
-                       MAX(g.grunome) AS grunome
+                       op.opetransac
                 FROM doctos d
                 LEFT JOIN empresa e ON d.notclifor = e.empresa
                 LEFT JOIN cidade c ON d.noscidade = c.cidade
@@ -413,13 +435,17 @@ def fetch_monthly_revenue(year, filters):
             # Quando nenhum parametro de transacao e definido pelo usuario o
             # filtro nao e aplicado para permitir a exibicao de dados
 
-            sql += " GROUP BY mes ORDER BY mes"
+            sql += " GROUP BY mes, op.opetransac ORDER BY mes"
 
             cur.execute(sql, tuple(params))
             results = cur.fetchall()
-            for mes, total, _ in results:
+            for mes, total, transac in results:
                 idx = int(mes) - 1
-                monthly_totals[idx] = float(total)
+                sign = transaction_signs.get(str(transac), '+')
+                if sign == '-':
+                    monthly_totals[idx] -= float(total)
+                else:
+                    monthly_totals[idx] += float(total)
             cur.close()
         except Error as e:
             print(f'Erro ao buscar faturamento mensal: {e}')
@@ -590,10 +616,16 @@ def invoices_mirror():
 
     # Obter transações selecionadas pelo usuário
     user_id = session.get('user_id')
-    selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
-    selected_transactions = []
-    if selected_transactions_str:
-        selected_transactions = selected_transactions_str.split(',')
+    transaction_signs = parse_transaction_signs(
+        get_user_parameters(user_id, 'invoice_transaction_signs')
+    )
+    selected_transactions = list(transaction_signs.keys())
+    if not selected_transactions:
+        selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
+        if selected_transactions_str:
+            selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+            transaction_signs = {t: '+' for t in selected_transactions}
+    if selected_transactions:
         print(f"DEBUG: Transações selecionadas para o usuário {user_id}: {selected_transactions}")
 
     if conn:
@@ -730,11 +762,13 @@ def invoices_mirror():
                 invoices_data.append(invoice)
 
                 # Acumula totais para o rodapé
-                totals_summary['valor_produtos'] += float(invoice['total_privltotal'] or 0)
-                totals_summary['valor_ipi'] += float(invoice['notvlipi'] or 0)
-                totals_summary['valor_st'] += float(invoice['total_privlsubst'] or 0)
-                totals_summary['valor_total'] += float(invoice['notvltotal'] or 0)
-                totals_summary['valor_frete'] += float(invoice['valor_frete'] or 0)
+                sign = transaction_signs.get(str(invoice['operacao']), '+')
+                multiplier = -1 if sign == '-' else 1
+                totals_summary['valor_produtos'] += multiplier * float(invoice['total_privltotal'] or 0)
+                totals_summary['valor_ipi'] += multiplier * float(invoice['notvlipi'] or 0)
+                totals_summary['valor_st'] += multiplier * float(invoice['total_privlsubst'] or 0)
+                totals_summary['valor_total'] += multiplier * float(invoice['notvltotal'] or 0)
+                totals_summary['valor_frete'] += multiplier * float(invoice['valor_frete'] or 0)
 
         except Error as e:
             print(f"Erro ao executar a consulta: {e}")
@@ -1128,21 +1162,40 @@ def gerencial_parameters():
         selected_transactions = request.form.getlist('selected_transactions')
         selected_transactions_str = ','.join(selected_transactions)
         
-        if save_user_parameters(user_id, 'selected_invoice_transactions', selected_transactions_str):
+        transaction_signs = {}
+        for trans in selected_transactions:
+            sign = request.form.get(f'sign_{trans}', '+')
+            if sign not in ['+', '-']:
+                sign = '+'
+            transaction_signs[trans] = sign
+        transaction_signs_str = ','.join(f'{t}:{s}' for t, s in transaction_signs.items())
+
+        success = True
+        if not save_user_parameters(user_id, 'selected_invoice_transactions', selected_transactions_str):
+            success = False
+        if not save_user_parameters(user_id, 'invoice_transaction_signs', transaction_signs_str):
+            success = False
+        if success:
             flash('Parâmetros de transação salvos com sucesso!', 'success')
         else:
             flash('Falha ao salvar parâmetros de transação.', 'danger')
         return redirect(url_for('gerencial_parameters'))
     
-    # GET request: Load current selected transactions
-    current_selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
-    current_selected_transactions = []
-    if current_selected_transactions_str:
-        current_selected_transactions = current_selected_transactions_str.split(',')
+    # GET request: Load current selected transactions and signs
+    current_signs_str = get_user_parameters(user_id, 'invoice_transaction_signs')
+    current_transaction_signs = parse_transaction_signs(current_signs_str)
+    current_selected_transactions = list(current_transaction_signs.keys())
+    if not current_selected_transactions:
+        current_selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
+        if current_selected_transactions_str:
+            current_selected_transactions = [t for t in current_selected_transactions_str.split(',') if t]
+            current_transaction_signs = {t: '+' for t in current_selected_transactions}
 
     # Marcar as transações que já estão selecionadas
     for trans in all_transactions:
-        trans['is_selected'] = trans['transacao'] in current_selected_transactions
+        code = trans['transacao']
+        trans['is_selected'] = code in current_selected_transactions
+        trans['sign'] = current_transaction_signs.get(code, '+')
 
     return render_template(
         'parameters.html',

@@ -17,6 +17,10 @@
                            class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                            {% if transacao.is_selected %}checked{% endif %}>
                     <label for="transacao_{{ transacao.transacao }}" class="ml-2 text-gray-700">{{ transacao.trsnome }} ({{ transacao.transacao }})</label>
+                    <select name="sign_{{ transacao.transacao }}" class="ml-2 h-8 border-gray-300 rounded">
+                        <option value="+" {% if transacao.sign == '+' %}selected{% endif %}>+</option>
+                        <option value="-" {% if transacao.sign == '-' %}selected{% endif %}>-</option>
+                    </select>
                 </div>
                 {% endfor %}
             </div>
