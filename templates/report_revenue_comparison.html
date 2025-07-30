@@ -12,13 +12,23 @@
             <i class="fas fa-filter mr-2"></i> Filtrar
         </button>
     </div>
-    <canvas id="revenueChart" class="w-full h-96"></canvas>
-    <div class="mt-6 text-sm text-gray-700">
-        <p><strong>Total {{ current_year_label }}:</strong> {{ totals.current_total | round(2) }}</p>
-        <p><strong>Média Mensal {{ current_year_label }}:</strong> {{ totals.current_average | round(2) }}</p>
-        <p><strong>Total {{ previous_year_label }}:</strong> {{ totals.previous_total | round(2) }}</p>
-        <p><strong>Média Mensal {{ previous_year_label }}:</strong> {{ totals.previous_average | round(2) }}</p>
-        <p><strong>Variação:</strong> {{ totals.variation_percent | round(2) }}%</p>
+    <canvas id="revenueChart" class="w-full h-[28rem]"></canvas>
+    <div class="mt-6 flex flex-wrap justify-center gap-4 text-sm text-gray-700">
+        <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
+            <strong>Total {{ current_year_label }}:</strong> {{ totals.current_total | round(2) }}
+        </div>
+        <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
+            <strong>Média Mensal {{ current_year_label }}:</strong> {{ totals.current_average | round(2) }}
+        </div>
+        <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
+            <strong>Total {{ previous_year_label }}:</strong> {{ totals.previous_total | round(2) }}
+        </div>
+        <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
+            <strong>Média Mensal {{ previous_year_label }}:</strong> {{ totals.previous_average | round(2) }}
+        </div>
+        <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
+            <strong>Variação:</strong> {{ totals.variation_percent | round(2) }}%
+        </div>
     </div>
 </div>
 

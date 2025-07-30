@@ -1023,6 +1023,13 @@ def report_customer_sales():
 def report_financial_summary():
     return render_template('placeholder.html', page_title="Relatório: Resumo Financeiro", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
 
+# Página intermediária para relatórios de faturamento
+@app.route('/revenue_reports')
+@login_required
+def revenue_reports():
+    """Página de seleção dos relatórios de faturamento."""
+    return render_template('revenue_reports.html', page_title="Relatórios de Faturamento", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+
 @app.route('/report_revenue_comparison')
 @login_required
 def report_revenue_comparison():
