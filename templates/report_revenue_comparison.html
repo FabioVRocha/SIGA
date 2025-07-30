@@ -21,19 +21,19 @@
     <canvas id="revenueChart" class="w-full h-[28rem]"></canvas>
     <div class="mt-6 flex flex-wrap justify-center gap-4 text-sm text-gray-700">
         <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
-            <strong>Total {{ current_year_label }}:</strong> {{ totals.current_total | round(2) }}
+            <strong>Total {{ current_year_label }}:</strong> {{ totals.current_total | format_currency_brl }}
         </div>
         <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
-            <strong>Média Mensal {{ current_year_label }}:</strong> {{ totals.current_average | round(2) }}
+            <strong>Média Mensal {{ current_year_label }}:</strong> {{ totals.current_average | format_currency_brl }}
         </div>
         <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
-            <strong>Total {{ previous_year_label }}:</strong> {{ totals.previous_total | round(2) }}
+            <strong>Total {{ previous_year_label }}:</strong> {{ totals.previous_total | format_currency_brl }}
         </div>
         <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
-            <strong>Média Mensal {{ previous_year_label }}:</strong> {{ totals.previous_average | round(2) }}
+            <strong>Média Mensal {{ previous_year_label }}:</strong> {{ totals.previous_average | format_currency_brl }}
         </div>
         <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
-            <strong>Variação:</strong> {{ totals.variation_percent | round(2) }}%
+            <strong>Variação:</strong> {{ totals.variation_percent | format_currency_brl }}%
         </div>
     </div>
 </div>

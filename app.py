@@ -19,6 +19,18 @@ app = Flask(__name__)
 # Define a chave secreta importada do config.py
 app.secret_key = SECRET_KEY
 
+
+def format_currency_brl(value):
+    """Formata valores numéricos no padrão de moeda brasileira."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        value = 0.0
+    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+app.jinja_env.filters["format_currency_brl"] = format_currency_brl
+
 def get_erp_db_connection():
     """
     Estabelece e retorna uma conexão com o banco de dados PostgreSQL do ERP.
