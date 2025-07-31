@@ -455,6 +455,23 @@ def fetch_monthly_revenue(year, filters):
     return monthly_totals
 
 
+def fetch_all_cfops():
+    """Retorna todas as CFOPs cadastradas."""
+    conn = get_erp_db_connection()
+    cfops = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT operacao FROM opera ORDER BY operacao;")
+            cfops = [str(row[0]) for row in cur.fetchall() if row and row[0]]
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar CFOPs: {e}')
+        finally:
+            conn.close()
+    return cfops
+
+
 def fetch_revenue_by_cfop(filters):
     """Retorna o faturamento agregado por CFOP."""
     conn = get_erp_db_connection()
@@ -476,6 +493,11 @@ def fetch_revenue_by_cfop(filters):
                 if selected_transactions_str:
                     selected_transactions = [t for t in selected_transactions_str.split(',') if t]
                     transaction_signs = {t: '+' for t in selected_transactions}
+
+            selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+            selected_cfops = []
+            if selected_cfops_str:
+                selected_cfops = [c for c in selected_cfops_str.split(',') if c]
 
             sql = """
                 SELECT op.operacao,
@@ -550,6 +572,11 @@ def fetch_revenue_by_cfop(filters):
                 placeholders = ','.join(['%s'] * len(selected_transactions))
                 sql += f" AND op.opetransac IN ({placeholders})"
                 params.extend(selected_transactions)
+
+            if selected_cfops:
+                placeholders = ','.join(['%s'] * len(selected_cfops))
+                sql += f" AND op.operacao IN ({placeholders})"
+                params.extend(selected_cfops)
 
             sql += " GROUP BY op.operacao, op.opetransac ORDER BY op.operacao"
 
@@ -1296,16 +1323,21 @@ def gerencial_parameters():
     
     conn_erp = get_erp_db_connection()
     all_transactions = []
+    all_cfops = []
     if conn_erp:
         try:
             cur_erp = conn_erp.cursor()
             cur_erp.execute("SELECT transacao, trsnome FROM transa ORDER BY trsnome;")
             # Ensure transacao values are stored as strings to match form inputs
             all_transactions = [{'transacao': str(t[0]), 'trsnome': t[1]} for t in cur_erp.fetchall()]
+            
+            cur_erp.execute("SELECT operacao FROM opera ORDER BY operacao;")
+            all_cfops = [str(row[0]) for row in cur_erp.fetchall()]
+
             cur_erp.close()
         except Error as e:
-            print(f"Erro ao buscar transações: {e}")
-            flash(f"Erro ao carregar transações: {e}", "danger")
+            print(f"Erro ao buscar transações ou CFOPs: {e}")
+            flash(f"Erro ao carregar transações ou CFOPs: {e}", "danger")
         finally:
             if conn_erp:
                 conn_erp.close()
@@ -1322,15 +1354,20 @@ def gerencial_parameters():
             transaction_signs[trans] = sign
         transaction_signs_str = ','.join(f'{t}:{s}' for t, s in transaction_signs.items())
 
+        selected_cfops = request.form.getlist('selected_cfops')
+        selected_cfops_str = ','.join(selected_cfops)
+
         success = True
         if not save_user_parameters(user_id, 'selected_invoice_transactions', selected_transactions_str):
             success = False
         if not save_user_parameters(user_id, 'invoice_transaction_signs', transaction_signs_str):
             success = False
+        if not save_user_parameters(user_id, 'selected_report_cfops', selected_cfops_str):
+            success = False
         if success:
-            flash('Parâmetros de transação salvos com sucesso!', 'success')
+            flash('Parâmetros de transação e CFOP salvos com sucesso!', 'success')
         else:
-            flash('Falha ao salvar parâmetros de transação.', 'danger')
+            flash('Falha ao salvar parâmetros de transação ou CFOP.', 'danger')
         return redirect(url_for('gerencial_parameters'))
     
     # GET request: Load current selected transactions and signs
@@ -1343,18 +1380,28 @@ def gerencial_parameters():
             current_selected_transactions = [t for t in current_selected_transactions_str.split(',') if t]
             current_transaction_signs = {t: '+' for t in current_selected_transactions}
 
-    # Marcar as transações que já estão selecionadas
+    selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+    current_selected_cfops = []
+    if selected_cfops_str:
+        current_selected_cfops = [c for c in selected_cfops_str.split(',') if c]
+
+    # Marcar as transações e CFOPs que já estão selecionados
     for trans in all_transactions:
         code = trans['transacao']
         trans['is_selected'] = code in current_selected_transactions
         trans['sign'] = current_transaction_signs.get(code, '+')
+
+    cfops_data = []
+    for cfop in all_cfops:
+        cfops_data.append({'cfop': cfop, 'is_selected': cfop in current_selected_cfops})
 
     return render_template(
         'parameters.html',
         page_title="Parâmetros do Sistema",
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado'),
-        all_transactions=all_transactions
+        all_transactions=all_transactions,
+        all_cfops=cfops_data
     )
 
 
