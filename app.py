@@ -365,7 +365,7 @@ def fetch_monthly_revenue(year, filters):
                 selected_cfops = [c for c in selected_cfops_str.split(',') if c]
 
             sql = """
-                SELECT EXTRACT(MONTH FROM d.notdata) AS mes,
+                SELECT EXTRACT(MONTH FROM tm.pridata) AS mes,
                        SUM(tm.privltotal) AS total,
                        op.opetransac
                 FROM doctos d
@@ -375,7 +375,7 @@ def fetch_monthly_revenue(year, filters):
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
                 LEFT JOIN opera op ON d.operacao = op.operacao
-                WHERE EXTRACT(YEAR FROM d.notdata) = %s
+                WHERE EXTRACT(YEAR FROM tm.pridata) = %s
             """
             params = [year]
 
@@ -397,11 +397,11 @@ def fetch_monthly_revenue(year, filters):
 
                 if valid_months:
                     if len(valid_months) == 1:
-                        sql += " AND EXTRACT(MONTH FROM d.notdata) = %s"
+                        sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
                         params.append(valid_months[0])
                     else:
                         placeholders = ','.join(['%s'] * len(valid_months))
-                        sql += f" AND EXTRACT(MONTH FROM d.notdata) IN ({placeholders})"
+                        sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
                         params.extend(valid_months)
             if filters.get('state'):
                 sql += " AND c.uf = %s"
@@ -523,7 +523,7 @@ def fetch_revenue_by_cfop(filters):
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
                 LEFT JOIN opera op ON d.operacao = op.operacao
-                WHERE EXTRACT(YEAR FROM d.notdata) = %s
+                WHERE EXTRACT(YEAR FROM tm.pridata) = %s
             """
             params = [filters.get('year')]
 
@@ -538,11 +538,11 @@ def fetch_revenue_by_cfop(filters):
                         continue
                 if valid_months:
                     if len(valid_months) == 1:
-                        sql += " AND EXTRACT(MONTH FROM d.notdata) = %s"
+                        sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
                         params.append(valid_months[0])
                     else:
                         placeholders = ','.join(['%s'] * len(valid_months))
-                        sql += f" AND EXTRACT(MONTH FROM d.notdata) IN ({placeholders})"
+                        sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
                         params.extend(valid_months)
 
             if filters.get('state'):
@@ -644,7 +644,7 @@ def fetch_revenue_by_line(filters):
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
                 LEFT JOIN opera op ON d.operacao = op.operacao
-                WHERE EXTRACT(YEAR FROM d.notdata) = %s
+                WHERE EXTRACT(YEAR FROM tm.pridata) = %s
             """
             params = [filters.get('year')]
 
@@ -659,11 +659,11 @@ def fetch_revenue_by_line(filters):
                         continue
                 if valid_months:
                     if len(valid_months) == 1:
-                        sql += " AND EXTRACT(MONTH FROM d.notdata) = %s"
+                        sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
                         params.append(valid_months[0])
                     else:
                         placeholders = ','.join(['%s'] * len(valid_months))
-                        sql += f" AND EXTRACT(MONTH FROM d.notdata) IN ({placeholders})"
+                        sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
                         params.extend(valid_months)
 
             if filters.get('state'):
@@ -942,10 +942,10 @@ def invoices_mirror():
             where_clauses = []
 
             if filters['start_date']:
-                where_clauses.append("d.notdata >= %s")
+                where_clauses.append("tm.pridata >= %s")
                 query_params.append(filters['start_date'])
             if filters['end_date']:
-                where_clauses.append("d.notdata <= %s")
+                where_clauses.append("tm.pridata <= %s")
                 query_params.append(filters['end_date'])
             if filters['client_name']:
                 where_clauses.append("e.empnome ILIKE %s")
@@ -1361,6 +1361,16 @@ def report_sales_by_product():
     return render_template(
         'placeholder.html',
         page_title="Relatório: Vendas por Produto",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+@app.route('/report_customer_sales')
+@login_required
+def report_customer_sales():
+    return render_template(
+        'placeholder.html',
+        page_title="Relatório: Vendas por Cliente",
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
