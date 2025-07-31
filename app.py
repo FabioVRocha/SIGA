@@ -356,13 +356,13 @@ def fetch_monthly_revenue(year, filters):
                     user_id, 'selected_invoice_transactions'
                 )
                 if selected_transactions_str:
-                    selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+                    selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
 
             selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
             selected_cfops = []
             if selected_cfops_str:
-                selected_cfops = [c for c in selected_cfops_str.split(',') if c]
+                selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
 
             sql = """
                 SELECT EXTRACT(MONTH FROM tm.pridata) AS mes,
@@ -501,13 +501,13 @@ def fetch_revenue_by_cfop(filters):
                     user_id, 'selected_invoice_transactions'
                 )
                 if selected_transactions_str:
-                    selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+                    selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
 
             selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
             selected_cfops = []
             if selected_cfops_str:
-                selected_cfops = [c for c in selected_cfops_str.split(',') if c]
+                selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
 
             sql = """
                 SELECT op.operacao,
@@ -630,7 +630,7 @@ def fetch_revenue_by_line(filters):
                     user_id, 'selected_invoice_transactions'
                 )
                 if selected_transactions_str:
-                    selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+                    selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
 
             sql = """
@@ -746,12 +746,12 @@ def fetch_revenue_by_vendor(filters):
                     user_id, 'selected_invoice_transactions'
                 )
                 if selected_transactions_str:
-                    selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+                    selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
             selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
             selected_cfops = []
             if selected_cfops_str:
-                selected_cfops = [c for c in selected_cfops_str.split(',') if c]
+                selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
                 
             sql = """
                 SELECT v.vennome,
@@ -1020,7 +1020,7 @@ def invoices_mirror():
     if not selected_transactions:
         selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
         if selected_transactions_str:
-            selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+            selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
             transaction_signs = {t: '+' for t in selected_transactions}
     if selected_transactions:
         print(f"DEBUG: Transações selecionadas para o usuário {user_id}: {selected_transactions}")
@@ -1680,13 +1680,13 @@ def gerencial_parameters():
     if not current_selected_transactions:
         current_selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
         if current_selected_transactions_str:
-            current_selected_transactions = [t for t in current_selected_transactions_str.split(',') if t]
+            current_selected_transactions = [t.strip() for t in current_selected_transactions_str.split(',') if t.strip()]
             current_transaction_signs = {t: '+' for t in current_selected_transactions}
 
     selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
     current_selected_cfops = []
     if selected_cfops_str:
-        current_selected_cfops = [c for c in selected_cfops_str.split(',') if c]
+        current_selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
 
     # Marcar as transações e CFOPs que já estão selecionados
     for trans in all_transactions:
