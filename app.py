@@ -824,7 +824,10 @@ def fetch_revenue_by_vendor(filters):
                 placeholders = ','.join(['%s'] * len(selected_transactions))
                 sql += f" AND op.opetransac IN ({placeholders})"
                 params.extend(selected_transactions)
-
+            if selected_cfops:
+                placeholders = ','.join(['%s'] * len(selected_cfops))
+                sql += f" AND op.operacao IN ({placeholders})"
+                params.extend(selected_cfops)
             sql += " GROUP BY v.vennome, op.opetransac"
 
             cur.execute(sql, tuple(params))
