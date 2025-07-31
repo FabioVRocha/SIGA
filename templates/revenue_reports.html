@@ -21,10 +21,10 @@
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Linha</h2>
         <p class="text-medium-gray">Veja o faturamento agrupado por linha.</p>
     </a>
-    <a href="{{ url_for('report_financial_summary') }}" class="card p-6 text-center flex flex-col items-center justify-center">
-        <div class="text-icon-purple mb-4"><i class="fas fa-dollar-sign fa-3x"></i></div>
-        <h2 class="text-xl font-semibold text-dark-blue mb-2">Resumo Financeiro</h2>
-        <p class="text-medium-gray">Obtenha uma visão geral das finanças.</p>
+    <a href="{{ url_for('report_revenue_by_vendor') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-purple mb-4"><i class="fas fa-user-tie fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Vendedor</h2>
+        <p class="text-medium-gray">Veja o faturamento agrupado por vendedor.</p>
     </a>
 </div>
 {% endblock %}

@@ -727,6 +727,123 @@ def fetch_revenue_by_line(filters):
 
     return data
 
+def fetch_revenue_by_vendor(filters):
+    """Retorna o faturamento agregado por vendedor."""
+    conn = get_erp_db_connection()
+    data = []
+
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            user_id = session.get('user_id')
+            transaction_signs = parse_transaction_signs(
+                get_user_parameters(user_id, 'invoice_transaction_signs')
+            )
+            selected_transactions = list(transaction_signs.keys())
+            if not selected_transactions:
+                selected_transactions_str = get_user_parameters(
+                    user_id, 'selected_invoice_transactions'
+                )
+                if selected_transactions_str:
+                    selected_transactions = [t for t in selected_transactions_str.split(',') if t]
+                    transaction_signs = {t: '+' for t in selected_transactions}
+
+            sql = """
+                SELECT v.vennome,
+                       SUM(tm.privltotal) AS valor_liquido,
+                       op.opetransac
+                FROM doctos d
+                LEFT JOIN empresa e ON d.notclifor = e.empresa
+                LEFT JOIN cidade c ON d.noscidade = c.cidade
+                LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
+                LEFT JOIN produto p ON tm.priproduto = p.produto
+                LEFT JOIN grupo g ON p.grupo = g.grupo
+                LEFT JOIN vendedor v ON d.notvendedor = v.vendedor
+                LEFT JOIN opera op ON d.operacao = op.operacao
+                WHERE EXTRACT(YEAR FROM tm.pridata) = %s
+            """
+            params = [filters.get('year')]
+
+            months = filters.get('month')
+            if months:
+                month_tokens = months if isinstance(months, list) else [months]
+                valid_months = []
+                for m in month_tokens:
+                    try:
+                        valid_months.append(int(m))
+                    except ValueError:
+                        continue
+                if valid_months:
+                    if len(valid_months) == 1:
+                        sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
+                        params.append(valid_months[0])
+                    else:
+                        placeholders = ','.join(['%s'] * len(valid_months))
+                        sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
+                        params.extend(valid_months)
+
+            if filters.get('state'):
+                sql += " AND c.uf = %s"
+                params.append(filters['state'])
+            if filters.get('city'):
+                sql += " AND c.ciddes = %s"
+                params.append(filters['city'])
+            if filters.get('vendor'):
+                sql += " AND d.notvendedor = %s"
+                params.append(filters['vendor'])
+
+            if filters.get('line'):
+                matching_group_codes = []
+                temp_conn = get_erp_db_connection()
+                if temp_conn:
+                    try:
+                        temp_cur = temp_conn.cursor()
+                        temp_cur.execute("SELECT grupo, grunome FROM grupo;")
+                        groups_data = temp_cur.fetchall()
+                        temp_cur.close()
+                        for code, name in groups_data:
+                            if get_product_line(name) == filters['line']:
+                                matching_group_codes.append(code)
+                    except Error as e:
+                        print(f'Erro ao buscar grupos para filtro de linha: {e}')
+                    finally:
+                        temp_conn.close()
+                if matching_group_codes:
+                    placeholders = ','.join(['%s'] * len(matching_group_codes))
+                    sql += f" AND g.grupo IN ({placeholders})"
+                    params.extend(matching_group_codes)
+                else:
+                    sql += " AND FALSE"
+
+            if selected_transactions:
+                placeholders = ','.join(['%s'] * len(selected_transactions))
+                sql += f" AND op.opetransac IN ({placeholders})"
+                params.extend(selected_transactions)
+
+            sql += " GROUP BY v.vennome, op.opetransac"
+
+            cur.execute(sql, tuple(params))
+            results = cur.fetchall()
+            vendor_totals = {}
+            for name, liquido, transac in results:
+                vendor = name or 'Sem Vendedor'
+                sign = transaction_signs.get(str(transac), '+')
+                mult = -1 if sign == '-' else 1
+                vendor_totals[vendor] = vendor_totals.get(vendor, 0.0) + float(liquido or 0) * mult
+
+            for vendor, total in vendor_totals.items():
+                data.append({'vendor': vendor, 'valor_liquido': total})
+
+            data.sort(key=lambda x: x['vendor'])
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar faturamento por vendedor: {e}')
+        finally:
+            conn.close()
+
+    return data
+
 def parse_regcar_description(rgcdes_string):
     """
     Parses the rgcdes string to extract freight percentages and M³ value.
@@ -1401,10 +1518,31 @@ def report_revenue_by_line():
         usuario_logado=session.get('username', 'Convidado')
     )
 
-@app.route('/report_financial_summary')
+@app.route('/report_revenue_by_vendor')
 @login_required
-def report_financial_summary():
-    return render_template('placeholder.html', page_title="Relatório: Resumo Financeiro", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+def report_revenue_by_vendor():
+    current_year = int(request.args.get('year', datetime.date.today().year))
+    filters = {
+        'year': current_year,
+        'month': request.args.getlist('month'),
+        'state': request.args.get('state'),
+        'city': request.args.get('city'),
+        'vendor': request.args.get('vendor'),
+        'line': request.args.get('line')
+    }
+    data = fetch_revenue_by_vendor(filters)
+    chart_labels = [row['vendor'] for row in data]
+    chart_values = [row['valor_liquido'] for row in data]
+    total_liquido = sum(chart_values)
+    return render_template(
+        'report_revenue_by_vendor.html',
+        filters=filters,
+        chart_labels=chart_labels,
+        chart_values=chart_values,
+        total_liquido=total_liquido,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
 
 # Página intermediária para relatórios de faturamento
 @app.route('/revenue_reports')
