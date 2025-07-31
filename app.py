@@ -337,7 +337,7 @@ def fetch_monthly_revenue(year, filters):
     """Retorna o faturamento mensal para o ano especificado.
 
     Esta função executa uma consulta agregada no ERP e pode aplicar
-    filtros opcionais de mês, estado, cidade, vendedor e linha de produto.
+    filtros opcionais de mês, estado, cidade, vendedor, linha de produto e CFOP.
     """
     conn = get_erp_db_connection()
     monthly_totals = [0.0] * 12
@@ -358,6 +358,11 @@ def fetch_monthly_revenue(year, filters):
                 if selected_transactions_str:
                     selected_transactions = [t for t in selected_transactions_str.split(',') if t]
                     transaction_signs = {t: '+' for t in selected_transactions}
+
+            selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+            selected_cfops = []
+            if selected_cfops_str:
+                selected_cfops = [c for c in selected_cfops_str.split(',') if c]
 
             sql = """
                 SELECT EXTRACT(MONTH FROM d.notdata) AS mes,
@@ -434,6 +439,11 @@ def fetch_monthly_revenue(year, filters):
                 params.extend(selected_transactions)
             # Quando nenhum parametro de transacao e definido pelo usuario o
             # filtro nao e aplicado para permitir a exibicao de dados
+
+            if selected_cfops:
+                placeholders = ','.join(['%s'] * len(selected_cfops))
+                sql += f" AND op.operacao IN ({placeholders})"
+                params.extend(selected_cfops)
 
             sql += " GROUP BY mes, op.opetransac ORDER BY mes"
 
