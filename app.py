@@ -748,7 +748,11 @@ def fetch_revenue_by_vendor(filters):
                 if selected_transactions_str:
                     selected_transactions = [t for t in selected_transactions_str.split(',') if t]
                     transaction_signs = {t: '+' for t in selected_transactions}
-
+            selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+            selected_cfops = []
+            if selected_cfops_str:
+                selected_cfops = [c for c in selected_cfops_str.split(',') if c]
+                
             sql = """
                 SELECT v.vennome,
                        SUM(tm.privltotal) AS valor_liquido,
