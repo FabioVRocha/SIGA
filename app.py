@@ -849,6 +849,7 @@ def fetch_revenue_by_vendor(filters):
                     cur.close()
                     break
                 except UndefinedColumn:
+                    conn.rollback()
                     cur.close()
                     data.clear()
                     continue
