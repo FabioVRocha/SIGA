@@ -757,8 +757,11 @@ def fetch_revenue_by_state(filters):
                        op.opetransac
                 FROM doctos d
                 LEFT JOIN empresa e ON d.notclifor = e.empresa
-                LEFT JOIN cidade c ON d.noscidade = c.cidade
+                LEFT JOIN cidade c ON e.empcidade = c.cidade
                 LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
+                LEFT JOIN ntvped1 np ON np.ntvnota = d.controle
+                LEFT JOIN comnf cf ON d.notdocto = cf.comncontr
+                LEFT JOIN vendedor v ON cf.comnvende = v.vendedor
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
                 LEFT JOIN opera op ON d.operacao = op.operacao
@@ -791,7 +794,7 @@ def fetch_revenue_by_state(filters):
                 sql += " AND c.ciddes = %s"
                 params.append(filters['city'])
             if filters.get('vendor'):
-                sql += " AND d.vendedor = %s"
+                sql += " AND cf.comnvende = %s"
                 params.append(filters['vendor'])
 
             if filters.get('line'):
@@ -877,11 +880,13 @@ def fetch_revenue_by_vendor(filters):
                                op.opetransac
                         FROM doctos d
                         LEFT JOIN empresa e ON d.notclifor = e.empresa
-                        LEFT JOIN cidade c ON d.noscidade = c.cidade
+                        LEFT JOIN cidade c ON e.empcidade = c.cidade
                         LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
+                        LEFT JOIN ntvped1 np ON np.ntvnota = d.controle
+                        LEFT JOIN comnf cf ON d.notdocto = cf.comncontr
+                        LEFT JOIN vendedor v ON cf.comnvende = v.vendedor
                         LEFT JOIN produto p ON tm.priproduto = p.produto
                         LEFT JOIN grupo g ON p.grupo = g.grupo
-                        LEFT JOIN vendedor v ON COALESCE(d.vendedor, d.notvendedor, tm.vendedor) = v.vendedor
                         LEFT JOIN opera op ON d.operacao = op.operacao
                         WHERE EXTRACT(YEAR FROM tm.pridata) = %s
                 """
@@ -912,7 +917,7 @@ def fetch_revenue_by_vendor(filters):
                     sql += " AND c.ciddes = %s"
                     params.append(filters['city'])
                 if filters.get('vendor'):
-                    sql += " AND COALESCE(d.vendedor, d.notvendedor, tm.vendedor) = %s"
+                    sql += " AND cf.comnvende = %s"
                     params.append(filters['vendor'])
 
                 if filters.get('line'):
