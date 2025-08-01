@@ -847,7 +847,10 @@ def fetch_revenue_by_vendor(filters):
 
                     data.sort(key=lambda x: x['vendor'])
                     cur.close()
-                    break
+                    if data:
+                        break
+                    else:
+                        continue
                 except UndefinedColumn:
                     conn.rollback()
                     cur.close()
