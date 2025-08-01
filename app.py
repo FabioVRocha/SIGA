@@ -552,7 +552,7 @@ def fetch_revenue_by_cfop(filters):
                 sql += " AND c.ciddes = %s"
                 params.append(filters['city'])
             if filters.get('vendor'):
-                sql += " AND d.vendedor = %s"
+                sql += " AND d.notvendedor = %s"
                 params.append(filters['vendor'])
 
             if filters.get('line'):
@@ -673,7 +673,7 @@ def fetch_revenue_by_line(filters):
                 sql += " AND c.ciddes = %s"
                 params.append(filters['city'])
             if filters.get('vendor'):
-                sql += " AND d.vendedor = %s"
+                sql += " AND d.notvendedor = %s"
                 params.append(filters['vendor'])
 
             if filters.get('line'):
@@ -763,7 +763,7 @@ def fetch_revenue_by_vendor(filters):
                 LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
-                LEFT JOIN vendedor v ON d.vendedor = v.vendedor
+                LEFT JOIN vendedor v ON d.notvendedor = v.vendedor
                 LEFT JOIN opera op ON d.operacao = op.operacao
                 WHERE EXTRACT(YEAR FROM tm.pridata) = %s
             """
@@ -794,7 +794,7 @@ def fetch_revenue_by_vendor(filters):
                 sql += " AND c.ciddes = %s"
                 params.append(filters['city'])
             if filters.get('vendor'):
-                sql += " AND d.vendedor = %s"
+                sql += " AND d.notvendedor = %s"
                 params.append(filters['vendor'])
 
             if filters.get('line'):
