@@ -21,6 +21,11 @@
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Linha</h2>
         <p class="text-medium-gray">Veja o faturamento agrupado por linha.</p>
     </a>
+      <a href="{{ url_for('report_revenue_by_state') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+          <div class="text-icon-red mb-4"><i class="fas fa-map-marked-alt fa-3x"></i></div>
+          <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Estado</h2>
+          <p class="text-medium-gray">Veja o faturamento agrupado por estado.</p>
+      </a>
     <a href="{{ url_for('report_revenue_by_vendor') }}" class="card p-6 text-center flex flex-col items-center justify-center">
         <div class="text-icon-purple mb-4"><i class="fas fa-user-tie fa-3x"></i></div>
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Vendedor</h2>
