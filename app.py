@@ -760,7 +760,7 @@ def fetch_revenue_by_state(filters):
                 LEFT JOIN cidade c ON e.empcidade = c.cidade
                 LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
                 LEFT JOIN ntvped1 np ON np.ntvnota = d.controle
-                LEFT JOIN comnf cf ON d.notdocto = cf.comncontr
+                LEFT JOIN comnf cf ON d.notdocto = cf.comncontr::text
                 LEFT JOIN vendedor v ON cf.comnvende = v.vendedor
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
@@ -883,7 +883,7 @@ def fetch_revenue_by_vendor(filters):
                         LEFT JOIN cidade c ON e.empcidade = c.cidade
                         LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
                         LEFT JOIN ntvped1 np ON np.ntvnota = d.controle
-                        LEFT JOIN comnf cf ON d.notdocto = cf.comncontr
+                        LEFT JOIN comnf cf ON d.notdocto = cf.comncontr::text
                         LEFT JOIN vendedor v ON cf.comnvende = v.vendedor
                         LEFT JOIN produto p ON tm.priproduto = p.produto
                         LEFT JOIN grupo g ON p.grupo = g.grupo
