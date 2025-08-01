@@ -4,6 +4,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 import psycopg2
 # Importa o módulo para lidar com erros de banco de dados
 from psycopg2 import Error
+from psycopg2.errors import UndefinedColumn
 import datetime # Para formatar datas
 from functools import wraps # Para criar um decorador de login
 # Importa as funções para hashing de senhas
@@ -734,8 +735,6 @@ def fetch_revenue_by_vendor(filters):
 
     if conn:
         try:
-            cur = conn.cursor()
-
             user_id = session.get('user_id')
             transaction_signs = parse_transaction_signs(
                 get_user_parameters(user_id, 'invoice_transaction_signs')
@@ -752,98 +751,107 @@ def fetch_revenue_by_vendor(filters):
             selected_cfops = []
             if selected_cfops_str:
                 selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
-                
-            sql = """
-                SELECT v.vennome,
-                       SUM(tm.privltotal) AS valor_liquido,
-                       op.opetransac
-                FROM doctos d
-                LEFT JOIN empresa e ON d.notclifor = e.empresa
-                LEFT JOIN cidade c ON d.noscidade = c.cidade
-                LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
-                LEFT JOIN produto p ON tm.priproduto = p.produto
-                LEFT JOIN grupo g ON p.grupo = g.grupo
-                LEFT JOIN vendedor v ON d.vendedor = v.vendedor
-                LEFT JOIN opera op ON d.operacao = op.operacao
-                WHERE EXTRACT(YEAR FROM tm.pridata) = %s
-            """
-            params = [filters.get('year')]
 
-            months = filters.get('month')
-            if months:
-                month_tokens = months if isinstance(months, list) else [months]
-                valid_months = []
-                for m in month_tokens:
-                    try:
-                        valid_months.append(int(m))
-                    except ValueError:
-                        continue
-                if valid_months:
-                    if len(valid_months) == 1:
-                        sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
-                        params.append(valid_months[0])
-                    else:
-                        placeholders = ','.join(['%s'] * len(valid_months))
-                        sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
-                        params.extend(valid_months)
+            vendor_columns = ['vendedor', 'notvendedor']
+            for vendor_col in vendor_columns:
+                try:
+                    cur = conn.cursor()
+                    sql = f"""
+                        SELECT v.vennome,
+                               SUM(tm.privltotal) AS valor_liquido,
+                               op.opetransac
+                        FROM doctos d
+                        LEFT JOIN empresa e ON d.notclifor = e.empresa
+                        LEFT JOIN cidade c ON d.noscidade = c.cidade
+                        LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
+                        LEFT JOIN produto p ON tm.priproduto = p.produto
+                        LEFT JOIN grupo g ON p.grupo = g.grupo
+                        LEFT JOIN vendedor v ON d.{vendor_col} = v.vendedor
+                        LEFT JOIN opera op ON d.operacao = op.operacao
+                        WHERE EXTRACT(YEAR FROM tm.pridata) = %s
+                    """
+                    params = [filters.get('year')]
 
-            if filters.get('state'):
-                sql += " AND c.uf = %s"
-                params.append(filters['state'])
-            if filters.get('city'):
-                sql += " AND c.ciddes = %s"
-                params.append(filters['city'])
-            if filters.get('vendor'):
-                sql += " AND d.vendedor = %s"
-                params.append(filters['vendor'])
+                    months = filters.get('month')
+                    if months:
+                        month_tokens = months if isinstance(months, list) else [months]
+                        valid_months = []
+                        for m in month_tokens:
+                            try:
+                                valid_months.append(int(m))
+                            except ValueError:
+                                continue
+                        if valid_months:
+                            if len(valid_months) == 1:
+                                sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
+                                params.append(valid_months[0])
+                            else:
+                                placeholders = ','.join(['%s'] * len(valid_months))
+                                sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
+                                params.extend(valid_months)
 
-            if filters.get('line'):
-                matching_group_codes = []
-                temp_conn = get_erp_db_connection()
-                if temp_conn:
-                    try:
-                        temp_cur = temp_conn.cursor()
-                        temp_cur.execute("SELECT grupo, grunome FROM grupo;")
-                        groups_data = temp_cur.fetchall()
-                        temp_cur.close()
-                        for code, name in groups_data:
-                            if get_product_line(name) == filters['line']:
-                                matching_group_codes.append(code)
-                    except Error as e:
-                        print(f'Erro ao buscar grupos para filtro de linha: {e}')
-                    finally:
-                        temp_conn.close()
-                if matching_group_codes:
-                    placeholders = ','.join(['%s'] * len(matching_group_codes))
-                    sql += f" AND g.grupo IN ({placeholders})"
-                    params.extend(matching_group_codes)
-                else:
-                    sql += " AND FALSE"
+                    if filters.get('state'):
+                        sql += " AND c.uf = %s"
+                        params.append(filters['state'])
+                    if filters.get('city'):
+                        sql += " AND c.ciddes = %s"
+                        params.append(filters['city'])
+                    if filters.get('vendor'):
+                        sql += f" AND d.{vendor_col} = %s"
+                        params.append(filters['vendor'])
 
-            if selected_transactions:
-                placeholders = ','.join(['%s'] * len(selected_transactions))
-                sql += f" AND op.opetransac IN ({placeholders})"
-                params.extend(selected_transactions)
-            if selected_cfops:
-                placeholders = ','.join(['%s'] * len(selected_cfops))
-                sql += f" AND op.operacao IN ({placeholders})"
-                params.extend(selected_cfops)
-            sql += " GROUP BY v.vennome, op.opetransac"
+                    if filters.get('line'):
+                        matching_group_codes = []
+                        temp_conn = get_erp_db_connection()
+                        if temp_conn:
+                            try:
+                                temp_cur = temp_conn.cursor()
+                                temp_cur.execute("SELECT grupo, grunome FROM grupo;")
+                                groups_data = temp_cur.fetchall()
+                                temp_cur.close()
+                                for code, name in groups_data:
+                                    if get_product_line(name) == filters['line']:
+                                        matching_group_codes.append(code)
+                            except Error as e:
+                                print(f'Erro ao buscar grupos para filtro de linha: {e}')
+                            finally:
+                                temp_conn.close()
+                        if matching_group_codes:
+                            placeholders = ','.join(['%s'] * len(matching_group_codes))
+                            sql += f" AND g.grupo IN ({placeholders})"
+                            params.extend(matching_group_codes)
+                        else:
+                            sql += " AND FALSE"
 
-            cur.execute(sql, tuple(params))
-            results = cur.fetchall()
-            vendor_totals = {}
-            for name, liquido, transac in results:
-                vendor = name or 'Sem Vendedor'
-                sign = transaction_signs.get(str(transac), '+')
-                mult = -1 if sign == '-' else 1
-                vendor_totals[vendor] = vendor_totals.get(vendor, 0.0) + float(liquido or 0) * mult
+                    if selected_transactions:
+                        placeholders = ','.join(['%s'] * len(selected_transactions))
+                        sql += f" AND op.opetransac IN ({placeholders})"
+                        params.extend(selected_transactions)
+                    if selected_cfops:
+                        placeholders = ','.join(['%s'] * len(selected_cfops))
+                        sql += f" AND op.operacao IN ({placeholders})"
+                        params.extend(selected_cfops)
+                    sql += " GROUP BY v.vennome, op.opetransac"
 
-            for vendor, total in vendor_totals.items():
-                data.append({'vendor': vendor, 'valor_liquido': total})
+                    cur.execute(sql, tuple(params))
+                    results = cur.fetchall()
+                    vendor_totals = {}
+                    for name, liquido, transac in results:
+                        vendor = name or 'Sem Vendedor'
+                        sign = transaction_signs.get(str(transac), '+')
+                        mult = -1 if sign == '-' else 1
+                        vendor_totals[vendor] = vendor_totals.get(vendor, 0.0) + float(liquido or 0) * mult
 
-            data.sort(key=lambda x: x['vendor'])
-            cur.close()
+                    for vendor, total in vendor_totals.items():
+                        data.append({'vendor': vendor, 'valor_liquido': total})
+
+                    data.sort(key=lambda x: x['vendor'])
+                    cur.close()
+                    break
+                except UndefinedColumn:
+                    cur.close()
+                    data.clear()
+                    continue
         except Error as e:
             print(f'Erro ao buscar faturamento por vendedor: {e}')
         finally:
