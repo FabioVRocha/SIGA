@@ -43,44 +43,89 @@
                 <input type="number" name="year" id="year" value="{{ filters.year }}" class="mt-1 p-2 border rounded w-full">
             </div>
             <div>
-                <label for="month" class="block text-sm font-medium text-gray-700">Mês</label>
-                <select name="month" id="month" multiple class="mt-1 p-2 border rounded w-full">
-                    {% for m in range(1,13) %}
-                    <option value="{{ m }}" {% if filters.month and (m|string) in filters.month %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
-                    {% endfor %}
-                </select>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Mês</label>
+                <div class="relative w-full">
+                    <button type="button" id="month-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="month-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="month-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="month-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-60 overflow-auto">
+                        {% for m in range(1,13) %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
+                            <input type="checkbox" name="month" value="{{ m }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.month and (m|string) in filters.month %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ "%02d"|format(m) }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
             <div>
-                <label for="state" class="block text-sm font-medium text-gray-700">Estado</label>
-                <select name="state" id="state" multiple class="mt-1 p-2 border rounded w-full">
-                    {% for s in states %}
-                    <option value="{{ s }}" {% if filters.state and s in filters.state %}selected{% endif %}>{{ s }}</option>
-                    {% endfor %}
-                </select>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                <div class="relative w-full">
+                    <button type="button" id="state-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="state-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="state-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="state-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-60 overflow-auto">
+                        {% for s in states %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
+                            <input type="checkbox" name="state" value="{{ s }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.state and s in filters.state %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ s }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
             <div>
-                <label for="city" class="block text-sm font-medium text-gray-700">Cidade</label>
-                <select name="city" id="city" multiple class="mt-1 p-2 border rounded w-full">
-                    {% for c in cities %}
-                    <option value="{{ c }}" {% if filters.city and c in filters.city %}selected{% endif %}>{{ c }}</option>
-                    {% endfor %}
-                </select>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
+                <div class="relative w-full">
+                    <button type="button" id="city-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="city-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="city-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="city-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-60 overflow-auto">
+                        {% for c in cities %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
+                            <input type="checkbox" name="city" value="{{ c }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.city and c in filters.city %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ c }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
             <div>
-                <label for="vendor" class="block text-sm font-medium text-gray-700">Vendedor</label>
-                <select name="vendor" id="vendor" multiple class="mt-1 p-2 border rounded w-full">
-                    {% for v in vendors %}
-                    <option value="{{ v }}" {% if filters.vendor and v in filters.vendor %}selected{% endif %}>{{ v }}</option>
-                    {% endfor %}
-                </select>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Vendedor</label>
+                <div class="relative w-full">
+                    <button type="button" id="vendor-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="vendor-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="vendor-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="vendor-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-60 overflow-auto">
+                        {% for v in vendors %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
+                            <input type="checkbox" name="vendor" value="{{ v }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.vendor and v in filters.vendor %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ v }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
             <div>
-                <label for="line" class="block text-sm font-medium text-gray-700">Linha</label>
-                <select name="line" id="line" multiple class="mt-1 p-2 border rounded w-full">
-                    {% for l in product_lines %}
-                    <option value="{{ l }}" {% if filters.line and l in filters.line %}selected{% endif %}>{{ l }}</option>
-                    {% endfor %}
-                </select>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Linha</label>
+                <div class="relative w-full">
+                    <button type="button" id="line-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="line-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="line-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="line-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-60 overflow-auto">
+                        {% for l in product_lines %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
+                            <input type="checkbox" name="line" value="{{ l }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.line and l in filters.line %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ l }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
         </div>
         <div class="mt-4 flex justify-end">
@@ -107,6 +152,59 @@ document.addEventListener('DOMContentLoaded', () => {
     openFilterModalBtn.addEventListener('click', openModal);
     closeFilterModalBtn.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if(e.target === filterModal) closeModal(); });
+
+    const setupCombobox = (prefix, placeholder) => {
+        const button = document.getElementById(`${prefix}-button`);
+        const options = document.getElementById(`${prefix}-options`);
+        const textEl = document.getElementById(`${prefix}-text`);
+        const arrow = document.getElementById(`${prefix}-arrow`);
+        const checkboxes = options.querySelectorAll('input[type="checkbox"]');
+
+        const updateSelectedText = () => {
+            const selected = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.nextElementSibling.textContent.trim());
+            textEl.textContent = selected.length ? selected.join(', ') : placeholder;
+        };
+
+        button.addEventListener('click', () => {
+            const isHidden = options.classList.contains('hidden');
+            if (isHidden) {
+                options.classList.remove('hidden');
+                setTimeout(() => {
+                    options.classList.remove('opacity-0');
+                    arrow.classList.add('rotate-180');
+                }, 10);
+            } else {
+                options.classList.add('opacity-0');
+                arrow.classList.remove('rotate-180');
+                setTimeout(() => {
+                    options.classList.add('hidden');
+                }, 300);
+            }
+        });
+
+        checkboxes.forEach(cb => cb.addEventListener('change', updateSelectedText));
+
+        document.addEventListener('click', (event) => {
+            const isClickInside = button.contains(event.target) || options.contains(event.target);
+            if (!isClickInside && !options.classList.contains('hidden')) {
+                options.classList.add('opacity-0');
+                arrow.classList.remove('rotate-180');
+                setTimeout(() => {
+                    options.classList.add('hidden');
+                }, 300);
+            }
+        });
+
+        updateSelectedText();
+    };
+
+    setupCombobox('month', 'Selecione uma ou mais opções');
+    setupCombobox('state', 'Selecione uma ou mais opções');
+    setupCombobox('city', 'Selecione uma ou mais opções');
+    setupCombobox('vendor', 'Selecione uma ou mais opções');
+    setupCombobox('line', 'Selecione uma ou mais opções');
 
     const ctx = document.getElementById('dayRevenueChart').getContext('2d');
     const labels = {{ chart_labels | tojson }};
