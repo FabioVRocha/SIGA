@@ -35,7 +35,7 @@
       <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
     </div>
     <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+    <div class="inline-block align-bottom bg-white rounded-lg text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full overflow-visible">
       <form id="filterForm" method="get" action="{{ url_for('report_revenue_by_day') }}" class="bg-white p-6">
         <div class="grid grid-cols-1 gap-4">
             <div>
@@ -49,7 +49,7 @@
                         <span id="month-text" class="truncate">Selecione uma ou mais opções</span>
                         <svg id="month-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    <div id="month-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-60 overflow-auto">
+                    <div id="month-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
                         {% for m in range(1,13) %}
                         <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
                             <input type="checkbox" name="month" value="{{ m }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.month and (m|string) in filters.month %}checked{% endif %}>
@@ -66,7 +66,7 @@
                         <span id="state-text" class="truncate">Selecione uma ou mais opções</span>
                         <svg id="state-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    <div id="state-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-60 overflow-auto">
+                    <div id="state-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
                         {% for s in states %}
                         <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
                             <input type="checkbox" name="state" value="{{ s }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.state and s in filters.state %}checked{% endif %}>
@@ -83,7 +83,7 @@
                         <span id="city-text" class="truncate">Selecione uma ou mais opções</span>
                         <svg id="city-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    <div id="city-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-60 overflow-auto">
+                    <div id="city-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
                         {% for c in cities %}
                         <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
                             <input type="checkbox" name="city" value="{{ c }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.city and c in filters.city %}checked{% endif %}>
@@ -100,7 +100,7 @@
                         <span id="vendor-text" class="truncate">Selecione uma ou mais opções</span>
                         <svg id="vendor-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    <div id="vendor-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-60 overflow-auto">
+                    <div id="vendor-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
                         {% for v in vendors %}
                         <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
                             <input type="checkbox" name="vendor" value="{{ v }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.vendor and v in filters.vendor %}checked{% endif %}>
@@ -117,7 +117,7 @@
                         <span id="line-text" class="truncate">Selecione uma ou mais opções</span>
                         <svg id="line-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    <div id="line-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-60 overflow-auto">
+                    <div id="line-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
                         {% for l in product_lines %}
                         <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
                             <input type="checkbox" name="line" value="{{ l }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.line and l in filters.line %}checked{% endif %}>
