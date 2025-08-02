@@ -458,13 +458,7 @@ def fetch_monthly_revenue(year, filters):
 
             months = filters.get('month')
             if months:
-                placeholders = ','.join(['%s'] * len(months))
-                month_param = filters['month']
-                if isinstance(month_param, str):
-                    month_tokens = [m.strip() for m in month_param.split(',') if m.strip()]
-                else:
-                    month_tokens = [str(month_param).strip()]
-
+                month_tokens = months if isinstance(months, list) else [months]
                 valid_months = []
                 for m in month_tokens:
                     try:
@@ -473,13 +467,9 @@ def fetch_monthly_revenue(year, filters):
                         continue
 
                 if valid_months:
-                    if len(valid_months) == 1:
-                        sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
-                        params.append(valid_months[0])
-                    else:
-                        placeholders = ','.join(['%s'] * len(valid_months))
-                        sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
-                        params.extend(valid_months)
+                    placeholders = ','.join(['%s'] * len(valid_months))
+                    sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
+                    params.extend(valid_months)
             states = filters.get('state')
             if states:
                 placeholders = ','.join(['%s'] * len(states))
