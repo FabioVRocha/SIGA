@@ -24,6 +24,7 @@ AVAILABLE_PARAMETER_REPORTS = [
     ('report_revenue_comparison', 'Comparativo de Faturamento'),
     ('report_revenue_by_cfop', 'Faturamento por CFOP'),
     ('report_revenue_by_line', 'Faturamento por Linha'),
+    ('report_revenue_by_day', 'Faturamento por Dia'),
     ('report_revenue_by_state', 'Faturamento por Estado'),
     ('report_revenue_by_vendor', 'Faturamento por Vendedor'),
     ('invoices_mirror', 'Espelho de Notas Fiscais Faturadas'),
@@ -751,6 +752,134 @@ def fetch_revenue_by_line(filters):
             cur.close()
         except Error as e:
             print(f'Erro ao buscar faturamento por linha: {e}')
+        finally:
+            conn.close()
+
+    return data
+
+
+def fetch_revenue_by_day(filters):
+    """Retorna o faturamento agregado por dia."""
+    conn = get_erp_db_connection()
+    data = []
+
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            user_id = session.get('user_id')
+            report_id = 'report_revenue_by_day'
+            transaction_signs = parse_transaction_signs(
+                get_user_parameters(user_id, f'{report_id}_invoice_transaction_signs')
+            )
+            selected_transactions = list(transaction_signs.keys())
+            if not selected_transactions:
+                selected_transactions_str = get_user_parameters(
+                    user_id, f'{report_id}_selected_invoice_transactions'
+                )
+                if selected_transactions_str:
+                    selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
+                    transaction_signs = {t: '+' for t in selected_transactions}
+            selected_cfops_str = get_user_parameters(
+                user_id, f'{report_id}_selected_report_cfops'
+            )
+            selected_cfops = []
+            if selected_cfops_str:
+                selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
+
+            sql = """
+                SELECT EXTRACT(DAY FROM tm.pridata) AS day,
+                       SUM(tm.privltotal) AS valor_liquido,
+                       op.opetransac
+                FROM doctos d
+                LEFT JOIN empresa e ON d.notclifor = e.empresa
+                LEFT JOIN cidade c ON d.noscidade = c.cidade
+                LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
+                LEFT JOIN produto p ON tm.priproduto = p.produto
+                LEFT JOIN grupo g ON p.grupo = g.grupo
+                LEFT JOIN opera op ON d.operacao = op.operacao
+                WHERE EXTRACT(YEAR FROM tm.pridata) = %s
+            """
+            params = [filters.get('year')]
+
+            months = filters.get('month')
+            if months:
+                month_tokens = months if isinstance(months, list) else [months]
+                valid_months = []
+                for m in month_tokens:
+                    try:
+                        valid_months.append(int(m))
+                    except ValueError:
+                        continue
+                if valid_months:
+                    if len(valid_months) == 1:
+                        sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
+                        params.append(valid_months[0])
+                    else:
+                        placeholders = ','.join(['%s'] * len(valid_months))
+                        sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
+                        params.extend(valid_months)
+
+            if filters.get('state'):
+                sql += ' AND c.estado = %s'
+                params.append(filters['state'])
+            if filters.get('city'):
+                sql += " AND c.ciddes = %s"
+                params.append(filters['city'])
+            if filters.get('vendor'):
+                sql += " AND d.vennome = %s"
+                params.append(filters['vendor'])
+
+            if filters.get('line'):
+                matching_group_codes = []
+                temp_conn = get_erp_db_connection()
+                if temp_conn:
+                    try:
+                        temp_cur = temp_conn.cursor()
+                        temp_cur.execute("SELECT grupo, grunome FROM grupo;")
+                        groups_data = temp_cur.fetchall()
+                        temp_cur.close()
+                        for code, name in groups_data:
+                            if get_product_line(name) == filters['line']:
+                                matching_group_codes.append(code)
+                    except Error as e:
+                        print(f'Erro ao buscar grupos para filtro de linha: {e}')
+                    finally:
+                        temp_conn.close()
+                if matching_group_codes:
+                    placeholders = ','.join(['%s'] * len(matching_group_codes))
+                    sql += f" AND g.grupo IN ({placeholders})"
+                    params.extend(matching_group_codes)
+                else:
+                    sql += " AND FALSE"
+
+            if selected_transactions:
+                placeholders = ','.join(['%s'] * len(selected_transactions))
+                sql += f" AND op.opetransac IN ({placeholders})"
+                params.extend(selected_transactions)
+
+            if selected_cfops:
+                placeholders = ','.join(['%s'] * len(selected_cfops))
+                sql += f" AND op.operacao IN ({placeholders})"
+                params.extend(selected_cfops)
+
+            sql += " GROUP BY EXTRACT(DAY FROM tm.pridata), op.opetransac"
+
+            cur.execute(sql, tuple(params))
+            results = cur.fetchall()
+            day_totals = {}
+            for day, liquido, transac in results:
+                sign = transaction_signs.get(str(transac), '+')
+                mult = -1 if sign == '-' else 1
+                day_key = int(day)
+                day_totals[day_key] = day_totals.get(day_key, 0.0) + float(liquido or 0) * mult
+
+            for day_key in sorted(day_totals.keys()):
+                data.append({'day': day_key, 'valor_liquido': day_totals[day_key]})
+
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar faturamento por dia: {e}')
         finally:
             conn.close()
 
@@ -1739,6 +1868,32 @@ def report_revenue_by_line():
     total_liquido = sum(chart_values)
     return render_template(
         'report_revenue_by_line.html',
+        filters=filters,
+        chart_labels=chart_labels,
+        chart_values=chart_values,
+        total_liquido=total_liquido,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+@app.route('/report_revenue_by_day')
+@login_required
+def report_revenue_by_day():
+    current_year = int(request.args.get('year', datetime.date.today().year))
+    filters = {
+        'year': current_year,
+        'month': request.args.getlist('month'),
+        'state': request.args.get('state'),
+        'city': request.args.get('city'),
+        'vendor': request.args.get('vendor'),
+        'line': request.args.get('line')
+    }
+    data = fetch_revenue_by_day(filters)
+    chart_labels = [row['day'] for row in data]
+    chart_values = [row['valor_liquido'] for row in data]
+    total_liquido = sum(chart_values)
+    return render_template(
+        'report_revenue_by_day.html',
         filters=filters,
         chart_labels=chart_labels,
         chart_values=chart_values,
