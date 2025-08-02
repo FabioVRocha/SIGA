@@ -598,15 +598,11 @@ def fetch_revenue_by_cfop(filters):
                 placeholders = ','.join(['%s'] * len(selected_transactions))
                 sql += f" AND op.opetransac IN ({placeholders})"
                 params.extend(selected_transactions)
-            else:
-                sql += " AND FALSE"
 
             if selected_cfops:
                 placeholders = ','.join(['%s'] * len(selected_cfops))
                 sql += f" AND op.operacao IN ({placeholders})"
                 params.extend(selected_cfops)
-            else:
-                sql += " AND FALSE"
 
             sql += " GROUP BY op.operacao, op.opetransac ORDER BY op.operacao"
 
@@ -861,15 +857,11 @@ def fetch_revenue_by_state(filters):
                 placeholders = ','.join(['%s'] * len(selected_transactions))
                 sql += f" AND op.opetransac IN ({placeholders})"
                 params.extend(selected_transactions)
-            else:
-                sql += " AND FALSE"
 
             if selected_cfops:
                 placeholders = ','.join(['%s'] * len(selected_cfops))
                 sql += f" AND op.operacao IN ({placeholders})"
                 params.extend(selected_cfops)
-            else:
-                sql += " AND FALSE"
 
             sql += ' GROUP BY c.estado, op.opetransac'
 
