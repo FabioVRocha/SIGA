@@ -359,6 +359,54 @@ def get_distinct_product_lines():
                 conn.close()
     return sorted(list(product_lines))
 
+def get_distinct_states():
+    """Busca todos os estados distintos presentes no ERP."""
+    conn = get_erp_db_connection()
+    states = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT DISTINCT estado FROM cidade ORDER BY estado;")
+            states = [row[0] for row in cur.fetchall() if row[0]]
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar estados distintos: {e}')
+        finally:
+            conn.close()
+    return states
+
+def get_distinct_cities():
+    """Busca todas as cidades distintas presentes no ERP."""
+    conn = get_erp_db_connection()
+    cities = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT DISTINCT ciddes FROM cidade ORDER BY ciddes;")
+            cities = [row[0] for row in cur.fetchall() if row[0]]
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar cidades distintas: {e}')
+        finally:
+            conn.close()
+    return cities
+
+def get_distinct_vendors():
+    """Busca todos os vendedores distintos presentes no ERP."""
+    conn = get_erp_db_connection()
+    vendors = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT DISTINCT vennome FROM vendedor ORDER BY vennome;")
+            vendors = [row[0] for row in cur.fetchall() if row[0]]
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar vendedores distintos: {e}')
+        finally:
+            conn.close()
+    return vendors
+
 def fetch_monthly_revenue(year, filters):
     """Retorna o faturamento mensal para o ano especificado.
 
@@ -835,17 +883,24 @@ def fetch_revenue_by_day(filters):
                         sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
                         params.extend(valid_months)
 
-            if filters.get('state'):
-                sql += ' AND c.estado = %s'
-                params.append(filters['state'])
-            if filters.get('city'):
-                sql += " AND c.ciddes = %s"
-                params.append(filters['city'])
-            if filters.get('vendor'):
-                sql += " AND d.vennome = %s"
-                params.append(filters['vendor'])
+            states = filters.get('state')
+            if states:
+                placeholders = ','.join(['%s'] * len(states))
+                sql += f' AND c.estado IN ({placeholders})'
+                params.extend(states)
+            cities = filters.get('city')
+            if cities:
+                placeholders = ','.join(['%s'] * len(cities))
+                sql += f" AND c.ciddes IN ({placeholders})"
+                params.extend(cities)
+            vendors = filters.get('vendor')
+            if vendors:
+                placeholders = ','.join(['%s'] * len(vendors))
+                sql += f" AND d.vennome IN ({placeholders})"
+                params.extend(vendors)
 
-            if filters.get('line'):
+            lines = filters.get('line')
+            if lines:
                 matching_group_codes = []
                 temp_conn = get_erp_db_connection()
                 if temp_conn:
@@ -855,7 +910,7 @@ def fetch_revenue_by_day(filters):
                         groups_data = temp_cur.fetchall()
                         temp_cur.close()
                         for code, name in groups_data:
-                            if get_product_line(name) == filters['line']:
+                            if get_product_line(name) in lines:
                                 matching_group_codes.append(code)
                     except Error as e:
                         print(f'Erro ao buscar grupos para filtro de linha: {e}')
@@ -1898,10 +1953,10 @@ def report_revenue_by_day():
     filters = {
         'year': current_year,
         'month': request.args.getlist('month'),
-        'state': request.args.get('state'),
-        'city': request.args.get('city'),
-        'vendor': request.args.get('vendor'),
-        'line': request.args.get('line')
+        'state': request.args.getlist('state'),
+        'city': request.args.getlist('city'),
+        'vendor': request.args.getlist('vendor'),
+        'line': request.args.getlist('line')
     }
     data = fetch_revenue_by_day(filters)
     chart_labels = [row['day'] for row in data]
@@ -1925,6 +1980,10 @@ def report_revenue_by_day():
         chart_values=chart_values,
         total_liquido=total_liquido,
         daily_average=daily_average,
+        states=get_distinct_states(),
+        cities=get_distinct_cities(),
+        vendors=get_distinct_vendors(),
+        product_lines=get_distinct_product_lines(),
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )

@@ -52,19 +52,35 @@
             </div>
             <div>
                 <label for="state" class="block text-sm font-medium text-gray-700">Estado</label>
-                <input type="text" name="state" id="state" value="{{ filters.state or '' }}" class="mt-1 p-2 border rounded w-full">
+                <select name="state" id="state" multiple class="mt-1 p-2 border rounded w-full">
+                    {% for s in states %}
+                    <option value="{{ s }}" {% if filters.state and s in filters.state %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div>
                 <label for="city" class="block text-sm font-medium text-gray-700">Cidade</label>
-                <input type="text" name="city" id="city" value="{{ filters.city or '' }}" class="mt-1 p-2 border rounded w-full">
+                <select name="city" id="city" multiple class="mt-1 p-2 border rounded w-full">
+                    {% for c in cities %}
+                    <option value="{{ c }}" {% if filters.city and c in filters.city %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div>
                 <label for="vendor" class="block text-sm font-medium text-gray-700">Vendedor</label>
-                <input type="text" name="vendor" id="vendor" value="{{ filters.vendor or '' }}" class="mt-1 p-2 border rounded w-full">
+                <select name="vendor" id="vendor" multiple class="mt-1 p-2 border rounded w-full">
+                    {% for v in vendors %}
+                    <option value="{{ v }}" {% if filters.vendor and v in filters.vendor %}selected{% endif %}>{{ v }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div>
                 <label for="line" class="block text-sm font-medium text-gray-700">Linha</label>
-                <input type="text" name="line" id="line" value="{{ filters.line or '' }}" class="mt-1 p-2 border rounded w-full">
+                <select name="line" id="line" multiple class="mt-1 p-2 border rounded w-full">
+                    {% for l in product_lines %}
+                    <option value="{{ l }}" {% if filters.line and l in filters.line %}selected{% endif %}>{{ l }}</option>
+                    {% endfor %}
+                </select>
             </div>
         </div>
         <div class="mt-4 flex justify-end">
