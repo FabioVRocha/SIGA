@@ -382,7 +382,7 @@ def get_distinct_cities():
     if conn:
         try:
             cur = conn.cursor()
-            cur.execute("SELECT DISTINCT ciddes FROM cidade ORDER BY ciddes;")
+            cur.execute("SELECT DISTINCT cidnome FROM cidade ORDER BY cidnome;")
             cities = [row[0] for row in cur.fetchall() if row[0]]
             cur.close()
         except Error as e:
@@ -484,7 +484,7 @@ def fetch_monthly_revenue(year, filters):
                 sql += ' AND c.estado = %s'
                 params.append(filters['state'])
             if filters.get('city'):
-                sql += " AND c.ciddes = %s"
+                sql += " AND c.cidnome = %s"
                 params.append(filters['city'])
 
             if filters.get('line'):
@@ -630,7 +630,7 @@ def fetch_revenue_by_cfop(filters):
                 sql += ' AND c.estado = %s'
                 params.append(filters['state'])
             if filters.get('city'):
-                sql += " AND c.ciddes = %s"
+                sql += " AND c.cidnome = %s"
                 params.append(filters['city'])
             if filters.get('vendor'):
                 sql += " AND d.vennome = %s"
@@ -758,7 +758,7 @@ def fetch_revenue_by_line(filters):
                 sql += ' AND c.estado = %s'
                 params.append(filters['state'])
             if filters.get('city'):
-                sql += " AND c.ciddes = %s"
+                sql += " AND c.cidnnome = %s"
                 params.append(filters['city'])
             if filters.get('vendor'):
                 sql += " AND d.vennome = %s"
@@ -891,7 +891,7 @@ def fetch_revenue_by_day(filters):
             cities = filters.get('city')
             if cities:
                 placeholders = ','.join(['%s'] * len(cities))
-                sql += f" AND c.ciddes IN ({placeholders})"
+                sql += f" AND c.cidnome IN ({placeholders})"
                 params.extend(cities)
             vendors = filters.get('vendor')
             if vendors:
@@ -1034,7 +1034,7 @@ def fetch_revenue_by_state(filters):
                 sql += ' AND c.estado = %s'
                 params.append(filters['state'])
             if filters.get('city'):
-                sql += " AND c.ciddes = %s"
+                sql += " AND c.cidnome = %s"
                 params.append(filters['city'])
             if filters.get('vendor'):
                 sql += " AND d.vennome = %s"
@@ -1166,7 +1166,7 @@ def fetch_revenue_by_vendor(filters):
                     sql += ' AND c.estado = %s'
                     params.append(filters['state'])
                 if filters.get('city'):
-                    sql += " AND c.ciddes = %s"
+                    sql += " AND c.cidnome = %s"
                     params.append(filters['city'])
                 if filters.get('vendor'):
                     sql += " AND d.vennome = %s"
