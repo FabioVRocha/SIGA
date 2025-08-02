@@ -365,6 +365,11 @@ def fetch_monthly_revenue(year, filters):
             if selected_cfops_str:
                 selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
 
+            selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+            selected_cfops = []
+            if selected_cfops_str:
+                selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
+
             sql = """
                 SELECT EXTRACT(MONTH FROM tm.pridata) AS mes,
                        SUM(tm.privltotal) AS total,
@@ -405,7 +410,7 @@ def fetch_monthly_revenue(year, filters):
                         sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
                         params.extend(valid_months)
             if filters.get('state'):
-                sql += ' AND c."CIDUF" = %s'
+                sql += ' AND c.estado = %s'
                 params.append(filters['state'])
             if filters.get('city'):
                 sql += " AND c.ciddes = %s"
@@ -547,13 +552,13 @@ def fetch_revenue_by_cfop(filters):
                         params.extend(valid_months)
 
             if filters.get('state'):
-                sql += ' AND c."CIDUF" = %s'
+                sql += ' AND c.estado = %s'
                 params.append(filters['state'])
             if filters.get('city'):
                 sql += " AND c.ciddes = %s"
                 params.append(filters['city'])
             if filters.get('vendor'):
-                sql += " AND d.vendedor = %s"
+                sql += " AND d.vennome = %s"
                 params.append(filters['vendor'])
 
             if filters.get('line'):
@@ -668,13 +673,13 @@ def fetch_revenue_by_line(filters):
                         params.extend(valid_months)
 
             if filters.get('state'):
-                sql += ' AND c."CIDUF" = %s'
+                sql += ' AND c.estado = %s'
                 params.append(filters['state'])
             if filters.get('city'):
                 sql += " AND c.ciddes = %s"
                 params.append(filters['city'])
             if filters.get('vendor'):
-                sql += " AND d.vendedor = %s"
+                sql += " AND d.vennome = %s"
                 params.append(filters['vendor'])
 
             if filters.get('line'):
@@ -751,8 +756,13 @@ def fetch_revenue_by_state(filters):
                     selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
 
+            selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+            selected_cfops = []
+            if selected_cfops_str:
+                selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
+
             sql = """
-                SELECT c."CIDUF" AS uf,
+                SELECT c.estado AS uf,
                        SUM(tm.privltotal) AS valor_liquido,
                        op.opetransac
                 FROM doctos d
@@ -788,13 +798,13 @@ def fetch_revenue_by_state(filters):
                         params.extend(valid_months)
 
             if filters.get('state'):
-                sql += ' AND c."CIDUF" = %s'
+                sql += ' AND c.estado = %s'
                 params.append(filters['state'])
             if filters.get('city'):
                 sql += " AND c.ciddes = %s"
                 params.append(filters['city'])
             if filters.get('vendor'):
-                sql += " AND cf.comnvende = %s"
+                sql += " AND d.vennome = %s"
                 params.append(filters['vendor'])
 
             if filters.get('line'):
@@ -825,7 +835,13 @@ def fetch_revenue_by_state(filters):
                 sql += f" AND op.opetransac IN ({placeholders})"
                 params.extend(selected_transactions)
 
-            sql += ' GROUP BY c."CIDUF", op.opetransac'
+            if selected_cfops:
+                placeholders = ','.join(['%s'] * len(selected_cfops))
+                sql += f" AND op.operacao IN ({placeholders})"
+                params.extend(selected_cfops)
+
+            sql += ' GROUP BY c.estado, op.opetransac'
+
 
             cur.execute(sql, tuple(params))
             results = cur.fetchall()
@@ -911,13 +927,13 @@ def fetch_revenue_by_vendor(filters):
                             params.extend(valid_months)
 
                 if filters.get('state'):
-                    sql += ' AND c."CIDUF" = %s'
+                    sql += ' AND c.estado = %s'
                     params.append(filters['state'])
                 if filters.get('city'):
                     sql += " AND c.ciddes = %s"
                     params.append(filters['city'])
                 if filters.get('vendor'):
-                    sql += " AND cf.comnvende = %s"
+                    sql += " AND d.vennome = %s"
                     params.append(filters['vendor'])
 
                 if filters.get('line'):
