@@ -793,11 +793,8 @@ def fetch_revenue_by_state(filters):
                        op.opetransac
                 FROM doctos d
                 LEFT JOIN empresa e ON d.notclifor = e.empresa
-                LEFT JOIN cidade c ON e.empcidade = c.cidade
+                LEFT JOIN cidade c ON d.noscidade = c.cidade
                 LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
-                LEFT JOIN ntvped1 np ON np.ntvnota = d.controle
-                LEFT JOIN comnf cf ON d.notdocto = cf.comncontr::text
-                LEFT JOIN vendedor v ON cf.comnvende = v.vendedor
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
                 LEFT JOIN opera op ON d.operacao = op.operacao
@@ -936,7 +933,7 @@ def fetch_revenue_by_vendor(filters):
                                op.opetransac
                         FROM doctos d
                         LEFT JOIN empresa e ON d.notclifor = e.empresa
-                        LEFT JOIN cidade c ON e.empcidade = c.cidade
+                        LEFT JOIN cidade c ON d.noscidade = c.cidade
                         LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
                         LEFT JOIN ntvped1 np ON np.ntvnota = d.controle
                         LEFT JOIN comnf cf ON d.notdocto = cf.comncontr::text
