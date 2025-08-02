@@ -6,8 +6,17 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
+    <form method="get" action="{{ url_for('gerencial_parameters') }}" class="mb-4">
+        <label for="report" class="form-label text-lg font-medium">Relatório:</label>
+        <select name="report" id="report" class="ml-2 h-8 border-gray-300 rounded" onchange="this.form.submit()">
+            {% for value, label in available_reports %}
+            <option value="{{ value }}" {% if value == selected_report %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </form>
     <h2 class="text-xl font-semibold text-gray-800 mb-4">Configurações de Transações para Notas Fiscais</h2>
     <form action="{{ url_for('gerencial_parameters') }}" method="POST" class="space-y-6">
+        <input type="hidden" name="report" value="{{ selected_report }}">
         <div class="form-group">
             <label class="form-label text-lg font-medium">Transações a serem exibidas no Espelho de Notas Fiscais:</label>
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-2">

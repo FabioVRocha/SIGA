@@ -20,6 +20,11 @@ app = Flask(__name__)
 # Define a chave secreta importada do config.py
 app.secret_key = SECRET_KEY
 
+AVAILABLE_PARAMETER_REPORTS = [
+    ('report_revenue_by_cfop', 'Faturamento por CFOP'),
+    ('report_revenue_by_state', 'Faturamento por Estado'),
+]
+
 
 def format_currency_brl(value):
     """Formata valores numéricos no padrão de moeda brasileira."""
@@ -1792,6 +1797,12 @@ def gerencial_parameters():
     Permite ao usuário selecionar transações que devem ser apresentadas no Espelho de Notas Fiscais.
     """
     user_id = session.get('user_id')
+
+    available_reports = AVAILABLE_PARAMETER_REPORTS
+    report_ids = [r[0] for r in available_reports]
+    selected_report = request.form.get('report') if request.method == 'POST' else request.args.get('report')
+    if selected_report not in report_ids:
+        selected_report = available_reports[0][0]
     
     conn_erp = get_erp_db_connection()
     all_transactions = []
@@ -1830,29 +1841,29 @@ def gerencial_parameters():
         selected_cfops_str = ','.join(selected_cfops)
 
         success = True
-        if not save_user_parameters(user_id, 'selected_invoice_transactions', selected_transactions_str):
+        if not save_user_parameters(user_id, f'{selected_report}_selected_invoice_transactions', selected_transactions_str):
             success = False
-        if not save_user_parameters(user_id, 'invoice_transaction_signs', transaction_signs_str):
+        if not save_user_parameters(user_id, f'{selected_report}_invoice_transaction_signs', transaction_signs_str):
             success = False
-        if not save_user_parameters(user_id, 'selected_report_cfops', selected_cfops_str):
+        if not save_user_parameters(user_id, f'{selected_report}_selected_report_cfops', selected_cfops_str):
             success = False
         if success:
             flash('Parâmetros de transação e CFOP salvos com sucesso!', 'success')
         else:
             flash('Falha ao salvar parâmetros de transação ou CFOP.', 'danger')
-        return redirect(url_for('gerencial_parameters'))
+        return redirect(url_for('gerencial_parameters', report=selected_report))
     
     # GET request: Load current selected transactions and signs
-    current_signs_str = get_user_parameters(user_id, 'invoice_transaction_signs')
+    current_signs_str = get_user_parameters(user_id, f'{selected_report}_invoice_transaction_signs')
     current_transaction_signs = parse_transaction_signs(current_signs_str)
     current_selected_transactions = list(current_transaction_signs.keys())
     if not current_selected_transactions:
-        current_selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
+        current_selected_transactions_str = get_user_parameters(user_id, f'{selected_report}_selected_invoice_transactions')
         if current_selected_transactions_str:
             current_selected_transactions = [t.strip() for t in current_selected_transactions_str.split(',') if t.strip()]
             current_transaction_signs = {t: '+' for t in current_selected_transactions}
 
-    selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+    selected_cfops_str = get_user_parameters(user_id, f'{selected_report}_selected_report_cfops')
     current_selected_cfops = []
     if selected_cfops_str:
         current_selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
@@ -1873,7 +1884,9 @@ def gerencial_parameters():
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado'),
         all_transactions=all_transactions,
-        all_cfops=cfops_data
+        all_cfops=cfops_data,
+        available_reports=available_reports,
+        selected_report=selected_report
     )
 
 
