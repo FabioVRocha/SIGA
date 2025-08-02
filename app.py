@@ -484,7 +484,7 @@ def fetch_all_cfops():
         try:
             cur = conn.cursor()
             cur.execute("SELECT operacao FROM opera ORDER BY operacao;")
-            cfops = [str(row[0]) for row in cur.fetchall() if row and row[0]]
+            cfops = [str(row[0]).strip() for row in cur.fetchall() if row and row[0]]
             cur.close()
         except Error as e:
             print(f'Erro ao buscar CFOPs: {e}')
@@ -1815,7 +1815,7 @@ def gerencial_parameters():
             all_transactions = [{'transacao': str(t[0]), 'trsnome': t[1]} for t in cur_erp.fetchall()]
             
             cur_erp.execute("SELECT operacao FROM opera ORDER BY operacao;")
-            all_cfops = [str(row[0]) for row in cur_erp.fetchall()]
+            all_cfops = [str(row[0]).strip() for row in cur_erp.fetchall() if row and row[0]]
 
             cur_erp.close()
         except Error as e:
@@ -1837,7 +1837,7 @@ def gerencial_parameters():
             transaction_signs[trans] = sign
         transaction_signs_str = ','.join(f'{t}:{s}' for t, s in transaction_signs.items())
 
-        selected_cfops = request.form.getlist('selected_cfops')
+        selected_cfops = [c.strip() for c in request.form.getlist('selected_cfops')]
         selected_cfops_str = ','.join(selected_cfops)
 
         success = True
