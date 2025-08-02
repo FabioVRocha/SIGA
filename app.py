@@ -6,6 +6,7 @@ import psycopg2
 from psycopg2 import Error
 from psycopg2.errors import UndefinedColumn
 import datetime # Para formatar datas
+import calendar  # Para cálculo de dias úteis
 from functools import wraps # Para criar um decorador de login
 # Importa as funções para hashing de senhas
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -41,6 +42,20 @@ def format_currency_brl(value):
 
 
 app.jinja_env.filters["format_currency_brl"] = format_currency_brl
+
+def count_business_days(year, months=None):
+    """Calcula o número de dias úteis (segunda a sexta) para o ano e meses informados."""
+    total = 0
+    months = months or range(1, 13)
+    for m in months:
+        try:
+            _, days_in_month = calendar.monthrange(year, m)
+        except calendar.IllegalMonthError:
+            continue
+        for day in range(1, days_in_month + 1):
+            if datetime.date(year, m, day).weekday() < 5:
+                total += 1
+    return total
 
 def get_erp_db_connection():
     """
@@ -1892,12 +1907,24 @@ def report_revenue_by_day():
     chart_labels = [row['day'] for row in data]
     chart_values = [row['valor_liquido'] for row in data]
     total_liquido = sum(chart_values)
+    months_selected = set()
+    if filters['month']:
+        for m in filters['month']:
+            try:
+                months_selected.add(int(m))
+            except ValueError:
+                continue
+    else:
+        months_selected = set(range(1, 13))
+    business_days = count_business_days(current_year, months_selected)
+    daily_average = total_liquido / business_days if business_days else 0
     return render_template(
         'report_revenue_by_day.html',
         filters=filters,
         chart_labels=chart_labels,
         chart_values=chart_values,
         total_liquido=total_liquido,
+        daily_average=daily_average,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
