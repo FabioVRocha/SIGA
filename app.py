@@ -392,20 +392,43 @@ def get_distinct_cities():
     return cities
 
 def get_distinct_vendors():
-    """Busca todos os vendedores distintos presentes no ERP."""
+    """Busca todos os vendedores distintos e seus status presentes no ERP."""
     conn = get_erp_db_connection()
     vendors = []
     if conn:
         try:
             cur = conn.cursor()
-            cur.execute("SELECT DISTINCT vennome FROM vendedor ORDER BY vennome;")
-            vendors = [row[0] for row in cur.fetchall() if row[0]]
+            cur.execute(
+                "SELECT DISTINCT vennome, venstatus FROM vendedor ORDER BY vennome;"
+            )
+            vendors = [
+                (row[0], row[1]) for row in cur.fetchall() if row[0]
+            ]
             cur.close()
         except Error as e:
             print(f'Erro ao buscar vendedores distintos: {e}')
         finally:
             conn.close()
     return vendors
+
+
+def get_distinct_vendor_statuses():
+    """Busca todos os status de vendedores distintos presentes no ERP."""
+    conn = get_erp_db_connection()
+    statuses = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT DISTINCT venstatus FROM vendedor ORDER BY venstatus;"
+            )
+            statuses = [row[0] for row in cur.fetchall() if row[0]]
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar status de vendedores: {e}')
+        finally:
+            conn.close()
+    return statuses
 
 def fetch_monthly_revenue(year, filters):
     """Retorna o faturamento mensal para o ano especificado.
@@ -452,6 +475,7 @@ def fetch_monthly_revenue(year, filters):
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
                 LEFT JOIN opera op ON d.operacao = op.operacao
+                LEFT JOIN vendedor v ON d.vennome = v.vennome
                 WHERE EXTRACT(YEAR FROM tm.pridata) = %s
             """
             params = [year]
@@ -487,6 +511,12 @@ def fetch_monthly_revenue(year, filters):
                 placeholders = ','.join(['%s'] * len(vendors))
                 sql += f" AND d.vennome IN ({placeholders})"
                 params.extend(vendors)
+
+            vendor_statuses = filters.get('vendor_status')
+            if vendor_statuses:
+                placeholders = ','.join(['%s'] * len(vendor_statuses))
+                sql += f" AND v.venstatus IN ({placeholders})"
+                params.extend(vendor_statuses)
 
             lines = filters.get('line')
             if lines:
@@ -2035,6 +2065,7 @@ def report_revenue_comparison():
         'state': request.args.getlist('state'),
         'city': request.args.getlist('city'),
         'vendor': request.args.getlist('vendor'),
+        'vendor_status': request.args.getlist('vendor_status') or ['A'],
         'line': request.args.getlist('line')
     }
 
@@ -2071,6 +2102,7 @@ def report_revenue_comparison():
         states=get_distinct_states(),
         cities=get_distinct_cities(),
         vendors=get_distinct_vendors(),
+        vendor_statuses=get_distinct_vendor_statuses(),
         product_lines=get_distinct_product_lines(),
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
