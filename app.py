@@ -21,8 +21,12 @@ app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
 AVAILABLE_PARAMETER_REPORTS = [
+    ('report_revenue_comparison', 'Comparativo de Faturamento'),
     ('report_revenue_by_cfop', 'Faturamento por CFOP'),
+    ('report_revenue_by_line', 'Faturamento por Linha'),
     ('report_revenue_by_state', 'Faturamento por Estado'),
+    ('report_revenue_by_vendor', 'Faturamento por Vendedor'),
+    ('invoices_mirror', 'Espelho de Notas Fiscais Faturadas'),
 ]
 
 
@@ -365,12 +369,9 @@ def fetch_monthly_revenue(year, filters):
                     selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
 
-            selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
-            selected_cfops = []
-            if selected_cfops_str:
-                selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
-
-            selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+            selected_cfops_str = get_user_parameters(
+                user_id, 'report_revenue_comparison_selected_report_cfops'
+            )
             selected_cfops = []
             if selected_cfops_str:
                 selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
@@ -517,7 +518,9 @@ def fetch_revenue_by_cfop(filters):
                     selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
 
-            selected_cfops_str = get_user_parameters(user_id, f'{report_id}_selected_report_cfops')
+            selected_cfops_str = get_user_parameters(
+                user_id, 'report_revenue_by_cfop_selected_report_cfops'
+            )
             selected_cfops = []
             if selected_cfops_str:
                 selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
@@ -649,6 +652,12 @@ def fetch_revenue_by_line(filters):
                 if selected_transactions_str:
                     selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
+            selected_cfops_str = get_user_parameters(
+                user_id, 'report_revenue_by_line_selected_report_cfops'
+            )
+            selected_cfops = []
+            if selected_cfops_str:
+                selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
 
             sql = """
                 SELECT g.grunome,
@@ -721,6 +730,11 @@ def fetch_revenue_by_line(filters):
                 sql += f" AND op.opetransac IN ({placeholders})"
                 params.extend(selected_transactions)
 
+            if selected_cfops:
+                placeholders = ','.join(['%s'] * len(selected_cfops))
+                sql += f" AND op.operacao IN ({placeholders})"
+                params.extend(selected_cfops)
+
             sql += " GROUP BY g.grunome, op.opetransac"
 
             cur.execute(sql, tuple(params))
@@ -767,7 +781,9 @@ def fetch_revenue_by_state(filters):
                     selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
 
-            selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+            selected_cfops_str = get_user_parameters(
+                user_id, 'report_revenue_by_state_selected_report_cfops'
+            )
             selected_cfops = []
             if selected_cfops_str:
                 selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
@@ -898,7 +914,9 @@ def fetch_revenue_by_vendor(filters):
                 if selected_transactions_str:
                     selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
-            selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+            selected_cfops_str = get_user_parameters(
+                user_id, 'report_revenue_by_vendor_selected_report_cfops'
+            )
             selected_cfops = []
             if selected_cfops_str:
                 selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
@@ -1183,6 +1201,13 @@ def invoices_mirror():
     if selected_transactions:
         print(f"DEBUG: Transações selecionadas para o usuário {user_id}: {selected_transactions}")
 
+    selected_cfops_str = get_user_parameters(
+        user_id, 'invoices_mirror_selected_report_cfops'
+    )
+    selected_cfops = []
+    if selected_cfops_str:
+        selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
+
     if conn:
         try:
             cur = conn.cursor()
@@ -1275,6 +1300,11 @@ def invoices_mirror():
                     query_params.extend(valid_transactions)
                 else:
                     where_clauses.append("FALSE")
+
+            if selected_cfops:
+                placeholders = ','.join(['%s'] * len(selected_cfops))
+                where_clauses.append(f"op.operacao IN ({placeholders})")
+                query_params.extend(selected_cfops)
 
             if where_clauses:
                 sql_query += " WHERE " + " AND ".join(where_clauses)
