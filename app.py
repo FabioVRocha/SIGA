@@ -801,27 +801,38 @@ def fetch_revenue_by_state(filters):
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
                 LEFT JOIN opera op ON d.operacao = op.operacao
-                WHERE EXTRACT(YEAR FROM tm.pridata) = %s
+                WHERE 1=1
             """
-            params = [filters.get('year')]
+            params = []
 
-            months = filters.get('month')
-            if months:
-                month_tokens = months if isinstance(months, list) else [months]
-                valid_months = []
-                for m in month_tokens:
-                    try:
-                        valid_months.append(int(m))
-                    except ValueError:
-                        continue
-                if valid_months:
-                    if len(valid_months) == 1:
-                        sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
-                        params.append(valid_months[0])
-                    else:
-                        placeholders = ','.join(['%s'] * len(valid_months))
-                        sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
-                        params.extend(valid_months)
+            if filters.get('start_date'):
+                sql += " AND tm.pridata >= %s"
+                params.append(filters['start_date'])
+            if filters.get('end_date'):
+                sql += " AND tm.pridata <= %s"
+                params.append(filters['end_date'])
+
+            if not filters.get('start_date') and not filters.get('end_date'):
+                sql += " AND EXTRACT(YEAR FROM tm.pridata) = %s"
+                params.append(filters.get('year'))
+
+                months = filters.get('month')
+                if months:
+                    month_tokens = months if isinstance(months, list) else [months]
+                    valid_months = []
+                    for m in month_tokens:
+                        try:
+                            valid_months.append(int(m))
+                        except ValueError:
+                            continue
+                    if valid_months:
+                        if len(valid_months) == 1:
+                            sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
+                            params.append(valid_months[0])
+                        else:
+                            placeholders = ','.join(['%s'] * len(valid_months))
+                            sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
+                            params.extend(valid_months)
 
             if filters.get('state'):
                 sql += ' AND c.estado = %s'
@@ -1186,11 +1197,13 @@ def invoices_mirror():
     # Obter transações selecionadas pelo usuário
     user_id = session.get('user_id')
     transaction_signs = parse_transaction_signs(
-        get_user_parameters(user_id, 'invoice_transaction_signs')
+        get_user_parameters(user_id, 'invoices_mirror_invoice_transaction_signs')
     )
     selected_transactions = list(transaction_signs.keys())
     if not selected_transactions:
-        selected_transactions_str = get_user_parameters(user_id, 'selected_invoice_transactions')
+        selected_transactions_str = get_user_parameters(
+            user_id, 'invoices_mirror_selected_invoice_transactions'
+        )
         if selected_transactions_str:
             selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
             transaction_signs = {t: '+' for t in selected_transactions}
@@ -1688,6 +1701,8 @@ def report_customer_sales():
 def report_revenue_by_state():
     current_year = int(request.args.get('year', datetime.date.today().year))
     filters = {
+        'start_date': request.args.get('start_date'),
+        'end_date': request.args.get('end_date'),
         'year': current_year,
         'month': request.args.getlist('month'),
         'state': request.args.get('state'),
