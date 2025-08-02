@@ -503,19 +503,21 @@ def fetch_revenue_by_cfop(filters):
             cur = conn.cursor()
 
             user_id = session.get('user_id')
+            report_id = 'report_revenue_by_cfop'
+
             transaction_signs = parse_transaction_signs(
-                get_user_parameters(user_id, 'invoice_transaction_signs')
+                get_user_parameters(user_id, f'{report_id}_invoice_transaction_signs')
             )
             selected_transactions = list(transaction_signs.keys())
             if not selected_transactions:
                 selected_transactions_str = get_user_parameters(
-                    user_id, 'selected_invoice_transactions'
+                    user_id, f'{report_id}_selected_invoice_transactions'
                 )
                 if selected_transactions_str:
                     selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
 
-            selected_cfops_str = get_user_parameters(user_id, 'selected_report_cfops')
+            selected_cfops_str = get_user_parameters(user_id, f'{report_id}_selected_report_cfops')
             selected_cfops = []
             if selected_cfops_str:
                 selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
