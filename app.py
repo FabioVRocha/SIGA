@@ -71,7 +71,7 @@ def get_erp_db_connection():
             port=DB_PORT
         )
         return conn
-    except Error as e:
+    except (Error, UnicodeDecodeError) as e:
         print(f"Erro ao conectar ao banco de dados PostgreSQL do ERP: {e}")
         # flash(f"Erro ao conectar ao banco de dados do ERP: {e}", "danger") # Removido flash em função de conexão
         return None
@@ -90,7 +90,7 @@ def get_siga_db_connection():
             port=DB_PORT
         )
         return conn
-    except Error as e:
+    except (Error, UnicodeDecodeError) as e:
         print(f"Erro ao conectar ao banco de dados auxiliar SIGA_DB: {e}")
         # flash(f"Erro ao conectar ao banco de dados auxiliar: {e}", "danger") # Removido flash em função de conexão
         return None
@@ -2069,10 +2069,12 @@ def report_revenue_comparison():
         'line': request.args.getlist('line')
     }
 
+    data_filters = filters.copy()
+    data_filters.pop('vendor_status', None)
+
     prev_year = current_year - 1
-    current_data_all = fetch_monthly_revenue(current_year, filters)
-    prev_filters = filters.copy()
-    prev_filters['year'] = prev_year
+    current_data_all = fetch_monthly_revenue(current_year, data_filters)
+    prev_filters = data_filters.copy()
     previous_data_all = fetch_monthly_revenue(prev_year, prev_filters)
 
     months_selected = [int(m) for m in filters['month']] if filters['month'] else list(range(1,13))

@@ -44,8 +44,8 @@
       <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
     </div>
     <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-      <form id="filterForm" method="get" action="{{ url_for('report_revenue_comparison') }}" class="bg-white p-6">
+    <div class="inline-block align-bottom bg-white rounded-lg text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full overflow-visible max-h-[80vh]">
+      <form id="filterForm" method="get" action="{{ url_for('report_revenue_comparison') }}" class="bg-white p-6 h-full">
         <div class="grid grid-cols-1 gap-4">
             <div>
                 <label for="year" class="block text-sm font-medium text-gray-700">Ano</label>
