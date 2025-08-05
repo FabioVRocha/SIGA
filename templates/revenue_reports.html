@@ -21,6 +21,11 @@
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Linha</h2>
         <p class="text-medium-gray">Veja o faturamento agrupado por linha.</p>
     </a>
+    <a href="{{ url_for('report_average_price') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-teal mb-4"><i class="fas fa-chart-area fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Preço Médio</h2>
+        <p class="text-medium-gray">Visualize o preço médio por linha.</p>
+    </a>
     <a href="{{ url_for('report_revenue_by_day') }}" class="card p-6 text-center flex flex-col items-center justify-center">
         <div class="text-icon-blue mb-4"><i class="fas fa-calendar-day fa-3x"></i></div>
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Dia</h2>
