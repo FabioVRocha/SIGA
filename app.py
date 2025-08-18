@@ -860,6 +860,7 @@ def fetch_average_price(filters):
     chart_labels = []
     chart_datasets = []
     treemap_data = []
+    line_colors = {}
 
     if conn:
         try:
@@ -988,7 +989,12 @@ def fetch_average_price(filters):
             sorted_months = sorted(all_months, key=lambda x: datetime.datetime.strptime(x, '%m/%Y'))
             chart_labels = sorted_months
 
-            for line, months_data in line_month_totals.items():
+            color_palette = [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                '#FF9F40', '#C9CBCF', '#7FC97F', '#FDC086', '#386CB0'
+            ]
+
+            for idx, (line, months_data) in enumerate(line_month_totals.items()):
                 data_points = []
                 for m in sorted_months:
                     sums = months_data.get(m)
@@ -996,7 +1002,15 @@ def fetch_average_price(filters):
                         data_points.append(sums['valor'] / sums['quantidade'])
                     else:
                         data_points.append(0)
-                chart_datasets.append({'label': line, 'data': data_points, 'fill': True})
+                color = color_palette[idx % len(color_palette)]
+                chart_datasets.append({
+                    'label': line,
+                    'data': data_points,
+                    'fill': True,
+                    'borderColor': color,
+                    'backgroundColor': f"{color}33"
+                })
+                line_colors[line] = color
 
             for line, totals in line_totals.items():
                 avg = totals['valor'] / totals['quantidade'] if totals['quantidade'] else 0
@@ -1008,7 +1022,7 @@ def fetch_average_price(filters):
         finally:
             conn.close()
 
-    return chart_labels, chart_datasets, treemap_data
+    return chart_labels, chart_datasets, treemap_data, line_colors
 
 
 def fetch_revenue_by_day(filters):
@@ -2149,13 +2163,14 @@ def report_average_price():
         'vendor': request.args.get('vendor'),
         'line': request.args.get('line')
     }
-    chart_labels, chart_datasets, treemap_data = fetch_average_price(filters)
+    chart_labels, chart_datasets, treemap_data, line_colors = fetch_average_price(filters)
     return render_template(
         'report_average_price.html',
         filters=filters,
         chart_labels=chart_labels,
         chart_datasets=chart_datasets,
         treemap_data=treemap_data,
+        line_colors=line_colors,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )

@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const labels = {{ chart_labels | tojson }};
     const datasets = {{ chart_datasets | tojson }};
+    const lineColors = {{ line_colors | tojson }};
     const ctxArea = document.getElementById('averagePriceAreaChart').getContext('2d');
 
     new Chart(ctxArea, {
@@ -122,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 spacing: 0.1,
                 borderWidth: 1,
                 borderColor: '#fff',
+                backgroundColor: ctx => lineColors[ctx.raw.x] || '#ccc',
                 labels: {
                     display: true,
                     formatter: ctx => ctx.raw.x + ': ' + ctx.raw.v.toFixed(2)
