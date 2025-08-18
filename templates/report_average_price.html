@@ -113,6 +113,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const treemapData = {{ treemap_data | tojson }};
     const ctxTree = document.getElementById('averagePriceTreemap').getContext('2d');
+    
+    if (window.ChartjsChartTreemap) {
+        const { TreemapController, TreemapElement, TreemapLabel } = window.ChartjsChartTreemap;
+        const components = [TreemapController, TreemapElement, TreemapLabel].filter(Boolean);
+        Chart.register(...components);
+    }
+
     new Chart(ctxTree, {
         type: 'treemap',
         data: {
