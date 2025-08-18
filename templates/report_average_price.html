@@ -74,7 +74,7 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2/dist/chartjs-chart-treemap.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const filterModal = document.getElementById('filterModal');
@@ -118,31 +118,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const { TreemapController, TreemapElement, TreemapLabel } = window.ChartjsChartTreemap;
         const components = [TreemapController, TreemapElement, TreemapLabel].filter(Boolean);
         Chart.register(...components);
-    }
 
     new Chart(ctxTree, {
-        type: 'treemap',
-        data: {
-            datasets: [{
-                tree: treemapData,
-                key: 'v',
-                groups: ['x'],
-                spacing: 0.1,
-                borderWidth: 1,
-                borderColor: '#fff',
-                backgroundColor: ctx => lineColors[ctx.raw.x] || '#ccc',
-                labels: {
-                    display: true,
-                    formatter: ctx => ctx.raw.x + ': ' + ctx.raw.v.toFixed(2)
+            type: 'treemap',
+            data: {
+                datasets: [{
+                    tree: treemapData,
+                    key: 'v',
+                    groups: ['x'],
+                    spacing: 0.1,
+                    borderWidth: 1,
+                    borderColor: '#fff',
+                    backgroundColor: ctx => lineColors[ctx.raw.x] || '#ccc',
+                    labels: {
+                        display: true,
+                        formatter: ctx => ctx.raw.x + ': ' + ctx.raw.v.toFixed(2)
+                    }
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: { display: false }
                 }
-            }]
-        },
-        options: {
-            plugins: {
-                legend: { display: false }
             }
-        }
-    });
+        });
+    } else {
+        console.error('Treemap plugin não carregado');
+    }
 });
 </script>
 {% endblock %}
