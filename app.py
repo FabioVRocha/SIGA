@@ -2160,6 +2160,15 @@ def fetch_orders(filters):
 @app.route('/orders_list')
 @login_required
 def orders_list():
+    today = datetime.date.today()
+    first_day_of_month = today.replace(day=1)
+    last_day_of_month = first_day_of_month.replace(
+        day=calendar.monthrange(today.year, today.month)[1]
+    )
+
+    start_date_param = request.args.get('start_date')
+    end_date_param = request.args.get('end_date')
+
     filters = {
         'order_number': (request.args.get('order_number') or '').strip() or None,
         'client_code': (request.args.get('client_code') or '').strip() or None,
@@ -2168,8 +2177,16 @@ def orders_list():
         'state': (request.args.get('state') or '').strip() or None,
         'lot_sequence': (request.args.get('lot_sequence') or '').strip() or None,
         'line': (request.args.get('line') or '').strip() or None,
-        'start_date': (request.args.get('start_date') or '').strip() or None,
-        'end_date': (request.args.get('end_date') or '').strip() or None,
+        'start_date': (
+            (start_date_param or '').strip() or None
+            if start_date_param is not None
+            else first_day_of_month.strftime('%Y-%m-%d')
+        ),
+        'end_date': (
+            (end_date_param or '').strip() or None
+            if end_date_param is not None
+            else last_day_of_month.strftime('%Y-%m-%d')
+        ),
     }
 
     orders, error_message = fetch_orders(filters)
