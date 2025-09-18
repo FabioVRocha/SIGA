@@ -95,8 +95,12 @@
                 <input type="text" id="state" name="state" class="form-input" value="{{ filters.state or '' }}" placeholder="Estado (UF)">
             </div>
             <div class="form-group">
-                <label for="lot_sequence" class="form-label">Seq. do Lote:</label>
-                <input type="text" id="lot_sequence" name="lot_sequence" class="form-input" value="{{ filters.lot_sequence or '' }}" placeholder="Sequência do lote">
+                <label for="load_lot" class="form-label">Lote de Carga:</label>
+                <input type="text" id="load_lot" name="load_lot" class="form-input" value="{{ filters.load_lot or '' }}" placeholder="Código ou descrição do lote de carga">
+            </div>
+            <div class="form-group">
+                <label for="production_lot" class="form-label">Lote de Produção:</label>
+                <input type="text" id="production_lot" name="production_lot" class="form-input" value="{{ filters.production_lot or '' }}" placeholder="Código ou descrição do lote de produção">
             </div>
             <div class="form-group">
                 <label for="line" class="form-label">Linha:</label>

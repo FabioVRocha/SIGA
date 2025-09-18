@@ -2078,6 +2078,7 @@ def fetch_orders(filters):
             LEFT JOIN prod_quant prod ON p.pedido = prod.pedido
             LEFT JOIN proj_totals proj ON p.pedido = proj.pedido
             LEFT JOIN linha_info linha ON p.pedido = linha.pedido
+            LEFT JOIN lotecar lc ON p.lcacod = lc.lcacod
             WHERE 1 = 1
         """
 
@@ -2103,9 +2104,23 @@ def fetch_orders(filters):
             query += " AND COALESCE(c.estado, '') ILIKE %s"
             params.append(f"%{filters['state']}%")
 
-        if filters.get('lot_sequence'):
-            query += " AND CAST(p.lcaseque AS TEXT) ILIKE %s"
-            params.append(f"%{filters['lot_sequence']}%")
+        if filters.get('load_lot'):
+            query += " AND (CAST(p.lcacod AS TEXT) ILIKE %s OR COALESCE(lc.lcades, '') ILIKE %s)"
+            params.append(f"%{filters['load_lot']}%")
+            params.append(f"%{filters['load_lot']}%")
+
+        if filters.get('production_lot'):
+            query += """
+                AND EXISTS (
+                    SELECT 1
+                    FROM ordem o
+                    LEFT JOIN loteprod lp ON o.lotcod = lp.lotcod
+                    WHERE o.ordped = p.pedido
+                      AND (CAST(o.lotcod AS TEXT) ILIKE %s OR COALESCE(lp.lotdes, '') ILIKE %s)
+                )
+            """
+            params.append(f"%{filters['production_lot']}%")
+            params.append(f"%{filters['production_lot']}%")
 
         if filters.get('line'):
             query += " AND COALESCE(linha.linha, '') ILIKE %s"
@@ -2175,7 +2190,8 @@ def orders_list():
         'client_name': (request.args.get('client_name') or '').strip() or None,
         'city': (request.args.get('city') or '').strip() or None,
         'state': (request.args.get('state') or '').strip() or None,
-        'lot_sequence': (request.args.get('lot_sequence') or '').strip() or None,
+        'load_lot': (request.args.get('load_lot') or '').strip() or None,
+        'production_lot': (request.args.get('production_lot') or '').strip() or None,
         'line': (request.args.get('line') or '').strip() or None,
         'start_date': (
             (start_date_param or '').strip() or None
