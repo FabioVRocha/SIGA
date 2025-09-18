@@ -2025,6 +2025,30 @@ def fetch_orders(filters):
     if not conn:
         return orders, "Não foi possível conectar ao banco de dados do ERP."
 
+    has_lcacod_column = False
+    column_check_cursor = None
+
+    try:
+        column_check_cursor = conn.cursor()
+        column_check_cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'pedido'
+                  AND column_name = 'lcacod'
+            )
+            """
+        )
+        result = column_check_cursor.fetchone()
+        if result:
+            has_lcacod_column = result[0]
+    except Error as e:
+        print(f"Erro ao verificar a coluna 'lcacod' na tabela 'pedido': {e}")
+    finally:
+        if column_check_cursor:
+            column_check_cursor.close()
+
     try:
         cur = conn.cursor()
         query = """
@@ -2078,9 +2102,10 @@ def fetch_orders(filters):
             LEFT JOIN prod_quant prod ON p.pedido = prod.pedido
             LEFT JOIN proj_totals proj ON p.pedido = proj.pedido
             LEFT JOIN linha_info linha ON p.pedido = linha.pedido
-            LEFT JOIN lotecar lc ON p.lcacod = lc.lcacod
-            WHERE 1 = 1
         """
+        if has_lcacod_column:
+            query += "            LEFT JOIN lotecar lc ON p.lcacod = lc.lcacod\n"
+        query += "            WHERE 1 = 1\n"
 
         params = []
 
@@ -2105,9 +2130,12 @@ def fetch_orders(filters):
             params.append(f"%{filters['state']}%")
 
         if filters.get('load_lot'):
-            query += " AND (CAST(p.lcacod AS TEXT) ILIKE %s OR COALESCE(lc.lcades, '') ILIKE %s)"
-            params.append(f"%{filters['load_lot']}%")
-            params.append(f"%{filters['load_lot']}%")
+            if has_lcacod_column:
+                query += " AND (CAST(p.lcacod AS TEXT) ILIKE %s OR COALESCE(lc.lcades, '') ILIKE %s)"
+                params.append(f"%{filters['load_lot']}%")
+                params.append(f"%{filters['load_lot']}%")
+            else:
+                print("Coluna 'lcacod' ausente na tabela 'pedido'; filtro 'Lote de Carga' foi ignorado.")
 
         if filters.get('production_lot'):
             query += """
