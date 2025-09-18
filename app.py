@@ -2059,6 +2059,9 @@ def fetch_orders(filters):
                 p.pedcliente,
                 COALESCE(e.empnome, '') AS empnome,
                 CASE
+                    WHEN COALESCE(c.cidnome, '') <> '' AND COALESCE(c.estado, '') <> '' THEN c.cidnome || '/' || c.estado
+                    WHEN COALESCE(c.cidnome, '') <> '' THEN c.cidnome
+                    WHEN COALESCE(c.estado, '') <> '' THEN c.estado
                     WHEN COALESCE(p.pedentcid::text, '') <> '' AND COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentcid::text || '/' || p.pedentuf::text
                     WHEN COALESCE(p.pedentcid::text, '') <> '' THEN p.pedentcid::text
                     WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text
@@ -2071,6 +2074,7 @@ def fetch_orders(filters):
                 COALESCE(linha.linha, '') AS linha
             FROM pedido p
             LEFT JOIN empresa e ON p.pedcliente = e.empresa
+            LEFT JOIN cidade c ON p.pedentcid = c.cidade
             LEFT JOIN prod_quant prod ON p.pedido = prod.pedido
             LEFT JOIN proj_totals proj ON p.pedido = proj.pedido
             LEFT JOIN linha_info linha ON p.pedido = linha.pedido
@@ -2092,11 +2096,11 @@ def fetch_orders(filters):
             params.append(f"%{filters['client_name']}%")
 
         if filters.get('city'):
-            query += " AND COALESCE(p.pedentcid::text, '') ILIKE %s"
+            query += " AND COALESCE(c.cidnome, '') ILIKE %s"
             params.append(f"%{filters['city']}%")
 
         if filters.get('state'):
-            query += " AND COALESCE(p.pedentuf::text, '') ILIKE %s"
+            query += " AND COALESCE(c.estado, '') ILIKE %s"
             params.append(f"%{filters['state']}%")
 
         if filters.get('lot_sequence'):
