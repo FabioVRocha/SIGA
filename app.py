@@ -2059,9 +2059,9 @@ def fetch_orders(filters):
                 p.pedcliente,
                 COALESCE(e.empnome, '') AS empnome,
                 CASE
-                    WHEN COALESCE(p.pedentcid, '') <> '' AND COALESCE(p.pedentuf, '') <> '' THEN p.pedentcid || '/' || p.pedentuf
-                    WHEN COALESCE(p.pedentcid, '') <> '' THEN p.pedentcid
-                    WHEN COALESCE(p.pedentuf, '') <> '' THEN p.pedentuf
+                    WHEN COALESCE(p.pedentcid::text, '') <> '' AND COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentcid::text || '/' || p.pedentuf::text
+                    WHEN COALESCE(p.pedentcid::text, '') <> '' THEN p.pedentcid::text
+                    WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text
                     ELSE ''
                 END AS cidade_uf,
                 COALESCE(prod.total_quantidade, 0) AS quantidade_total,
@@ -2092,11 +2092,11 @@ def fetch_orders(filters):
             params.append(f"%{filters['client_name']}%")
 
         if filters.get('city'):
-            query += " AND COALESCE(p.pedentcid, '') ILIKE %s"
+            query += " AND COALESCE(p.pedentcid::text, '') ILIKE %s"
             params.append(f"%{filters['city']}%")
 
         if filters.get('state'):
-            query += " AND COALESCE(p.pedentuf, '') ILIKE %s"
+            query += " AND COALESCE(p.pedentuf::text, '') ILIKE %s"
             params.append(f"%{filters['state']}%")
 
         if filters.get('lot_sequence'):
