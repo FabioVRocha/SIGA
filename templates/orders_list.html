@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Lista de Pedidos{% endblock %}
+
+{% block page_title %}Lista de Pedidos{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold text-gray-800">Pedidos</h2>
+        <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+            <i class="fas fa-filter mr-2"></i> Filtrar
+        </button>
+    </div>
+
+    {% if orders %}
+    <div class="overflow-x-auto rounded-lg shadow-md">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                <tr>
+                    <th scope="col" class="px-2 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tl-lg">Pedido</th>
+                    <th scope="col" class="px-2 py-3 text-left text-xs font-medium uppercase tracking-wider">Seq. Lote</th>
+                    <th scope="col" class="px-2 py-3 text-left text-xs font-medium uppercase tracking-wider">Cód. Cliente</th>
+                    <th scope="col" class="px-2 py-3 text-left text-xs font-medium uppercase tracking-wider">Cliente</th>
+                    <th scope="col" class="px-2 py-3 text-left text-xs font-medium uppercase tracking-wider">Cidade/UF</th>
+                    <th scope="col" class="px-2 py-3 text-right text-xs font-medium uppercase tracking-wider">Quantidade</th>
+                    <th scope="col" class="px-2 py-3 text-right text-xs font-medium uppercase tracking-wider">Reservado</th>
+                    <th scope="col" class="px-2 py-3 text-right text-xs font-medium uppercase tracking-wider">Separado</th>
+                    <th scope="col" class="px-2 py-3 text-right text-xs font-medium uppercase tracking-wider">Carregado</th>
+                    <th scope="col" class="px-2 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tr-lg">Linha</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for order in orders %}
+                <tr class="hover:bg-blue-50">
+                    <td class="px-2 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ order.pedido or 'N/A' }}</td>
+                    <td class="px-2 py-4 whitespace-nowrap text-sm text-gray-700">{{ order.sequencia_lote or 'N/A' }}</td>
+                    <td class="px-2 py-4 whitespace-nowrap text-sm text-gray-700">{{ order.cliente_codigo or 'N/A' }}</td>
+                    <td class="px-2 py-4 whitespace-nowrap text-sm text-gray-700">{{ order.cliente_nome or 'N/A' }}</td>
+                    <td class="px-2 py-4 whitespace-nowrap text-sm text-gray-700">{{ order.cidade_uf or 'N/A' }}</td>
+                    <td class="px-2 py-4 whitespace-nowrap text-sm text-right text-gray-700">{{ order.quantidade_total | format_decimal_br }}</td>
+                    <td class="px-2 py-4 whitespace-nowrap text-sm text-right text-gray-700">{{ order.reservado | format_decimal_br }}</td>
+                    <td class="px-2 py-4 whitespace-nowrap text-sm text-right text-gray-700">{{ order.separado | format_decimal_br }}</td>
+                    <td class="px-2 py-4 whitespace-nowrap text-sm text-right text-gray-700">{{ order.carregado | format_decimal_br }}</td>
+                    <td class="px-2 py-4 whitespace-nowrap text-sm text-gray-700">{{ order.linha or 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="bg-gray-100 p-4 rounded-lg mt-4 flex flex-wrap justify-center gap-2">
+        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+            Quantidade Total: <span>{{ totals.quantidade_total | format_decimal_br }}</span>
+        </div>
+        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+            Reservado: <span>{{ totals.reservado | format_decimal_br }}</span>
+        </div>
+        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+            Separado: <span>{{ totals.separado | format_decimal_br }}</span>
+        </div>
+        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+            Carregado: <span>{{ totals.carregado | format_decimal_br }}</span>
+        </div>
+    </div>
+    {% else %}
+    <p class="no-data text-center p-8 text-gray-600 text-lg">Nenhum pedido encontrado para os filtros informados.</p>
+    {% endif %}
+</div>
+
+<div id="filterModal" class="modal flex items-center justify-center">
+    <div class="modal-content">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-800">Filtros de Pedidos</h2>
+            <button id="closeFilterModalBtn" class="close-button">&times;</button>
+        </div>
+        <form id="filterForm" action="{{ url_for('orders_list') }}" method="GET" class="space-y-4">
+            <div class="form-group">
+                <label for="order_number" class="form-label">Pedido:</label>
+                <input type="text" id="order_number" name="order_number" class="form-input" value="{{ filters.order_number or '' }}" placeholder="Número do pedido">
+            </div>
+            <div class="form-group">
+                <label for="client_code" class="form-label">Código do Cliente:</label>
+                <input type="text" id="client_code" name="client_code" class="form-input" value="{{ filters.client_code or '' }}" placeholder="Código do cliente">
+            </div>
+            <div class="form-group">
+                <label for="client_name" class="form-label">Nome do Cliente:</label>
+                <input type="text" id="client_name" name="client_name" class="form-input" value="{{ filters.client_name or '' }}" placeholder="Nome do cliente">
+            </div>
+            <div class="form-group">
+                <label for="city" class="form-label">Cidade:</label>
+                <input type="text" id="city" name="city" class="form-input" value="{{ filters.city or '' }}" placeholder="Cidade de entrega">
+            </div>
+            <div class="form-group">
+                <label for="state" class="form-label">UF:</label>
+                <input type="text" id="state" name="state" class="form-input" value="{{ filters.state or '' }}" placeholder="Estado (UF)">
+            </div>
+            <div class="form-group">
+                <label for="lot_sequence" class="form-label">Seq. do Lote:</label>
+                <input type="text" id="lot_sequence" name="lot_sequence" class="form-input" value="{{ filters.lot_sequence or '' }}" placeholder="Sequência do lote">
+            </div>
+            <div class="form-group">
+                <label for="line" class="form-label">Linha:</label>
+                <input type="text" id="line" name="line" class="form-input" value="{{ filters.line or '' }}" placeholder="Linha do pedido">
+            </div>
+            <div class="flex justify-end space-x-4 mt-6">
+                <button type="button" id="clearFiltersBtn" class="btn btn-secondary">Limpar Filtros</button>
+                <button type="submit" class="btn btn-primary">Aplicar Filtros</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const filterModal = document.getElementById('filterModal');
+    const openFilterModalBtn = document.getElementById('openFilterModalBtn');
+    const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+    const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+    const filterForm = document.getElementById('filterForm');
+
+    if (!filterModal) {
+        return;
+    }
+
+    filterModal.style.display = 'none';
+
+    const openModal = () => {
+        filterModal.style.display = 'flex';
+    };
+
+    const closeModal = () => {
+        filterModal.style.display = 'none';
+    };
+
+    if (openFilterModalBtn) {
+        openFilterModalBtn.addEventListener('click', openModal);
+    }
+
+    if (closeFilterModalBtn) {
+        closeFilterModalBtn.addEventListener('click', closeModal);
+    }
+
+    window.addEventListener('click', (event) => {
+        if (event.target === filterModal) {
+            closeModal();
+        }
+    });
+
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', () => {
+            window.location = "{{ url_for('orders_list') }}";
+        });
+    }
+
+    if (filterForm) {
+        filterForm.addEventListener('submit', () => {
+            closeModal();
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}Comparativo de Faturamento{% endblock %}
+
+{% block page_title %}Comparativo de Faturamento Anual{% endblock %}
+
+{% block header_action %}
+<a href="{{ url_for('revenue_reports') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+    <i class="fas fa-arrow-left mr-2"></i> Voltar
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold text-gray-800">{{ current_year_label }} x {{ previous_year_label }}</h2>
+        <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+            <i class="fas fa-filter mr-2"></i> Filtrar
+        </button>
+    </div>
+    <canvas id="revenueChart" class="w-full h-[28rem]"></canvas>
+    <div class="mt-6 flex flex-wrap justify-center gap-4 text-sm text-gray-700">
+        <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
+            <strong>Total {{ current_year_label }}:</strong> {{ totals.current_total | format_currency_brl }}
+        </div>
+        <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
+            <strong>Média Mensal {{ current_year_label }}:</strong> {{ totals.current_average | format_currency_brl }}
+        </div>
+        <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
+            <strong>Total {{ previous_year_label }}:</strong> {{ totals.previous_total | format_currency_brl }}
+        </div>
+        <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
+            <strong>Média Mensal {{ previous_year_label }}:</strong> {{ totals.previous_average | format_currency_brl }}
+        </div>
+        <div class="bg-gray-200 rounded-full px-4 py-2 shadow">
+            <strong>Variação:</strong> {{ totals.variation_percent | format_currency_brl }}%
+        </div>
+    </div>
+</div>
+
+<div id="filterModal" class="fixed z-10 inset-0 overflow-y-auto hidden">
+  <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+    <div class="fixed inset-0 transition-opacity" aria-hidden="true">
+      <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
+    </div>
+    <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+    <div class="inline-block align-bottom bg-white rounded-lg text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full overflow-visible max-h-[80vh]">
+      <form id="filterForm" method="get" action="{{ url_for('report_revenue_comparison') }}" class="bg-white p-6 h-full">
+        <input type="hidden" name="filter_applied" value="1">
+        <div class="grid grid-cols-1 gap-4">
+            <div>
+                <label for="year" class="block text-sm font-medium text-gray-700">Ano</label>
+                <input type="number" name="year" id="year" value="{{ filters.year }}" class="mt-1 p-2 border rounded w-full">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Mês</label>
+                <div class="relative w-full">
+                    <button type="button" id="month-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="month-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="month-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="month-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
+                        {% for m in range(1,13) %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
+                            <input type="checkbox" name="month" value="{{ m }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.month and (m|string) in filters.month %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ "%02d"|format(m) }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                <div class="relative w-full">
+                    <button type="button" id="state-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="state-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="state-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="state-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
+                        {% for s in states %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
+                            <input type="checkbox" name="state" value="{{ s }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.state and s in filters.state %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ s }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
+                <div class="relative w-full">
+                    <button type="button" id="city-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="city-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="city-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="city-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
+                        {% for c in cities %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
+                            <input type="checkbox" name="city" value="{{ c }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.city and c in filters.city %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ c }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Status do Vendedor</label>
+                <div class="relative w-full">
+                    <button type="button" id="vendor-status-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="vendor-status-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="vendor-status-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="vendor-status-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
+                        {% for s in vendor_statuses %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
+                            <input type="checkbox" name="vendor_status" value="{{ s }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.vendor_status and s in filters.vendor_status %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ s }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Vendedor</label>
+                <div class="relative w-full">
+                    <button type="button" id="vendor-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="vendor-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="vendor-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="vendor-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
+                        {% for v in vendors %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer" data-status="{{ v[1] }}">
+                            <input type="checkbox" name="vendor" value="{{ v[0] }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.vendor and v[0] in filters.vendor %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ v[0] }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Linha</label>
+                <div class="relative w-full">
+                    <button type="button" id="line-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="line-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="line-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="line-options" class="hidden absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg py-1 transition-opacity duration-300 opacity-0 max-h-96 overflow-auto">
+                        {% for l in product_lines %}
+                        <label class="flex items-center px-4 py-2 hover:bg-indigo-50 transition-colors duration-150 cursor-pointer">
+                            <input type="checkbox" name="line" value="{{ l }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.line and l in filters.line %}checked{% endif %}>
+                            <span class="ml-3 text-gray-700">{{ l }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="mt-4 flex justify-end">
+            <button type="button" id="closeFilterModalBtn" class="mr-2 px-4 py-2 rounded bg-gray-300">Cancelar</button>
+            <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white">Aplicar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const filterModal = document.getElementById('filterModal');
+    const openFilterModalBtn = document.getElementById('openFilterModalBtn');
+    const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+
+    const openModal = () => filterModal.classList.remove('hidden');
+    const closeModal = () => filterModal.classList.add('hidden');
+
+    openFilterModalBtn.addEventListener('click', openModal);
+    closeFilterModalBtn.addEventListener('click', closeModal);
+    window.addEventListener('click', (e) => { if(e.target === filterModal) closeModal(); });
+    const setupCombobox = (prefix, placeholder) => {
+        const button = document.getElementById(`${prefix}-button`);
+        const options = document.getElementById(`${prefix}-options`);
+        const textEl = document.getElementById(`${prefix}-text`);
+        const arrow = document.getElementById(`${prefix}-arrow`);
+        const checkboxes = options.querySelectorAll('input[type="checkbox"]');
+
+        const updateSelectedText = () => {
+            const selected = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.nextElementSibling.textContent.trim());
+            textEl.textContent = selected.length ? selected.join(', ') : placeholder;
+        };
+
+        button.addEventListener('click', () => {
+            const isHidden = options.classList.contains('hidden');
+            if (isHidden) {
+                options.classList.remove('hidden');
+                setTimeout(() => {
+                    options.classList.remove('opacity-0');
+                    arrow.classList.add('rotate-180');
+                }, 10);
+            } else {
+                options.classList.add('opacity-0');
+                arrow.classList.remove('rotate-180');
+                setTimeout(() => {
+                    options.classList.add('hidden');
+                }, 300);
+            }
+        });
+
+        checkboxes.forEach(cb => cb.addEventListener('change', updateSelectedText));
+
+        document.addEventListener('click', (event) => {
+            const isClickInside = button.contains(event.target) || options.contains(event.target);
+            if (!isClickInside && !options.classList.contains('hidden')) {
+                options.classList.add('opacity-0');
+                arrow.classList.remove('rotate-180');
+                setTimeout(() => {
+                    options.classList.add('hidden');
+                }, 300);
+            }
+        });
+
+        updateSelectedText();
+    };
+
+    setupCombobox('month', 'Selecione uma ou mais opções');
+    setupCombobox('state', 'Selecione uma ou mais opções');
+    setupCombobox('city', 'Selecione uma ou mais opções');
+    setupCombobox('vendor-status', 'Selecione uma ou mais opções');
+    setupCombobox('vendor', 'Selecione uma ou mais opções');
+    setupCombobox('line', 'Selecione uma ou mais opções');
+
+    const filterVendorsByStatus = () => {
+        const selectedStatuses = Array.from(document.querySelectorAll('#vendor-status-options input[type="checkbox"]:checked')).map(cb => cb.value);
+        document.querySelectorAll('#vendor-options label').forEach(label => {
+            const status = label.getAttribute('data-status');
+            const shouldShow = selectedStatuses.length === 0 || selectedStatuses.includes(status);
+            if (shouldShow) {
+                label.classList.remove('hidden');
+            } else {
+                const checkbox = label.querySelector('input[type="checkbox"]');
+                checkbox.checked = false;
+                checkbox.dispatchEvent(new Event('change'));
+                label.classList.add('hidden');
+            }
+        });
+    };
+
+    document.querySelectorAll('#vendor-status-options input[type="checkbox"]').forEach(cb => cb.addEventListener('change', filterVendorsByStatus));
+    filterVendorsByStatus();
+
+    const ctx = document.getElementById('revenueChart').getContext('2d');
+    const labels = {{ chart_labels | tojson }};
+    const dataCurrent = {{ current_year_data | tojson }};
+    const dataPrev = {{ previous_year_data | tojson }};
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '{{ current_year_label }}',
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    data: dataCurrent
+                },
+                {
+                    label: '{{ previous_year_label }}',
+                    backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                    data: dataPrev
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        afterBody: function(ctx){
+                            const i = ctx[0].dataIndex;
+                            const curr = dataCurrent[i];
+                            const prev = dataPrev[i];
+                            const diff = prev ? ((curr - prev) / prev) * 100 : 0;
+                            return 'Variação: ' + diff.toFixed(2) + '%';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Mês/Ano' } },
+                y: { title: { display: true, text: 'Faturamento Líquido (R$)' } }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

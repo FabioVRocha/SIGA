@@ -1,0 +1,489 @@
+{% extends "base.html" %}
+
+{% block title %}Espelho de Notas Fiscais{% endblock %}
+
+{% block page_title %}Espelho de Notas Fiscais Faturadas{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold text-gray-800">Notas Fiscais</h2>
+        <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+            <i class="fas fa-filter mr-2"></i> Filtrar
+        </button>
+    </div>
+
+    {% if invoices %}
+    <div class="overflow-x-auto rounded-lg shadow-md">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                <tr>
+                    <th scope="col" class="px-1 py-3 text-center text-xs font-medium uppercase tracking-wider rounded-tl-lg">
+                        <input type="checkbox" id="selectAllInvoices">
+                    </th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Controle</th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Documento</th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Data</th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Cliente/Fornecedor</th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor Produtos</th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor IPI</th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor ST</th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor Total</th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Percentual Frete</th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor do Frete</th>
+                    <th scope="col" class="px-1 py-3 text-center text-xs font-medium uppercase tracking-wider rounded-tr-lg">Ação</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for invoice in invoices %}
+                <tr class="hover:bg-blue-50">
+                    <td class="px-1 py-4 whitespace-nowrap text-center">
+                        <input type="checkbox" class="invoice-checkbox" data-valor-produtos="{{ invoice.total_privltotal or 0 }}" data-valor-ipi="{{ invoice.notvlipi or 0 }}" data-valor-st="{{ invoice.total_privlsubst or 0 }}" data-valor-total="{{ invoice.notvltotal or 0 }}" data-valor-frete="{{ invoice.valor_frete or 0 }}">
+                    </td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ invoice.controle if invoice.controle is not none else 'N/A' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice.notdocto if invoice.notdocto is not none else 'N/A' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice.notdata.strftime('%d/%m/%Y') if invoice.notdata is not none else 'N/A' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice.client_name if invoice.client_name is not none else 'N/A' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice.total_privltotal).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice.total_privltotal is not none else '0,00' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice.notvlipi).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice.notvlipi is not none else '0,00' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice.total_privlsubst).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice.total_privlsubst is not none else '0,00' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice.notvltotal).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice.notvltotal is not none else '0,00' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">{{ '{:,.2f}%'.format(invoice.freight_percentage).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice.freight_percentage is not none else 'N/A' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice.valor_frete).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice.valor_frete is not none else '0,00' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-center">
+                        <button class="icon-button view-details-btn" data-controle="{{ invoice.controle | default('', true) }}" title="Ver Detalhes">
+                            <i class="fas fa-eye text-blue-600 hover:text-blue-800"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div id="totalsFooter" class="bg-gray-100 p-4 rounded-lg mt-4 flex flex-wrap justify-center gap-2">
+        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+            Valor Produtos: <span id="footer_valor_produtos"></span>
+        </div>
+        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+            Valor IPI: <span id="footer_valor_ipi"></span>
+        </div>
+        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+            Valor ST: <span id="footer_valor_st"></span>
+        </div>
+        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+            Valor Total: <span id="footer_valor_total"></span>
+        </div>
+        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+            Valor do Frete: <span id="footer_valor_frete"></span>
+        </div>
+    </div>
+    <script id="initialTotalsData" type="application/json">
+        {{ totals | tojson }}
+    </script>
+    {% else %}
+    <p class="no-data text-center p-8 text-gray-600 text-lg">Nenhuma nota fiscal faturada encontrada.</p>
+    {% endif %}
+</div>
+
+<!-- Filter Modal -->
+<div id="filterModal" class="modal flex items-center justify-center">
+    <div class="modal-content">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-800">Filtros de Notas Fiscais</h2>
+            <button id="closeFilterModalBtn" class="close-button">&times;</button>
+        </div>
+        <form id="filterForm" action="{{ url_for('invoices_mirror') }}" method="GET" class="space-y-4">
+            <div class="form-group">
+                <label for="start_date" class="form-label">Data Inicial:</label>
+                <input type="date" id="start_date" name="start_date" class="form-input" value="{{ filters.start_date if filters.start_date }}">
+            </div>
+            <div class="form-group">
+                <label for="end_date" class="form-label">Data Final:</label>
+                <input type="date" id="end_date" name="end_date" class="form-input" value="{{ filters.end_date if filters.end_date }}">
+            </div>
+            <div class="form-group">
+                <label for="client_name" class="form-label">Cliente:</label>
+                <input type="text" id="client_name" name="client_name" placeholder="Nome do Cliente" class="form-input" value="{{ filters.client_name if filters.client_name }}">
+            </div>
+            <div class="form-group">
+                <label for="document_number" class="form-label">Documento:</label>
+                <input type="text" id="document_number" name="document_number" placeholder="Número do Documento" class="form-input" value="{{ filters.document_number if filters.document_number }}">
+            </div>
+            <div class="form-group">
+                <label for="lotecar_code" class="form-label">Lote de Carga:</label>
+                <div class="flex items-center space-x-2">
+                    <input type="text" id="lotecar_code" name="lotecar_code" placeholder="Código do Lote" class="form-input flex-grow" value="{{ filters.lotecar_code if filters.lotecar_code }}">
+                    <span id="lotecar_description" class="text-sm text-gray-600 w-1/2 overflow-hidden text-ellipsis whitespace-nowrap"></span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="product_line" class="form-label">Linha de Produto:</label>
+                <select id="product_line" name="product_line" class="form-select">
+                    <option value="">Todas</option>
+                    {% for line in product_lines %}
+                    <option value="{{ line }}" {% if filters.product_line == line %}selected{% endif %}>{{ line }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex justify-end space-x-4 mt-6">
+                <button type="button" id="clearFiltersBtn" class="btn btn-secondary">Limpar Filtros</button>
+                <button type="submit" class="btn btn-primary">Aplicar Filtros</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Invoice Details Modal -->
+<div id="invoiceDetailsModal" class="modal flex items-center justify-center">
+    <div class="modal-content photo-modal-content"> {# Use photo-modal-content for wider modal #}
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-800">Detalhes da Nota Fiscal</h2>
+            <button id="closeInvoiceDetailsModalBtn" class="close-button">&times;</button>
+        </div>
+
+        <div id="invoiceDetailsContent" class="space-y-4">
+            <!-- Header Details -->
+            <div class="bg-gray-100 p-4 rounded-lg">
+                <h3 class="font-bold text-lg mb-2">Cabeçalho da Nota</h3>
+                <p><strong>Número do Documento:</strong> <span id="detail_notdocto"></span> <strong>Data:</strong> <span id="detail_notdata"></span></p>
+                <p><strong>Código:</strong> <span id="detail_notclifor"></span> <strong>Cliente:</strong> <span id="detail_empnome"></span></p>
+                <p><strong>CFOP:</strong> <span id="detail_operacao"></span></p>
+            </div>
+
+            <!-- Product Grid -->
+            <div class="mt-6">
+                <h3 class="font-bold text-lg mb-2">Grade de Produtos</h3>
+                <div class="overflow-x-auto rounded-lg shadow-md">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seq.</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cód. Prod.</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Un. Med.</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qtd.</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Unit.</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Prod.</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alíq. IPI</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor IPI</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor ST</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">% Frete</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Frete</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoice_items_tbody" class="bg-white divide-y divide-gray-200">
+                            <!-- Product rows will be inserted here by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Totals Footer -->
+            <div class="bg-gray-100 p-4 rounded-lg mt-6 flex flex-wrap justify-center gap-2">
+                <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    Quantidade: <span id="total_quantidade"></span>
+                </div>
+                <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    Valor Produtos: <span id="total_valor_produtos"></span>
+                </div>
+                <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    Valor IPI: <span id="total_valor_ipi"></span>
+                </div>
+                <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    Valor ST: <span id="total_valor_st"></span>
+                </div>
+                <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    Total Nota: <span id="total_valor_nota_fiscal"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const filterModal = document.getElementById('filterModal');
+        const openFilterModalBtn = document.getElementById('openFilterModalBtn');
+        const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+        const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+        const filterForm = document.getElementById('filterForm');
+        const startDateInput = document.getElementById('start_date');
+        const endDateInput = document.getElementById('end_date');
+        const lotecarCodeInput = document.getElementById('lotecar_code');
+        const lotecarDescriptionSpan = document.getElementById('lotecar_description');
+        const productLineSelect = document.getElementById('product_line');
+
+        // Invoice Details Modal elements
+        const invoiceDetailsModal = document.getElementById('invoiceDetailsModal');
+        const closeInvoiceDetailsModalBtn = document.getElementById('closeInvoiceDetailsModalBtn');
+        const invoiceItemsTbody = document.getElementById('invoice_items_tbody');
+
+        // Ensure the modals are hidden when the page loads
+        filterModal.style.display = 'none';
+        invoiceDetailsModal.style.display = 'none';
+
+        // Function to open the filter modal
+        function openFilterModal() {
+            filterModal.style.display = 'flex';
+            // Set default dates to today if they are empty
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+            const day = String(today.getDate()).padStart(2, '0');
+            const formattedToday = `${year}-${month}-${day}`;
+
+            if (!startDateInput.value) {
+                startDateInput.value = formattedToday;
+            }
+            if (!endDateInput.value) {
+                endDateInput.value = formattedToday;
+            }
+
+            // Load lotecar description if code is already present
+            if (lotecarCodeInput.value) {
+                fetchLotecarDescription(lotecarCodeInput.value);
+            } else {
+                lotecarDescriptionSpan.textContent = ''; // Clear if no code
+            }
+        }
+
+        // Function to close the filter modal
+        function closeFilterModal() {
+            filterModal.style.display = 'none';
+        }
+
+        // Function to open the invoice details modal
+        function openInvoiceDetailsModal() {
+            invoiceDetailsModal.style.display = 'flex';
+        }
+
+        // Function to close the invoice details modal
+        function closeInvoiceDetailsModal() {
+            invoiceDetailsModal.style.display = 'none';
+            // Clear previous details
+            document.getElementById('detail_notdocto').textContent = '';
+            document.getElementById('detail_notclifor').textContent = '';
+            document.getElementById('detail_empnome').textContent = '';
+            document.getElementById('detail_operacao').textContent = '';
+            document.getElementById('detail_notdata').textContent = '';
+            invoiceItemsTbody.innerHTML = ''; // Clear product grid
+            document.getElementById('total_quantidade').textContent = '';
+            document.getElementById('total_valor_produtos').textContent = '';
+            document.getElementById('total_valor_ipi').textContent = '';
+            document.getElementById('total_valor_st').textContent = '';
+            document.getElementById('total_valor_nota_fiscal').textContent = '';
+        }
+
+        // Function to fetch lotecar description
+        async function fetchLotecarDescription(code) {
+            if (!code) {
+                lotecarDescriptionSpan.textContent = '';
+                return;
+            }
+            try {
+                const response = await fetch(`/api/get_lotecar_description/${code}`, {
+                    credentials: 'same-origin'
+                });
+                const data = await response.json();
+                lotecarDescriptionSpan.textContent = data.description || 'Não encontrado';
+            } catch (error) {
+                console.error('Erro ao buscar descrição do lote de carga:', error);
+                lotecarDescriptionSpan.textContent = 'Erro ao carregar';
+            }
+        }
+
+        // Function to fetch and display invoice details
+        async function fetchInvoiceDetails(controle) {
+            try {
+                const response = await fetch(`/api/get_invoice_details/${controle}`, {
+                    credentials: 'same-origin'
+                });
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    console.error('Unexpected response while fetching details:', text);
+                    throw new Error(`HTTP status ${response.status}`);
+                }
+
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    const text = await response.text();
+                    console.error('Unexpected content while fetching details:', text);
+                    throw new Error('Unexpected response');
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('Erro ao buscar detalhes da nota:', data.error);
+                    alert('Erro ao carregar detalhes da nota fiscal.'); // Use a modal customizada em produção
+                    return;
+                }
+
+                const header = data.header;
+                const items = data.items;
+
+                // Populate Header
+                document.getElementById('detail_notdocto').textContent = header.notdocto || 'N/A';
+                document.getElementById('detail_notclifor').textContent = header.notclifor || 'N/A';
+                document.getElementById('detail_empnome').textContent = header.empnome || 'N/A';
+                document.getElementById('detail_operacao').textContent = header.operacao || 'N/A';
+                document.getElementById('detail_notdata').textContent = header.notdata || 'N/A';
+
+                // Populate Product Grid
+                invoiceItemsTbody.innerHTML = ''; // Clear previous items
+                let totalQuantidade = 0;
+                let totalValorProdutos = 0;
+                let totalValorIPI = 0;
+                let totalValorST = 0;
+                let totalValorTotalItens = 0;
+
+                // Helpers to format currency and percentage values
+                const formatCurrency = (value) => {
+                    const num = parseFloat(value);
+                    return (!isNaN(num)) ? `R$ ${num.toFixed(2).replace('.', ',')}` : '0,00';
+                };
+                const formatPercentage = (value) => {
+                    const num = parseFloat(value);
+                    return (!isNaN(num)) ? `${num.toFixed(2).replace('.', ',')}%` : 'N/A';
+                };
+
+                items.forEach(item => {
+                    const row = invoiceItemsTbody.insertRow();
+                    row.className = 'hover:bg-blue-50';
+
+                    row.insertCell().textContent = item.prisequen || 'N/A';
+                    row.insertCell().textContent = item.priproduto || 'N/A';
+                    row.insertCell().textContent = item.pronome || 'N/A';
+                    row.insertCell().textContent = item.unimedida || 'N/A';
+                    row.insertCell().textContent = (!isNaN(parseFloat(item.priquanti))) ? parseFloat(item.priquanti).toFixed(2).replace('.', ',') : '0,00';
+                    row.insertCell().textContent = formatCurrency(item.pritmpuni);
+                    row.insertCell().textContent = formatCurrency(item.privltotal);
+                    row.insertCell().textContent = formatPercentage(item.prialqipi);
+                    row.insertCell().textContent = formatCurrency(item.privlipi);
+                    row.insertCell().textContent = formatCurrency(item.privlsubst);
+                    row.insertCell().textContent = formatCurrency(item.valor_total_item);
+                    row.insertCell().textContent = formatPercentage(item.freight_percentage);
+                    row.insertCell().textContent = formatCurrency(item.valor_frete);
+
+                    // Accumulate totals
+                    totalQuantidade += parseFloat(item.priquanti) || 0;
+                    totalValorProdutos += parseFloat(item.privltotal) || 0;
+                    totalValorIPI += parseFloat(item.privlipi) || 0;
+                    totalValorST += parseFloat(item.privlsubst) || 0;
+                    totalValorTotalItens += parseFloat(item.valor_total_item) || 0;
+                });
+
+                // Populate Totals Footer
+                document.getElementById('total_quantidade').textContent = totalQuantidade.toFixed(2).replace('.', ',');
+                document.getElementById('total_valor_produtos').textContent = formatCurrency(totalValorProdutos);
+                document.getElementById('total_valor_ipi').textContent = formatCurrency(totalValorIPI);
+                document.getElementById('total_valor_st').textContent = formatCurrency(totalValorST);
+                document.getElementById('total_valor_nota_fiscal').textContent = formatCurrency(header.notvltotal);
+
+                openInvoiceDetailsModal();
+
+            } catch (error) {
+                console.error('Erro ao buscar detalhes da nota fiscal:', error);
+                alert('Não foi possível carregar os detalhes da nota fiscal.'); // Use a modal customizada em produção
+            }
+        }
+
+        // Event listeners
+        openFilterModalBtn.addEventListener('click', openFilterModal);
+        closeFilterModalBtn.addEventListener('click', closeFilterModal);
+        window.addEventListener('click', (event) => {
+            if (event.target == filterModal) {
+                closeFilterModal();
+            }
+            if (event.target == invoiceDetailsModal) {
+                closeInvoiceDetailsModal();
+            }
+        });
+
+        clearFiltersBtn.addEventListener('click', () => {
+            filterForm.reset();
+            document.getElementById('client_name').value = '';
+            document.getElementById('document_number').value = '';
+            lotecarCodeInput.value = '';
+            lotecarDescriptionSpan.textContent = '';
+            productLineSelect.value = '';
+            filterForm.submit();
+        });
+
+        filterForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            closeFilterModal();
+            setTimeout(() => {
+                filterForm.submit();
+            }, 50);
+        });
+
+        lotecarCodeInput.addEventListener('input', (event) => {
+            fetchLotecarDescription(event.target.value);
+        });
+
+        if (lotecarCodeInput.value) {
+            fetchLotecarDescription(lotecarCodeInput.value);
+        }
+
+        // Event listener for "Detalhes" buttons
+        document.querySelectorAll('.view-details-btn').forEach(button => {
+            button.addEventListener('click', (event) => {
+                const controle = button.dataset.controle; // use button dataset to avoid icon click issues
+                fetchInvoiceDetails(controle);
+            });
+        });
+
+        // --- Totais do rodapé ---
+        const initialTotals = JSON.parse(document.getElementById('initialTotalsData').textContent);
+        const invoiceCheckboxes = document.querySelectorAll('.invoice-checkbox');
+        const selectAllCheckbox = document.getElementById('selectAllInvoices');
+
+        function formatCurrencyFooter(value) {
+            const num = parseFloat(value);
+            return !isNaN(num) ? `R$ ${num.toFixed(2).replace('.', ',')}` : '0,00';
+        }
+
+        function updateFooterTotals() {
+            let totals = { ...initialTotals };
+            if (Array.from(invoiceCheckboxes).some(cb => cb.checked)) {
+                totals = { valor_produtos: 0, valor_ipi: 0, valor_st: 0, valor_total: 0, valor_frete: 0 };
+                invoiceCheckboxes.forEach(cb => {
+                    if (cb.checked) {
+                        totals.valor_produtos += parseFloat(cb.dataset.valorProdutos) || 0;
+                        totals.valor_ipi += parseFloat(cb.dataset.valorIpi) || 0;
+                        totals.valor_st += parseFloat(cb.dataset.valorSt) || 0;
+                        totals.valor_total += parseFloat(cb.dataset.valorTotal) || 0;
+                        totals.valor_frete += parseFloat(cb.dataset.valorFrete) || 0;
+                    }
+                });
+            }
+
+            document.getElementById('footer_valor_produtos').textContent = formatCurrencyFooter(totals.valor_produtos);
+            document.getElementById('footer_valor_ipi').textContent = formatCurrencyFooter(totals.valor_ipi);
+            document.getElementById('footer_valor_st').textContent = formatCurrencyFooter(totals.valor_st);
+            document.getElementById('footer_valor_total').textContent = formatCurrencyFooter(totals.valor_total);
+            document.getElementById('footer_valor_frete').textContent = formatCurrencyFooter(totals.valor_frete);
+        }
+
+        invoiceCheckboxes.forEach(cb => cb.addEventListener('change', updateFooterTotals));
+
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', () => {
+                invoiceCheckboxes.forEach(cb => {
+                    cb.checked = selectAllCheckbox.checked;
+                });
+                updateFooterTotals();
+            });
+        }
+
+        updateFooterTotals();
+
+        closeInvoiceDetailsModalBtn.addEventListener('click', closeInvoiceDetailsModal);
+    });
+</script>
+{% endblock %}
