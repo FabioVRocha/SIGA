@@ -2111,6 +2111,22 @@ def fetch_orders(filters):
             query += " AND COALESCE(linha.linha, '') ILIKE %s"
             params.append(f"%{filters['line']}%")
 
+        if filters.get('start_date'):
+            try:
+                start_date = datetime.datetime.strptime(filters['start_date'], '%Y-%m-%d').date()
+                query += " AND p.peddata >= %s"
+                params.append(start_date)
+            except ValueError:
+                pass
+
+        if filters.get('end_date'):
+            try:
+                end_date = datetime.datetime.strptime(filters['end_date'], '%Y-%m-%d').date()
+                query += " AND p.peddata <= %s"
+                params.append(end_date)
+            except ValueError:
+                pass
+
         query += " ORDER BY p.pedido DESC"
 
         cur.execute(query, tuple(params))
@@ -2152,6 +2168,8 @@ def orders_list():
         'state': (request.args.get('state') or '').strip() or None,
         'lot_sequence': (request.args.get('lot_sequence') or '').strip() or None,
         'line': (request.args.get('line') or '').strip() or None,
+        'start_date': (request.args.get('start_date') or '').strip() or None,
+        'end_date': (request.args.get('end_date') or '').strip() or None,
     }
 
     orders, error_message = fetch_orders(filters)
