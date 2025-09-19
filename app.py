@@ -2247,31 +2247,54 @@ def orders_list():
         day=calendar.monthrange(today.year, today.month)[1]
     )
 
-    start_date_param = request.args.get('start_date')
-    end_date_param = request.args.get('end_date')
+    def _clean_filter_arg(arg_name: str) -> str:
+        value = request.args.get(arg_name)
+        return value.strip() if value else ''
 
-    filters = {
-        'order_number': (request.args.get('order_number') or '').strip() or None,
-        'client_code': (request.args.get('client_code') or '').strip() or None,
-        'client_name': (request.args.get('client_name') or '').strip() or None,
-        'city': (request.args.get('city') or '').strip() or None,
-        'state': (request.args.get('state') or '').strip() or None,
-        'load_lot': (request.args.get('load_lot') or '').strip() or None,
-        'production_lot': (request.args.get('production_lot') or '').strip() or None,
-        'line': (request.args.get('line') or '').strip() or None,
-        'start_date': (
-            (start_date_param or '').strip() or None
-            if start_date_param is not None
-            else first_day_of_month.strftime('%Y-%m-%d')
-        ),
-        'end_date': (
-            (end_date_param or '').strip() or None
-            if end_date_param is not None
-            else last_day_of_month.strftime('%Y-%m-%d')
-        ),
+    filters_for_display = {
+        'order_number': _clean_filter_arg('order_number'),
+        'client_code': _clean_filter_arg('client_code'),
+        'client_name': _clean_filter_arg('client_name'),
+        'city': _clean_filter_arg('city'),
+        'state': _clean_filter_arg('state'),
+        'load_lot': _clean_filter_arg('load_lot'),
+        'production_lot': _clean_filter_arg('production_lot'),
+        'line': _clean_filter_arg('line'),
+        'start_date': _clean_filter_arg('start_date'),
+        'end_date': _clean_filter_arg('end_date'),
     }
 
-    orders, error_message = fetch_orders(filters)
+    filters_for_query = {
+        key: (value or None)
+        for key, value in filters_for_display.items()
+    }
+
+    has_non_date_filters = any(
+        filters_for_query[key]
+        for key in (
+            'order_number',
+            'client_code',
+            'client_name',
+            'city',
+            'state',
+            'load_lot',
+            'production_lot',
+            'line',
+        )
+    )
+    has_explicit_date_filters = (
+        filters_for_query['start_date'] is not None
+        or filters_for_query['end_date'] is not None
+    )
+
+    if not has_non_date_filters and not has_explicit_date_filters:
+        filters_for_query['start_date'] = first_day_of_month.strftime('%Y-%m-%d')
+        filters_for_query['end_date'] = last_day_of_month.strftime('%Y-%m-%d')
+
+    applied_start_date = filters_for_query['start_date']
+    applied_end_date = filters_for_query['end_date']
+
+    orders, error_message = fetch_orders(filters_for_query)
 
     production_lots = fetch_production_lots()
 
@@ -2288,9 +2311,11 @@ def orders_list():
     return render_template(
         'orders_list.html',
         orders=orders,
-        filters=filters,
+        filters=filters_for_display,
         totals=totals,
         production_lots=production_lots,
+        applied_start_date=applied_start_date,
+        applied_end_date=applied_end_date,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
