@@ -78,29 +78,46 @@
                 <label for="order_number" class="form-label">Pedido:</label>
                 <input type="text" id="order_number" name="order_number" class="form-input" value="{{ filters.order_number or '' }}" placeholder="Número do pedido">
             </div>
-            <div class="form-group">
-                <label for="client_code" class="form-label">Código do Cliente:</label>
-                <input type="text" id="client_code" name="client_code" class="form-input" value="{{ filters.client_code or '' }}" placeholder="Código do cliente">
+            <div class="form-group grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="md:col-span-1">
+                    <label for="client_code" class="form-label">Código do Cliente:</label>
+                    <input type="text" id="client_code" name="client_code" class="form-input" value="{{ filters.client_code or '' }}" placeholder="Código do cliente">
+                </div>
+                <div class="md:col-span-2">
+                    <label for="client_name" class="form-label">Nome do Cliente:</label>
+                    <input type="text" id="client_name" name="client_name" class="form-input" value="{{ filters.client_name or '' }}" placeholder="Nome do cliente">
+                </div>
             </div>
-            <div class="form-group">
-                <label for="client_name" class="form-label">Nome do Cliente:</label>
-                <input type="text" id="client_name" name="client_name" class="form-input" value="{{ filters.client_name or '' }}" placeholder="Nome do cliente">
+            
+            <div class="form-group grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="md:col-span-2">
+                    <label for="city" class="form-label">Cidade:</label>
+                    <input type="text" id="city" name="city" class="form-input" value="{{ filters.city or '' }}" placeholder="Cidade de entrega">
+                </div>
+                <div class="md:col-span-1">
+                    <label for="state" class="form-label">UF:</label>
+                    <input type="text" id="state" name="state" class="form-input" value="{{ filters.state or '' }}" placeholder="Estado (UF)">
+                </div>
             </div>
-            <div class="form-group">
-                <label for="city" class="form-label">Cidade:</label>
-                <input type="text" id="city" name="city" class="form-input" value="{{ filters.city or '' }}" placeholder="Cidade de entrega">
-            </div>
-            <div class="form-group">
-                <label for="state" class="form-label">UF:</label>
-                <input type="text" id="state" name="state" class="form-input" value="{{ filters.state or '' }}" placeholder="Estado (UF)">
-            </div>
+            
             <div class="form-group">
                 <label for="load_lot" class="form-label">Lote de Carga:</label>
                 <input type="text" id="load_lot" name="load_lot" class="form-input" value="{{ filters.load_lot or '' }}" placeholder="Código ou descrição do lote de carga">
             </div>
             <div class="form-group">
                 <label for="production_lot" class="form-label">Lote de Produção:</label>
-                <input type="text" id="production_lot" name="production_lot" class="form-input" value="{{ filters.production_lot or '' }}" placeholder="Código ou descrição do lote de produção">
+                {% set selected_production_lot = filters.production_lot or '' %}
+                {% set production_lot_ns = namespace(found=False) %}
+                <select id="production_lot" name="production_lot" class="form-input">
+                    <option value="" {% if not selected_production_lot %}selected{% endif %}>Todos</option>
+                    {% for lot in production_lots %}
+                        {% if lot.value == selected_production_lot %}{% set production_lot_ns.found = True %}{% endif %}
+                        <option value="{{ lot.value }}" {% if lot.value == selected_production_lot %}selected{% endif %}>{{ lot.label }}</option>
+                    {% endfor %}
+                    {% if selected_production_lot and not production_lot_ns.found %}
+                        <option value="{{ selected_production_lot }}" selected>{{ selected_production_lot }}</option>
+                    {% endif %}
+                </select>
             </div>
             <div class="form-group">
                 <label for="line" class="form-label">Linha:</label>

@@ -2016,6 +2016,44 @@ def transporters_list():
     return render_template('placeholder.html', page_title="Lista de Transportadoras", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
 
 # --- Rotas de Placeholder para o Menu (Vendas) ---
+
+
+
+def fetch_production_lots():
+    """Retorna os lotes de producao disponiveis para o filtro."""
+    lots = []
+    conn = get_erp_db_connection()
+
+    if not conn:
+        return lots
+
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT lotcod, COALESCE(lotdes, '')
+            FROM loteprod
+            WHERE lotcod IS NOT NULL
+            ORDER BY lotcod DESC
+            """
+        )
+        rows = cur.fetchall()
+        cur.close()
+
+        for lotcod, lotdes in rows:
+            if lotcod is None:
+                continue
+            value = str(lotcod)
+            label = value if not lotdes else f"{value} - {lotdes}"
+            lots.append({'value': value, 'label': label})
+    except Error as e:
+        print(f"Erro ao carregar lotes de producao: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+    return lots
+
 def fetch_orders(filters):
     """Busca os pedidos com agregações de quantidade, reservas, separações e carregamentos."""
     orders = []
@@ -2235,6 +2273,8 @@ def orders_list():
 
     orders, error_message = fetch_orders(filters)
 
+    production_lots = fetch_production_lots()
+
     if error_message:
         flash(error_message, 'danger')
 
@@ -2250,6 +2290,7 @@ def orders_list():
         orders=orders,
         filters=filters,
         totals=totals,
+        production_lots=production_lots,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
