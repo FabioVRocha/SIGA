@@ -2393,11 +2393,30 @@ def fetch_orders(filters):
 
                 if view_conditions:
                     order_column_sql = quote_identifier(production_lot_view_metadata['order_column'])
+                    
+                    def build_order_normalization_sql(value_expression: str) -> str:
+                        return (
+                            "COALESCE("
+                            "NULLIF(REGEXP_REPLACE(BTRIM(" + value_expression + "), '^0+', ''), ''), '0'"
+                            ")"
+                        )
+
+                    normalized_view_order = build_order_normalization_sql(
+                        f"COALESCE(vpop.{order_column_sql}::TEXT, '')"
+                    )
+                    normalized_pedido_order = build_order_normalization_sql(
+                        "COALESCE(CAST(p.pedido AS TEXT), '')"
+                    )
+
                     query += "                AND EXISTS (\n"
                     query += "                    SELECT 1\n"
                     query += "                    FROM vw_produto_ordem_producao vpop\n"
                     query += (
-                        "                    WHERE COALESCE(vpop." + order_column_sql + "::TEXT, '') = COALESCE(CAST(p.pedido AS TEXT), '')\n"
+                    "                    WHERE "
+                        + normalized_view_order
+                        + " = "
+                        + normalized_pedido_order
+                        + "\n"
                     )
                     query += "                      AND (\n"
                     query += "                        " + "\n                        OR ".join(view_conditions) + "\n"
