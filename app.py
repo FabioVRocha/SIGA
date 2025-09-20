@@ -12,6 +12,7 @@ from functools import wraps # Para criar um decorador de login
 from werkzeug.security import generate_password_hash, check_password_hash
 import re # Para expressões regulares, usado para parsear rgcdes
 import json # Para lidar com dados JSON (para parâmetros de usuário)
+from decimal import Decimal, InvalidOperation
 
 # Importa as configurações do arquivo config.py
 from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE
@@ -50,6 +51,23 @@ def format_decimal_br(value, decimals=2):
         value = 0.0
     format_pattern = f"{{:,.{decimals}f}}"
     return format_pattern.format(value).replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def normalize_lot_code(value):
+    """Normalize lot codes to mirror PostgreSQL text formatting."""
+    if value is None:
+        return ''
+    value_str = str(value).strip()
+    if not value_str:
+        return ''
+    try:
+        decimal_candidate = Decimal(value_str.replace(',', '.'))
+    except (InvalidOperation, ValueError):
+        return value_str
+    normalized = format(decimal_candidate, 'f')
+    if '.' in normalized:
+        normalized = normalized.rstrip('0').rstrip('.')
+    return normalized or '0'
 
 
 app.jinja_env.filters["format_currency_brl"] = format_currency_brl
@@ -2040,11 +2058,19 @@ def fetch_production_lots():
         rows = cur.fetchall()
         cur.close()
 
+        seen_values = set()
         for lotcod, lotdes in rows:
             if lotcod is None:
                 continue
-            value = str(lotcod)
-            label = value if not lotdes else f"{value} - {lotdes}"
+            raw_value = str(lotcod).strip()
+            normalized_value = normalize_lot_code(lotcod)
+            value = normalized_value or raw_value
+            if not value or value in seen_values:
+                continue
+            seen_values.add(value)
+            lot_description = (lotdes or '').strip()
+            label_code = value
+            label = label_code if not lot_description else f"{label_code} - {lot_description}"
             lots.append({'value': value, 'label': label})
     except Error as e:
         print(f"Erro ao carregar lotes de producao: {e}")
@@ -2176,17 +2202,59 @@ def fetch_orders(filters):
                 print("Coluna 'lcacod' ausente na tabela 'pedido'; filtro 'Lote de Carga' foi ignorado.")
 
         if filters.get('production_lot'):
+            production_lot_raw = str(filters['production_lot']).strip()
+            code_terms = []
+            description_terms = []
+
+            def _append_unique_term(collection, value):
+                value = (value or '').strip()
+                if value and value not in collection:
+                    collection.append(value)
+
+            _append_unique_term(code_terms, production_lot_raw)
+
+            code_part = production_lot_raw
+            desc_part = ''
+            if ' - ' in production_lot_raw:
+                code_part, desc_part = production_lot_raw.split(' - ', 1)
+                _append_unique_term(code_terms, code_part)
+                _append_unique_term(description_terms, desc_part)
+
+            normalized_raw = normalize_lot_code(production_lot_raw)
+            _append_unique_term(code_terms, normalized_raw)
+
+            if code_part:
+                normalized_code_part = normalize_lot_code(code_part)
+                _append_unique_term(code_terms, normalized_code_part)
+
+            _append_unique_term(description_terms, production_lot_raw)
+            if desc_part:
+                _append_unique_term(description_terms, desc_part)
+
+            conditions = []
+            for term in code_terms:
+                conditions.append("CAST(o.lotcod AS TEXT) ILIKE %s")
+                params.append(f"%{term}%")
+                conditions.append("COALESCE(lp.lotcod::TEXT, '') ILIKE %s")
+                params.append(f"%{term}%")
+            for term in description_terms:
+                conditions.append("COALESCE(lp.lotdes, '') ILIKE %s")
+                params.append(f"%{term}%")
+
+            if not conditions:
+                conditions.append("CAST(o.lotcod AS TEXT) ILIKE %s")
+                params.append(f"%{production_lot_raw}%")
+
             query += """
                 AND EXISTS (
                     SELECT 1
                     FROM ordem o
                     LEFT JOIN loteprod lp ON o.lotcod = lp.lotcod
                     WHERE o.ordped = p.pedido
-                      AND (CAST(o.lotcod AS TEXT) ILIKE %s OR COALESCE(lp.lotdes, '') ILIKE %s)
-                )
+                      AND (
             """
-            params.append(f"%{filters['production_lot']}%")
-            params.append(f"%{filters['production_lot']}%")
+            query += "                        " + "\n                        OR ".join(conditions) + "\n"
+            query += "                      )\n                )\n"
 
         if filters.get('line'):
             query += " AND COALESCE(linha.linha, '') ILIKE %s"
@@ -2264,6 +2332,8 @@ def orders_list():
         'end_date': _clean_filter_arg('end_date'),
     }
 
+    normalized_production_lot_filter = normalize_lot_code(filters_for_display['production_lot']) if filters_for_display['production_lot'] else ''
+
     filters_for_query = {
         key: (value or None)
         for key, value in filters_for_display.items()
@@ -2316,6 +2386,7 @@ def orders_list():
         production_lots=production_lots,
         applied_start_date=applied_start_date,
         applied_end_date=applied_end_date,
+        normalized_production_lot_filter=normalized_production_lot_filter,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )

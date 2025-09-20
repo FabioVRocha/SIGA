@@ -107,12 +107,13 @@
             <div class="form-group">
                 <label for="production_lot" class="form-label">Lote de Produção:</label>
                 {% set selected_production_lot = filters.production_lot or '' %}
+                {% set selected_production_lot_normalized = normalized_production_lot_filter or selected_production_lot %}
                 {% set production_lot_ns = namespace(found=False) %}
                 <select id="production_lot" name="production_lot" class="form-input">
                     <option value="" {% if not selected_production_lot %}selected{% endif %}>Todos</option>
                     {% for lot in production_lots %}
-                        {% if lot.value == selected_production_lot %}{% set production_lot_ns.found = True %}{% endif %}
-                        <option value="{{ lot.value }}" {% if lot.value == selected_production_lot %}selected{% endif %}>{{ lot.label }}</option>
+                        {% if lot.value == selected_production_lot or lot.value == selected_production_lot_normalized %}{% set production_lot_ns.found = True %}{% endif %}
+                        <option value="{{ lot.value }}" {% if lot.value == selected_production_lot or lot.value == selected_production_lot_normalized %}selected{% endif %}>{{ lot.label }}</option>
                     {% endfor %}
                     {% if selected_production_lot and not production_lot_ns.found %}
                         <option value="{{ selected_production_lot }}" selected>{{ selected_production_lot }}</option>
