@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Fluxo {{ flow.name }} · Orquestrador WhatsApp{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom: 2rem;">
+    <h2 style="margin-top: 0;">{{ flow.name }}</h2>
+    <p style="margin-bottom: 1.5rem; color: #64748b;">Atualize as informações gerais do fluxo e defina o nó de entrada.</p>
+
+    <form method="post" action="{{ request.url_for('update_flow_form', flow_id=flow.id) }}">
+        <div class="field">
+            <label for="flow-name">Nome</label>
+            <input id="flow-name" type="text" name="name" required value="{{ flow.name }}" />
+        </div>
+
+        <div class="field">
+            <label for="flow-description">Descrição</label>
+            <textarea id="flow-description" name="description" placeholder="Objetivo do fluxo">{{ flow.description or '' }}</textarea>
+        </div>
+
+        <div class="field">
+            <label for="flow-status">Status</label>
+            <select id="flow-status" name="status_value">
+                {% for status in flow_statuses %}
+                <option value="{{ status.value }}" {% if flow.status == status %}selected{% endif %}>{{ status.value }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="field">
+            <label for="entry-node">Nó de entrada</label>
+            <select id="entry-node" name="entry_node_id">
+                <option value="" {% if not flow.entry_node_id %}selected{% endif %}>— Selecionar depois —</option>
+                {% for node in flow.nodes | sort(attribute='key') %}
+                <option value="{{ node.id }}" {% if flow.entry_node_id == node.id %}selected{% endif %}>{{ node.key }} (#{{ node.id }})</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button type="submit">Salvar alterações</button>
+        <a class="button" style="margin-left: 0.5rem; background: #6b7280;" href="{{ request.url_for('console_home') }}">Voltar</a>
+    </form>
+</div>
+
+<div class="card">
+    <h3 style="margin-top: 0;">Nós do fluxo</h3>
+    <p>Adicione e configure os passos da conversa. Use o campo "Próximo nó" para encadear a execução.</p>
+
+    <section style="margin-bottom: 2rem;">
+        <h4>Novo nó</h4>
+        {% set new_node = new_node_form if new_node_form is defined else None %}
+        <form method="post" action="{{ request.url_for('add_node_form', flow_id=flow.id) }}">
+            <div class="field">
+                <label for="node-key">Identificador (key)</label>
+                <input id="node-key" type="text" name="key" required value="{{ new_node.key if new_node else '' }}" />
+            </div>
+
+            <div class="field">
+                <label for="node-type">Tipo de nó</label>
+                <select id="node-type" name="node_type">
+                    {% for node_type in node_types %}
+                    <option value="{{ node_type.value }}" {% if new_node and new_node.node_type == node_type.value %}selected{% endif %}>{{ node_type.value }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="node-config">Configuração (JSON)</label>
+                <textarea id="node-config" name="config_json" placeholder='{"message": "Olá"}'>{{ new_node.config_json if new_node else '' }}</textarea>
+            </div>
+
+            <div class="field">
+                <label for="node-next">Próximo nó</label>
+                <select id="node-next" name="next_node_id">
+                    <option value="" {% if not new_node or not new_node.next_node_id %}selected{% endif %}>Encerrar fluxo</option>
+                    {% for node in flow.nodes | sort(attribute='key') %}
+                    <option value="{{ node.id }}" {% if new_node and new_node.next_node_id == (node.id | string) %}selected{% endif %}>{{ node.key }} (#{{ node.id }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <button type="submit">Adicionar nó</button>
+        </form>
+    </section>
+
+    {% if flow.nodes %}
+    <div class="nodes-list">
+        {% set open_id = open_node_id if open_node_id is defined else None %}
+        {% for node in flow.nodes | sort(attribute='id') %}
+        <details {% if open_id and open_id == node.id %}open{% endif %}>
+            <summary>{{ node.key }} · {{ node.node_type.value }} (ID {{ node.id }})</summary>
+            <div style="margin: 1rem 0;">
+                <form method="post" action="{{ request.url_for('update_node_form', flow_id=flow.id, node_id=node.id) }}" id="update-node-{{ node.id }}">
+                    <div class="field">
+                        <label for="node-type-{{ node.id }}">Tipo</label>
+                        <select id="node-type-{{ node.id }}" name="node_type">
+                            {% for node_type in node_types %}
+                            <option value="{{ node_type.value }}" {% if node.node_type == node_type %}selected{% endif %}>{{ node_type.value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label for="config-{{ node.id }}">Configuração (JSON)</label>
+                        <textarea id="config-{{ node.id }}" name="config_json">{{ node.config | tojson(indent=2) }}</textarea>
+                    </div>
+
+                    <div class="field">
+                        <label for="next-{{ node.id }}">Próximo nó</label>
+                        <select id="next-{{ node.id }}" name="next_node_id">
+                            <option value="" {% if not node.next_node_id %}selected{% endif %}>Encerrar fluxo</option>
+                            {% for candidate in flow.nodes | sort(attribute='key') %}
+                            <option value="{{ candidate.id }}" {% if node.next_node_id == candidate.id %}selected{% endif %}>{{ candidate.key }} (ID {{ candidate.id }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="inline-actions" style="justify-content: flex-start;">
+                        <button type="submit">Salvar nó</button>
+                        <button type="submit" form="delete-node-{{ node.id }}" style="background: var(--danger);" onclick="return confirm('Deseja remover este nó?');">Excluir</button>
+                    </div>
+                </form>
+                <form method="post" action="{{ request.url_for('delete_node_form', flow_id=flow.id, node_id=node.id) }}" id="delete-node-{{ node.id }}"></form>
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>Nenhum nó cadastrado ainda. Utilize o formulário acima para iniciar o fluxo.</p>
+    {% endif %}
+</div>
+{% endblock %}

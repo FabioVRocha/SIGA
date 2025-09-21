@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Console do Orquestrador WhatsApp{% endblock %}</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            --bg: #f6f8fb;
+            --bg-dark: #1f242d;
+            --text: #1f2933;
+            --text-dark: #f8fafc;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --border: #d0d7de;
+            --border-dark: #334155;
+            --danger: #dc2626;
+            font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: inherit;
+            min-height: 100vh;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: var(--bg-dark);
+                color: var(--text-dark);
+            }
+        }
+
+        .topbar {
+            background: var(--primary);
+            color: #fff;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        .topbar nav a {
+            color: #fff;
+            margin-right: 1rem;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .topbar nav a:last-child {
+            margin-right: 0;
+        }
+
+        .container {
+            padding: 2rem;
+            max-width: 960px;
+            margin: 0 auto;
+        }
+
+        a.button,
+        button,
+        .btn {
+            display: inline-block;
+            background: var(--primary);
+            color: #fff;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        a.button:hover,
+        button:hover,
+        .btn:hover {
+            background: var(--primary-hover);
+        }
+
+        form .field {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 1rem;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        input[type="text"],
+        textarea,
+        select {
+            padding: 0.5rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            font-size: 1rem;
+        }
+
+        textarea {
+            min-height: 120px;
+            font-family: "Fira Code", "Courier New", monospace;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+        }
+
+        th, td {
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem;
+            text-align: left;
+        }
+
+        th {
+            background: rgba(37, 99, 235, 0.1);
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .card {
+                background: #111827;
+                box-shadow: 0 6px 14px rgba(15, 23, 42, 0.4);
+            }
+
+            input[type="text"],
+            textarea,
+            select {
+                background: #0f172a;
+                color: var(--text-dark);
+                border: 1px solid var(--border-dark);
+            }
+
+            th, td {
+                border-bottom: 1px solid var(--border-dark);
+            }
+        }
+
+        .feedback {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+        }
+
+        .feedback.success {
+            background: rgba(34, 197, 94, 0.15);
+            color: #166534;
+        }
+
+        .feedback.error {
+            background: rgba(220, 38, 38, 0.15);
+            color: var(--danger);
+        }
+
+        details summary {
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .inline-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <h1>Orquestrador WhatsApp</h1>
+        <nav>
+            <a href="{{ request.url_for('console_home') }}">Fluxos</a>
+        </nav>
+    </header>
+    <main class="container">
+        {% if message %}
+        <div class="feedback success">{{ message }}</div>
+        {% endif %}
+        {% if error %}
+        <div class="feedback error">{{ error }}</div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
