@@ -441,6 +441,14 @@
                         <li><a href="{{ url_for('gerencial_parameters') }}" class="sidebar-nav-item text-sm"><i class="fas fa-sliders-h"></i> Parâmetros</a></li>
                     </ul>
                 </li>
+                {% if whatsapp_orchestrator_url %}
+                <li>
+                    <a href="{{ whatsapp_orchestrator_url }}" class="sidebar-nav-item" target="_blank" rel="noopener noreferrer">
+                        <i class="fab fa-whatsapp"></i> Orquestrador WhatsApp
+                        <i class="fas fa-external-link-alt ml-auto text-xs opacity-75"></i>
+                    </a>
+                </li>
+                {% endif %}
             </ul>
         </nav>
         <div class="flex justify-end mt-8">

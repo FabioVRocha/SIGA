@@ -15,12 +15,31 @@ import json # Para lidar com dados JSON (para parâmetros de usuário)
 from decimal import Decimal, InvalidOperation
 
 # Importa as configurações do arquivo config.py
-from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE
+from config import (
+    DB_HOST,
+    DB_NAME,
+    DB_USER,
+    DB_PASS,
+    DB_PORT,
+    SECRET_KEY,
+    SYSTEM_VERSION,
+    LOGGED_IN_USER,
+    SIGA_DB_NAME,
+    USER_PARAMETERS_TABLE,
+    WHATSAPP_ORCHESTRATOR_URL,
+)
 
 # Inicializa a aplicação Flask
 app = Flask(__name__)
 # Define a chave secreta importada do config.py
 app.secret_key = SECRET_KEY
+
+
+@app.context_processor
+def inject_external_links():
+    """Disponibiliza URLs de integrações para todos os templates."""
+
+    return {"whatsapp_orchestrator_url": WHATSAPP_ORCHESTRATOR_URL}
 
 AVAILABLE_PARAMETER_REPORTS = [
     ('report_revenue_comparison', 'Comparativo de Faturamento'),
