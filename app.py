@@ -2254,6 +2254,16 @@ def orders_list():
         usuario_logado=session.get('username', 'Convidado')
     )
 
+@app.route('/sales_orders_list')
+@login_required
+def sales_orders_list():
+    return render_template(
+        'placeholder.html',
+        page_title="Pedidos de Vendas",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
 @app.route('/sales_returns_list')
 @login_required
 def sales_returns_list():

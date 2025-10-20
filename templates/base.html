@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -393,6 +393,7 @@
                     <ul id="vendas-submenu" class="ml-6 mt-1 hidden">
                         <li><a href="{{ url_for('invoices_mirror') }}" class="sidebar-nav-item text-sm"><i class="fas fa-file-invoice"></i> Espelho Notas Fiscais</a></li>
                         <li><a href="{{ url_for('orders_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-clipboard-list"></i> Pedidos</a></li>
+                        <li><a href="{{ url_for('sales_orders_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-file-contract"></i> Pedidos de Vendas</a></li>
                         <li><a href="{{ url_for('sales_returns_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-undo-alt"></i> Devoluções de Venda</a></li>
                     </ul>
                 </li>
@@ -575,3 +576,4 @@
     {% endblock %}
 </body>
 </html>
+
