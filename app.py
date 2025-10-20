@@ -12,34 +12,14 @@ from functools import wraps # Para criar um decorador de login
 from werkzeug.security import generate_password_hash, check_password_hash
 import re # Para expressões regulares, usado para parsear rgcdes
 import json # Para lidar com dados JSON (para parâmetros de usuário)
-from decimal import Decimal, InvalidOperation
 
 # Importa as configurações do arquivo config.py
-from config import (
-    DB_HOST,
-    DB_NAME,
-    DB_USER,
-    DB_PASS,
-    DB_PORT,
-    SECRET_KEY,
-    SYSTEM_VERSION,
-    LOGGED_IN_USER,
-    SIGA_DB_NAME,
-    USER_PARAMETERS_TABLE,
-    WHATSAPP_ORCHESTRATOR_URL,
-)
+from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE
 
 # Inicializa a aplicação Flask
 app = Flask(__name__)
 # Define a chave secreta importada do config.py
 app.secret_key = SECRET_KEY
-
-
-@app.context_processor
-def inject_external_links():
-    """Disponibiliza URLs de integrações para todos os templates."""
-
-    return {"whatsapp_orchestrator_url": WHATSAPP_ORCHESTRATOR_URL}
 
 AVAILABLE_PARAMETER_REPORTS = [
     ('report_revenue_comparison', 'Comparativo de Faturamento'),
@@ -70,23 +50,6 @@ def format_decimal_br(value, decimals=2):
         value = 0.0
     format_pattern = f"{{:,.{decimals}f}}"
     return format_pattern.format(value).replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def normalize_lot_code(value):
-    """Normalize lot codes to mirror PostgreSQL text formatting."""
-    if value is None:
-        return ''
-    value_str = str(value).strip()
-    if not value_str:
-        return ''
-    try:
-        decimal_candidate = Decimal(value_str.replace(',', '.'))
-    except (InvalidOperation, ValueError):
-        return value_str
-    normalized = format(decimal_candidate, 'f')
-    if '.' in normalized:
-        normalized = normalized.rstrip('0').rstrip('.')
-    return normalized or '0'
 
 
 app.jinja_env.filters["format_currency_brl"] = format_currency_brl
@@ -2053,112 +2016,6 @@ def transporters_list():
     return render_template('placeholder.html', page_title="Lista de Transportadoras", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
 
 # --- Rotas de Placeholder para o Menu (Vendas) ---
-
-
-
-def fetch_production_lots():
-    """Retorna os lotes de producao disponiveis para o filtro."""
-    lots = []
-    conn = get_erp_db_connection()
-
-    if not conn:
-        return lots
-
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT lotcod, COALESCE(lotdes, '')
-            FROM loteprod
-            WHERE lotcod IS NOT NULL
-            ORDER BY lotcod DESC
-            """
-        )
-        rows = cur.fetchall()
-        cur.close()
-
-        seen_values = set()
-        for lotcod, lotdes in rows:
-            if lotcod is None:
-                continue
-            raw_value = str(lotcod).strip()
-            normalized_value = normalize_lot_code(lotcod)
-            value = normalized_value or raw_value
-            if not value or value in seen_values:
-                continue
-            seen_values.add(value)
-            lot_description = (lotdes or '').strip()
-            label_code = value
-            label = label_code if not lot_description else f"{label_code} - {lot_description}"
-            lots.append({'value': value, 'label': label})
-    except Error as e:
-        print(f"Erro ao carregar lotes de producao: {e}")
-    finally:
-        if conn:
-            conn.close()
-
-    return lots
-
-
-def get_production_lot_view_metadata(conn):
-    """Recupera metadados da view de lotes de producao para dinamizar o filtro."""
-    metadata = {
-        'exists': False,
-        'order_column': None,
-        'code_columns': [],
-        'description_columns': [],
-    }
-
-    if not conn:
-        return metadata
-
-    cursor = None
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-              AND table_name = 'vw_produto_ordem_producao'
-            ORDER BY ordinal_position
-            """
-        )
-        columns = [row[0] for row in cursor.fetchall()]
-    except Error as e:
-        print(f"Erro ao obter metadados da view 'vw_produto_ordem_producao': {e}")
-        columns = []
-    finally:
-        if cursor:
-            cursor.close()
-
-    if not columns:
-        return metadata
-
-    metadata['exists'] = True
-
-    for column in columns:
-        lower_column = column.lower()
-        if metadata['order_column'] is None and 'pedido' in lower_column and 'produto' not in lower_column:
-            metadata['order_column'] = column
-        if 'lote' in lower_column:
-            if any(keyword in lower_column for keyword in ('descricao', 'descrição', 'descr', 'desc', 'nome')):
-                metadata['description_columns'].append(column)
-            else:
-                metadata['code_columns'].append(column)
-
-    if metadata['order_column'] is None:
-        for column in columns:
-            if 'pedido' in column.lower():
-                metadata['order_column'] = column
-                break
-
-    if not metadata['code_columns'] and metadata['description_columns']:
-        metadata['code_columns'] = list(metadata['description_columns'])
-
-    return metadata
-
-
 def fetch_orders(filters):
     """Busca os pedidos com agregações de quantidade, reservas, separações e carregamentos."""
     orders = []
@@ -2192,8 +2049,6 @@ def fetch_orders(filters):
         if column_check_cursor:
             column_check_cursor.close()
 
-    production_lot_view_metadata = get_production_lot_view_metadata(conn)
-
     try:
         cur = conn.cursor()
         query = """
@@ -2211,37 +2066,16 @@ def fetch_orders(filters):
                 GROUP BY prjmpedid
             ),
             linha_info AS (
-                SELECT
-                    sub.ordped AS pedido,
-                    STRING_AGG(sub.linha_value, ', ' ORDER BY sub.linha_value) AS linha,
-                    STRING_AGG(sub.code_value, ', ' ORDER BY sub.code_value) AS lot_codes,
-                    STRING_AGG(sub.desc_value, ', ' ORDER BY sub.desc_value) AS lot_descriptions,
-                    STRING_AGG(sub.label_value, ', ' ORDER BY sub.label_value) AS lot_labels
+                SELECT ordped AS pedido,
+                       STRING_AGG(linha_value, ', ') AS linha
                 FROM (
-                    SELECT DISTINCT
-                        o.ordped,
-                        TRIM(COALESCE(lp.lotdes, lp.lotcod::text, o.lotcod::text)) AS linha_value,
-                        NULLIF(TRIM(COALESCE(o.lotcod::text, lp.lotcod::text)), '') AS code_value,
-                        NULLIF(TRIM(lp.lotdes), '') AS desc_value,
-                        CASE
-                            WHEN NULLIF(TRIM(COALESCE(o.lotcod::text, lp.lotcod::text)), '') IS NOT NULL
-                                 AND NULLIF(TRIM(lp.lotdes), '') IS NOT NULL
-                                THEN TRIM(COALESCE(o.lotcod::text, lp.lotcod::text)) || ' - ' || TRIM(lp.lotdes)
-                            WHEN NULLIF(TRIM(COALESCE(o.lotcod::text, lp.lotcod::text)), '') IS NOT NULL
-                                THEN TRIM(COALESCE(o.lotcod::text, lp.lotcod::text))
-                            WHEN NULLIF(TRIM(lp.lotdes), '') IS NOT NULL
-                                THEN TRIM(lp.lotdes)
-                            ELSE NULL
-                        END AS label_value
+                    SELECT DISTINCT o.ordped, COALESCE(lp.lotdes, lp.lotcod::text) AS linha_value
                     FROM ordem o
                     LEFT JOIN loteprod lp ON o.lotcod = lp.lotcod
                     WHERE o.ordped IS NOT NULL
-                          AND COALESCE(
-                              NULLIF(TRIM(COALESCE(o.lotcod::text, lp.lotcod::text)), ''),
-                              NULLIF(TRIM(lp.lotdes), '')
-                          ) IS NOT NULL
+                          AND COALESCE(lp.lotdes, lp.lotcod::text) IS NOT NULL
                 ) sub
-                GROUP BY sub.ordped
+                GROUP BY ordped
             )
             SELECT
                 p.pedido,
@@ -2304,152 +2138,17 @@ def fetch_orders(filters):
                 print("Coluna 'lcacod' ausente na tabela 'pedido'; filtro 'Lote de Carga' foi ignorado.")
 
         if filters.get('production_lot'):
-            production_lot_raw = str(filters['production_lot']).strip()
-            code_terms = []
-            description_terms = []
-
-            def _append_unique_term(collection, value):
-                value = (value or '').strip()
-                if value and value not in collection:
-                    collection.append(value)
-
-            _append_unique_term(code_terms, production_lot_raw)
-
-            code_part = production_lot_raw
-            desc_part = ''
-            if ' - ' in production_lot_raw:
-                code_part, desc_part = production_lot_raw.split(' - ', 1)
-                _append_unique_term(code_terms, code_part)
-                _append_unique_term(description_terms, desc_part)
-
-            normalized_raw = normalize_lot_code(production_lot_raw)
-            _append_unique_term(code_terms, normalized_raw)
-
-            if code_part:
-                normalized_code_part = normalize_lot_code(code_part)
-                _append_unique_term(code_terms, normalized_code_part)
-
-            _append_unique_term(description_terms, production_lot_raw)
-            if desc_part:
-                _append_unique_term(description_terms, desc_part)
-
-            def build_legacy_production_lot_filter():
-                legacy_conditions = []
-                legacy_params = []
-
-                for term in code_terms:
-                    legacy_conditions.append("CAST(o.lotcod AS TEXT) ILIKE %s")
-                    legacy_params.append(f"%{term}%")
-                    legacy_conditions.append("COALESCE(lp.lotcod::TEXT, '') ILIKE %s")
-                    legacy_params.append(f"%{term}%")
-
-                for term in description_terms:
-                    legacy_conditions.append("COALESCE(lp.lotdes, '') ILIKE %s")
-                    legacy_params.append(f"%{term}%")
-
-                if not legacy_conditions:
-                    legacy_conditions.append("CAST(o.lotcod AS TEXT) ILIKE %s")
-                    legacy_params.append(f"%{production_lot_raw}%")
-
-                legacy_query_part = (
-                    "                AND EXISTS (\n"
-                    "                    SELECT 1\n"
-                    "                    FROM ordem o\n"
-                    "                    LEFT JOIN loteprod lp ON o.lotcod = lp.lotcod\n"
-                    "                    WHERE o.ordped = p.pedido\n"
-                    "                      AND (\n"
-                    "                        " + "\n                        OR ".join(legacy_conditions) + "\n"
-                    "                      )\n"
-                    "                )\n"
+            query += """
+                AND EXISTS (
+                    SELECT 1
+                    FROM ordem o
+                    LEFT JOIN loteprod lp ON o.lotcod = lp.lotcod
+                    WHERE o.ordped = p.pedido
+                      AND (CAST(o.lotcod AS TEXT) ILIKE %s OR COALESCE(lp.lotdes, '') ILIKE %s)
                 )
-
-                return legacy_query_part, legacy_params
-
-            use_production_lot_view = (
-                production_lot_view_metadata.get('exists')
-                and production_lot_view_metadata.get('order_column')
-                and (
-                    production_lot_view_metadata.get('code_columns')
-                    or production_lot_view_metadata.get('description_columns')
-                )
-            )
-
-            if use_production_lot_view:
-                search_code_columns = production_lot_view_metadata.get('code_columns') or []
-                search_description_columns = production_lot_view_metadata.get('description_columns') or []
-
-                if not search_code_columns and search_description_columns:
-                    search_code_columns = list(search_description_columns)
-
-                target_description_columns = search_description_columns or search_code_columns
-
-                def quote_identifier(name):
-                    return '"' + name.replace('"', '""') + '"'
-
-                view_conditions = []
-                view_params = []
-
-                code_terms_to_use = code_terms or [production_lot_raw]
-                for term in code_terms_to_use:
-                    for column in search_code_columns:
-                        column_expr = f"COALESCE(vpop.{quote_identifier(column)}::TEXT, '') ILIKE %s"
-                        view_conditions.append(column_expr)
-                        view_params.append(f"%{term}%")
-
-                for term in description_terms:
-                    for column in target_description_columns:
-                        column_expr = f"COALESCE(vpop.{quote_identifier(column)}::TEXT, '') ILIKE %s"
-                        view_conditions.append(column_expr)
-                        view_params.append(f"%{term}%")
-
-                if not view_conditions:
-                    fallback_columns = search_code_columns or target_description_columns
-                    if fallback_columns:
-                        column = fallback_columns[0]
-                        column_expr = f"COALESCE(vpop.{quote_identifier(column)}::TEXT, '') ILIKE %s"
-                        view_conditions.append(column_expr)
-                        view_params.append(f"%{production_lot_raw}%")
-
-                if view_conditions:
-                    order_column_sql = quote_identifier(production_lot_view_metadata['order_column'])
-                    
-                    def build_order_normalization_sql(value_expression: str) -> str:
-                        return (
-                            "COALESCE("
-                            "NULLIF(REGEXP_REPLACE(BTRIM(" + value_expression + "), '^0+', ''), ''), '0'"
-                            ")"
-                        )
-
-                    normalized_view_order = build_order_normalization_sql(
-                        f"COALESCE(vpop.{order_column_sql}::TEXT, '')"
-                    )
-                    normalized_pedido_order = build_order_normalization_sql(
-                        "COALESCE(CAST(p.pedido AS TEXT), '')"
-                    )
-
-                    query += "                AND EXISTS (\n"
-                    query += "                    SELECT 1\n"
-                    query += "                    FROM vw_produto_ordem_producao vpop\n"
-                    query += (
-                    "                    WHERE "
-                        + normalized_view_order
-                        + " = "
-                        + normalized_pedido_order
-                        + "\n"
-                    )
-                    query += "                      AND (\n"
-                    query += "                        " + "\n                        OR ".join(view_conditions) + "\n"
-                    query += "                      )\n"
-                    query += "                )\n"
-                    params.extend(view_params)
-                else:
-                    legacy_query_part, legacy_params = build_legacy_production_lot_filter()
-                    query += legacy_query_part
-                    params.extend(legacy_params)
-            else:
-                legacy_query_part, legacy_params = build_legacy_production_lot_filter()
-                query += legacy_query_part
-                params.extend(legacy_params)
+            """
+            params.append(f"%{filters['production_lot']}%")
+            params.append(f"%{filters['production_lot']}%")
 
         if filters.get('line'):
             query += " AND COALESCE(linha.linha, '') ILIKE %s"
@@ -2510,58 +2209,31 @@ def orders_list():
         day=calendar.monthrange(today.year, today.month)[1]
     )
 
-    def _clean_filter_arg(arg_name: str) -> str:
-        value = request.args.get(arg_name)
-        return value.strip() if value else ''
+    start_date_param = request.args.get('start_date')
+    end_date_param = request.args.get('end_date')
 
-    filters_for_display = {
-        'order_number': _clean_filter_arg('order_number'),
-        'client_code': _clean_filter_arg('client_code'),
-        'client_name': _clean_filter_arg('client_name'),
-        'city': _clean_filter_arg('city'),
-        'state': _clean_filter_arg('state'),
-        'load_lot': _clean_filter_arg('load_lot'),
-        'production_lot': _clean_filter_arg('production_lot'),
-        'line': _clean_filter_arg('line'),
-        'start_date': _clean_filter_arg('start_date'),
-        'end_date': _clean_filter_arg('end_date'),
+    filters = {
+        'order_number': (request.args.get('order_number') or '').strip() or None,
+        'client_code': (request.args.get('client_code') or '').strip() or None,
+        'client_name': (request.args.get('client_name') or '').strip() or None,
+        'city': (request.args.get('city') or '').strip() or None,
+        'state': (request.args.get('state') or '').strip() or None,
+        'load_lot': (request.args.get('load_lot') or '').strip() or None,
+        'production_lot': (request.args.get('production_lot') or '').strip() or None,
+        'line': (request.args.get('line') or '').strip() or None,
+        'start_date': (
+            (start_date_param or '').strip() or None
+            if start_date_param is not None
+            else first_day_of_month.strftime('%Y-%m-%d')
+        ),
+        'end_date': (
+            (end_date_param or '').strip() or None
+            if end_date_param is not None
+            else last_day_of_month.strftime('%Y-%m-%d')
+        ),
     }
 
-    normalized_production_lot_filter = normalize_lot_code(filters_for_display['production_lot']) if filters_for_display['production_lot'] else ''
-
-    filters_for_query = {
-        key: (value or None)
-        for key, value in filters_for_display.items()
-    }
-
-    has_non_date_filters = any(
-        filters_for_query[key]
-        for key in (
-            'order_number',
-            'client_code',
-            'client_name',
-            'city',
-            'state',
-            'load_lot',
-            'production_lot',
-            'line',
-        )
-    )
-    has_explicit_date_filters = (
-        filters_for_query['start_date'] is not None
-        or filters_for_query['end_date'] is not None
-    )
-
-    if not has_non_date_filters and not has_explicit_date_filters:
-        filters_for_query['start_date'] = first_day_of_month.strftime('%Y-%m-%d')
-        filters_for_query['end_date'] = last_day_of_month.strftime('%Y-%m-%d')
-
-    applied_start_date = filters_for_query['start_date']
-    applied_end_date = filters_for_query['end_date']
-
-    orders, error_message = fetch_orders(filters_for_query)
-
-    production_lots = fetch_production_lots()
+    orders, error_message = fetch_orders(filters)
 
     if error_message:
         flash(error_message, 'danger')
@@ -2576,12 +2248,8 @@ def orders_list():
     return render_template(
         'orders_list.html',
         orders=orders,
-        filters=filters_for_display,
+        filters=filters,
         totals=totals,
-        production_lots=production_lots,
-        applied_start_date=applied_start_date,
-        applied_end_date=applied_end_date,
-        normalized_production_lot_filter=normalized_production_lot_filter,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )

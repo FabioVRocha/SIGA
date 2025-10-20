@@ -21,6 +21,3 @@ SECRET_KEY = 'sua_chave_secreta_muito_segura_e_complexa_aqui'
 # Variáveis de exemplo para o rodapé (em um sistema real, viriam de um banco de dados ou configuração)
 SYSTEM_VERSION = "1.0.0"
 LOGGED_IN_USER = "Admin" # Será sobrescrito pelo nome de usuário da sessão
-
-# URL pública do orquestrador do WhatsApp. Ajuste conforme o endereço onde o serviço está exposto.
-WHATSAPP_ORCHESTRATOR_URL = "http://localhost:8000"
