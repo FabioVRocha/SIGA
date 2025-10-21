@@ -158,26 +158,6 @@
         </div>
         <form id="filterForm" action="{{ url_for('orders_list') }}" method="GET" class="space-y-4">
             <div class="form-group">
-                <label for="order_number" class="form-label">Pedido:</label>
-                <input type="text" id="order_number" name="order_number" class="form-input" value="{{ filters.order_number or '' }}" placeholder="Número do pedido">
-            </div>
-            <div class="form-group">
-                <label for="client_code" class="form-label">Código do Cliente:</label>
-                <input type="text" id="client_code" name="client_code" class="form-input" value="{{ filters.client_code or '' }}" placeholder="Código do cliente">
-            </div>
-            <div class="form-group">
-                <label for="client_name" class="form-label">Nome do Cliente:</label>
-                <input type="text" id="client_name" name="client_name" class="form-input" value="{{ filters.client_name or '' }}" placeholder="Nome do cliente">
-            </div>
-            <div class="form-group">
-                <label for="city" class="form-label">Cidade:</label>
-                <input type="text" id="city" name="city" class="form-input" value="{{ filters.city or '' }}" placeholder="Cidade de entrega">
-            </div>
-            <div class="form-group">
-                <label for="state" class="form-label">UF:</label>
-                <input type="text" id="state" name="state" class="form-input" value="{{ filters.state or '' }}" placeholder="Estado (UF)">
-            </div>
-            <div class="form-group">
                 <label for="load_lot" class="form-label">Lote de Carga:</label>
                 <input type="text" id="load_lot" name="load_lot" class="form-input" value="{{ filters.load_lot or '' }}" placeholder="Código ou descrição do lote de carga">
             </div>

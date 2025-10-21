@@ -2213,26 +2213,6 @@ def fetch_orders(filters):
 
         params = []
 
-        if filters.get('order_number'):
-            query += " AND CAST(p.pedido AS TEXT) ILIKE %s"
-            params.append(f"%{filters['order_number']}%")
-
-        if filters.get('client_code'):
-            query += " AND CAST(p.pedcliente AS TEXT) ILIKE %s"
-            params.append(f"%{filters['client_code']}%")
-
-        if filters.get('client_name'):
-            query += " AND COALESCE(e.empnome, '') ILIKE %s"
-            params.append(f"%{filters['client_name']}%")
-
-        if filters.get('city'):
-            query += " AND COALESCE(c.cidnome, '') ILIKE %s"
-            params.append(f"%{filters['city']}%")
-
-        if filters.get('state'):
-            query += " AND COALESCE(c.estado, '') ILIKE %s"
-            params.append(f"%{filters['state']}%")
-
         if filters.get('load_lot'):
             if has_lcacod_column:
                 query += " AND (CAST(p.lcacod AS TEXT) ILIKE %s OR COALESCE(lc.lcades, '') ILIKE %s)"
@@ -2327,11 +2307,6 @@ def orders_list():
     ]
 
     filters = {
-        'order_number': (request.args.get('order_number') or '').strip() or None,
-        'client_code': (request.args.get('client_code') or '').strip() or None,
-        'client_name': (request.args.get('client_name') or '').strip() or None,
-        'city': (request.args.get('city') or '').strip() or None,
-        'state': (request.args.get('state') or '').strip() or None,
         'load_lot': (request.args.get('load_lot') or '').strip() or None,
         'production_lots': production_lots_param,
         'line': (request.args.get('line') or '').strip() or None,
