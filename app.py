@@ -403,6 +403,38 @@ def get_distinct_cities():
             conn.close()
     return cities
 
+def get_distinct_production_lots():
+    """Busca todos os lotes de producao disponiveis no ERP."""
+    conn = get_erp_db_connection()
+    production_lots = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT lotcod, COALESCE(lotdes, '')
+                FROM loteprod
+                ORDER BY COALESCE(NULLIF(lotdes, ''), lotcod::text)
+                """
+            )
+            rows = cur.fetchall()
+            cur.close()
+            for lotcod, lotdes in rows:
+                code = str(lotcod) if lotcod is not None else ''
+                description = lotdes or ''
+                production_lots.append(
+                    {
+                        'code': code,
+                        'description': description,
+                    }
+                )
+        except Error as e:
+            print(f'Erro ao buscar lotes de producao distintos: {e}')
+        finally:
+            if conn:
+                conn.close()
+    return production_lots
+
 def get_distinct_vendors():
     """Busca todos os vendedores distintos e seus status presentes no ERP."""
     conn = get_erp_db_connection()
@@ -2139,19 +2171,19 @@ def fetch_orders(filters):
             else:
                 print("Coluna 'lcacod' ausente na tabela 'pedido'; filtro 'Lote de Carga' foi ignorado.")
 
-        if filters.get('production_lot'):
-            query += """
+        production_lots_filter = filters.get('production_lots') or []
+        if production_lots_filter:
+            placeholders = ', '.join(['%s'] * len(production_lots_filter))
+            query += f"""
                 AND EXISTS (
                     SELECT 1
                     FROM projmovi pm
                     JOIN ordem o ON o.ordem = pm.prjmcontr
-                    LEFT JOIN loteprod lp ON o.lotcod = lp.lotcod
                     WHERE pm.prjmpedid = p.pedido
-                      AND (CAST(o.lotcod AS TEXT) ILIKE %s OR COALESCE(lp.lotdes, '') ILIKE %s)
+                      AND CAST(o.lotcod AS TEXT) IN ({placeholders})
                 )
             """
-            params.append(f"%{filters['production_lot']}%")
-            params.append(f"%{filters['production_lot']}%")
+            params.extend(production_lots_filter)
 
         if filters.get('line'):
             query += " AND COALESCE(linha.linha, '') ILIKE %s"
@@ -2214,6 +2246,9 @@ def orders_list():
 
     start_date_param = request.args.get('start_date')
     end_date_param = request.args.get('end_date')
+    production_lots_param = [
+        value.strip() for value in request.args.getlist('production_lots') if value and value.strip()
+    ]
 
     filters = {
         'order_number': (request.args.get('order_number') or '').strip() or None,
@@ -2222,7 +2257,7 @@ def orders_list():
         'city': (request.args.get('city') or '').strip() or None,
         'state': (request.args.get('state') or '').strip() or None,
         'load_lot': (request.args.get('load_lot') or '').strip() or None,
-        'production_lot': (request.args.get('production_lot') or '').strip() or None,
+        'production_lots': production_lots_param,
         'line': (request.args.get('line') or '').strip() or None,
         'start_date': (start_date_param or '').strip() or None,
         'end_date': (end_date_param or '').strip() or None,
@@ -2249,6 +2284,7 @@ def orders_list():
         'orders_list.html',
         orders=orders,
         filters=filters,
+        production_lot_options=get_distinct_production_lots(),
         totals=totals,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
