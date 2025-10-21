@@ -2135,7 +2135,7 @@ def fetch_orders(filters):
     if not conn:
         return orders, "Não foi possível conectar ao banco de dados do ERP."
 
-    has_lcacod_column = False
+    has_lcapecod_column = False
     column_check_cursor = None
 
     try:
@@ -2146,15 +2146,15 @@ def fetch_orders(filters):
                 SELECT 1
                 FROM information_schema.columns
                 WHERE table_name = 'pedido'
-                  AND column_name = 'lcacod'
+                  AND column_name = 'lcapecod'
             )
             """
         )
         result = column_check_cursor.fetchone()
         if result:
-            has_lcacod_column = result[0]
+            has_lcapecod_column = result[0]
     except Error as e:
-        print(f"Erro ao verificar a coluna 'lcacod' na tabela 'pedido': {e}")
+        print(f"Erro ao verificar a coluna 'lcapecod' na tabela 'pedido': {e}")
     finally:
         if column_check_cursor:
             column_check_cursor.close()
@@ -2240,27 +2240,27 @@ def fetch_orders(filters):
             LEFT JOIN proj_totals proj ON p.pedido = proj.pedido
             LEFT JOIN linha_info linha ON p.pedido = linha.pedido
         """
-        if has_lcacod_column:
-            query += "            LEFT JOIN lotecar lc ON p.lcacod = lc.lcacod\n"
+        if has_lcapecod_column:
+            query += "            LEFT JOIN lotecar lc ON p.lcapecod = lc.lcacod\n"
         query += "            WHERE 1 = 1\n"
 
         params = []
 
         load_lots_filter = filters.get('load_lots') or []
         if load_lots_filter:
-            if has_lcacod_column:
+            if has_lcapecod_column:
                 placeholders = ', '.join(['%s'] * len(load_lots_filter))
-                query += f" AND CAST(p.lcacod AS TEXT) IN ({placeholders})"
+                query += f" AND CAST(p.lcapecod AS TEXT) IN ({placeholders})"
                 params.extend(load_lots_filter)
             else:
-                print("Coluna 'lcacod' ausente na tabela 'pedido'; filtro 'Lote de Carga' foi ignorado.")
+                print("Coluna 'lcapecod' ausente na tabela 'pedido'; filtro 'Lote de Carga' foi ignorado.")
         elif filters.get('load_lot'):
-            if has_lcacod_column:
-                query += " AND (CAST(p.lcacod AS TEXT) ILIKE %s OR COALESCE(lc.lcades, '') ILIKE %s)"
+            if has_lcapecod_column:
+                query += " AND (CAST(p.lcapecod AS TEXT) ILIKE %s OR COALESCE(lc.lcades, '') ILIKE %s)"
                 params.append(f"%{filters['load_lot']}%")
                 params.append(f"%{filters['load_lot']}%")
             else:
-                print("Coluna 'lcacod' ausente na tabela 'pedido'; filtro 'Lote de Carga' foi ignorado.")
+                print("Coluna 'lcapecod' ausente na tabela 'pedido'; filtro 'Lote de Carga' foi ignorado.")
 
         production_lots_filter = filters.get('production_lots') or []
         if production_lots_filter:
