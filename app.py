@@ -414,7 +414,7 @@ def get_distinct_production_lots():
                 """
                 SELECT lotcod, COALESCE(lotdes, '')
                 FROM loteprod
-                ORDER BY COALESCE(NULLIF(lotdes, ''), lotcod::text)
+                ORDER BY lotcod DESC, COALESCE(lotdes, '') DESC
                 """
             )
             rows = cur.fetchall()
@@ -2098,18 +2098,43 @@ def fetch_orders(filters):
                 GROUP BY prjmpedid
             ),
             linha_info AS (
-                SELECT sub.prjmpedid AS pedido,
-                       STRING_AGG(sub.linha_value, ', ') AS linha
+                SELECT
+                    sub.pedido,
+                    (ARRAY_AGG(sub.linha_value ORDER BY sub.priority))[1] AS linha
                 FROM (
-                    SELECT DISTINCT pm.prjmpedid,
-                                    COALESCE(lp.lotdes, lp.lotcod::text) AS linha_value
-                    FROM projmovi pm
-                    JOIN ordem o ON o.ordem = pm.prjmcontr
-                    LEFT JOIN loteprod lp ON o.lotcod = lp.lotcod
-                    WHERE pm.prjmpedid IS NOT NULL
-                          AND COALESCE(lp.lotdes, lp.lotcod::text) IS NOT NULL
+                    SELECT DISTINCT
+                        base_data.pedido,
+                        CASE
+                            WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 'MADRESILVA'
+                            WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 'PETRA'
+                            WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 'GARLAND'
+                            WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 'GLASSMADRE'
+                            WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 'CAVILHAS'
+                            WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 'SOLARE'
+                            WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 'ESPUMA'
+                            ELSE 'OUTROS'
+                        END AS linha_value,
+                        CASE
+                            WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 1
+                            WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 2
+                            WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 3
+                            WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 4
+                            WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 5
+                            WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 6
+                            WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 7
+                            ELSE 999
+                        END AS priority
+                    FROM (
+                        SELECT
+                            pp.pedido,
+                            UPPER(COALESCE(g.grunome, '')) AS group_name_upper
+                        FROM pedprodu pp
+                        LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+                        LEFT JOIN grupo g ON g.grupo = prod.grupo
+                        WHERE pp.pedido IS NOT NULL
+                    ) base_data
                 ) sub
-                GROUP BY sub.prjmpedid
+                GROUP BY sub.pedido
             )
             SELECT
                 p.pedido,
@@ -2129,7 +2154,7 @@ def fetch_orders(filters):
                 COALESCE(proj.reservado, 0) AS reservado,
                 COALESCE(proj.separado, 0) AS separado,
                 COALESCE(proj.carregado, 0) AS carregado,
-                COALESCE(linha.linha, '') AS linha
+                COALESCE(linha.linha, 'OUTROS') AS linha
             FROM pedido p
             LEFT JOIN empresa e ON p.pedcliente = e.empresa
             LEFT JOIN cidade c ON p.pedentcid = c.cidade
