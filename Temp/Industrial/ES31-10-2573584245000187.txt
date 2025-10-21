@@ -1,0 +1,386 @@
+#USO#1#FORWOOD#2#31/10/25#3#73.584.245/0001-87#5#MADRESILVA INDUSTRIA DE MOVEIS LTDA#6#             
+        31/10/25         2                                                                          
+PCXLIMIT31/10/25        12                                                                          
+PIMPNF0131/10/25       108                                                                          
+PMDFI01731/10/25         2                                                                          
+PNFEI01731/10/25       119                                                                          
+PNFLAYOU31/10/25         3                                                                          
+TAB_FUNC31/10/25         5                                                                          
+TAB_LIMI31/10/25        11                                                                          
+TACOMPAN31/10/25       251                                                                          
+TASSANEX31/10/25         1                                                                          
+TASSDADT31/10/25        20                                                                          
+TASSHIST31/10/25        16                                                                          
+TASSISTE31/10/25       840                                                                          
+TASSISTL31/10/25        71                                                                          
+TBCOPARA31/10/25         1                                                                          
+TCAIPAR331/10/25        12                                                                          
+TCCE    31/10/25         1                                                                          
+TCHPRE0331/10/25         1                                                                          
+TCMEMPRE31/10/25        42                                                                          
+TCOMIPED31/10/25       576                                                                          
+TCOMNF  31/10/25        51                                                                          
+TCOMPRA 31/10/25       117                                                                          
+TCOMPRA131/10/25        72                                                                          
+TCOMPRA231/10/25        72                                                                          
+TCONDPAG31/10/25         1                                                                          
+TCONFIGM31/10/25       141                                                                          
+TCONFPAR31/10/25         3                                                                          
+TCREMUL131/10/25        69                                                                          
+TDEPDUPL31/10/25        76                                                                          
+TDEPOSIT31/10/25       259                                                                          
+TDUPDE1031/10/25        29                                                                          
+TDUPDES 31/10/25         3                                                                          
+TDUPDES131/10/25        12                                                                          
+TEMPRESA31/10/25        85                                                                          
+TESTRUTU31/10/25       261                                                                          
+TETIMANU31/10/25        38                                                                          
+TFUNCION31/10/25         5                                                                          
+TGARMOVI31/10/25         1                                                                          
+TGRMOTPE31/10/25         3                                                                          
+TGRUPECO31/10/25         3                                                                          
+TGRUPO  31/10/25        14                                                                          
+TINVENTA31/10/25        26                                                                          
+TLACMUL231/10/25         6                                                                          
+TLANCA1431/10/25         3                                                                          
+TLANCAI 31/10/25        23                                                                          
+TLANCAI231/10/25       374                                                                          
+TLANCAI331/10/25        52                                                                          
+TLANCAI531/10/25         2                                                                          
+TLANCAI631/10/25        26                                                                          
+TLOTECAR31/10/25       281                                                                          
+TLOTECT 31/10/25        11                                                                          
+TLOTEPRO31/10/25        40                                                                          
+TMDF    31/10/25         2                                                                          
+TMDFEVEE31/10/25         2                                                                          
+TMDFPRED31/10/25         4                                                                          
+TMDFVEIC31/10/25         3                                                                          
+TMETAS  31/10/25        16                                                                          
+TMOVIREP31/10/25        62                                                                          
+TNOTAE  31/10/25       201                                                                          
+TNOTANT 31/10/25         1                                                                          
+TNOTASA131/10/25        42                                                                          
+TNOTASAI31/10/25       224                                                                          
+TNOTCALC31/10/25        14                                                                          
+TOBSNOTE31/10/25         3                                                                          
+TOPERA  31/10/25         7                                                                          
+TORDEM  31/10/25       245                                                                          
+TPARBOLE31/10/25         1                                                                          
+TPASFASE31/10/25        34                                                                          
+TPEDHIST31/10/25       109                                                                          
+TPEDIDO 31/10/25      2863                                                                          
+TPEDIDOS31/10/25         4                                                                          
+TPERDAS 31/10/25        10                                                                          
+TPERDENT31/10/25       144                                                                          
+TPERIODO31/10/25         1                                                                          
+TPLANILH31/10/25        55                                                                          
+TPREENSA31/10/25        39                                                                          
+TPROCESS31/10/25       201                                                                          
+TPRODUTO31/10/25       847                                                                          
+TPROJMOV31/10/25         2                                                                          
+TPROJPED31/10/25        33                                                                          
+TRECMUL131/10/25        80                                                                          
+TREPORT231/10/25         4                                                                          
+TREQCOMP31/10/25        77                                                                          
+TREQORDE31/10/25        18                                                                          
+TREQUIS131/10/25      1088                                                                          
+TTABPRVE31/10/25       150                                                                          
+TTITALT 31/10/25       261                                                                          
+TTITBANC31/10/25       213                                                                          
+TTITCTBD31/10/25        18                                                                          
+TTITPROR31/10/25        22                                                                          
+TTITUOUT31/10/25       139                                                                          
+TTOQOPIN31/10/25         5                                                                          
+TTRANSPO31/10/25         7                                                                          
+TTRAVEIC31/10/25         9                                                                          
+TUMALTIT31/10/25         1                                                                          
+TUMALTTI31/10/25        13                                                                          
+TUMASSTE31/10/25       125                                                                          
+TVLRANTE31/10/25        72                                                                          
+TVLRLA1131/10/25        13                                                                          
+TVLRLA1231/10/25        82                                                                          
+TVLRLA2131/10/25        70                                                                          
+TVLRLA2231/10/25        30                                                                          
+TVLRLA2331/10/25         1                                                                          
+TVLRLA2431/10/25         3                                                                          
+TVLRLAUX31/10/25        65                                                                          
+TVOLUME 31/10/25       240                                                                          
+WACABCO231/10/25         6                                                                          
+WACABCON31/10/25        29                                                                          
+WACOESAS31/10/25        12                                                                          
+WANAFATF31/10/25         1                                                                          
+WANULANF31/10/25         2                                                                          
+WASSDADZ31/10/25        83                                                                          
+WASSFILR31/10/25         6                                                                          
+WASSIST231/10/25         1                                                                          
+WASSISTE31/10/25       347                                                                          
+WASSMOTI31/10/25         5                                                                          
+WASSMREL31/10/25       114                                                                          
+WASSREL 31/10/25       101                                                                          
+WASSSITU31/10/25        23                                                                          
+WBANCO  31/10/25         4                                                                          
+WBLOQCOB31/10/25         1                                                                          
+WBLOQPED31/10/25         1                                                                          
+WBWSERTI31/10/25         9                                                                          
+WCAILAN 31/10/25       208                                                                          
+WCCUSTO 31/10/25       138                                                                          
+WCHPRE0331/10/25        21                                                                          
+WCHPRE0431/10/25         2                                                                          
+WCHPRE0631/10/25         2                                                                          
+WCHPRE7731/10/25         1                                                                          
+WCIDADE 31/10/25        26                                                                          
+WCINUTNF31/10/25         1                                                                          
+WCLASSI 31/10/25         9                                                                          
+WCMAQPRO31/10/25         2                                                                          
+WCOMLIB331/10/25         6                                                                          
+WCOMNF  31/10/25         5                                                                          
+WCONDPAG31/10/25        69                                                                          
+WCONFEXC31/10/25        17                                                                          
+WCONFG0231/10/25       110                                                                          
+WCONVERS31/10/25         2                                                                          
+WCOPIAPR31/10/25       135                                                                          
+WCORREIO31/10/25         2                                                                          
+WCTEMDFE31/10/25         5                                                                          
+WDEPOSIT31/10/25       232                                                                          
+WDEVOL0731/10/25         6                                                                          
+WDEVOL0831/10/25         6                                                                          
+WDEVOL3131/10/25         6                                                                          
+WDTVENC 31/10/25        27                                                                          
+WDULAYO231/10/25         2                                                                          
+WDUPDE1831/10/25         2                                                                          
+WEMBPRO 31/10/25         1                                                                          
+WEMPRE1531/10/25        24                                                                          
+WEMPRE2 31/10/25        19                                                                          
+WEMPRES331/10/25         2                                                                          
+WEMPRES431/10/25         1                                                                          
+WEMPRESA31/10/25       648                                                                          
+WENCEOS 31/10/25         1                                                                          
+WENTDIGI31/10/25         1                                                                          
+WENTSAID31/10/25         1                                                                          
+WES0501731/10/25        66                                                                          
+WES0501831/10/25       406                                                                          
+WES0501931/10/25         1                                                                          
+WES0502031/10/25       433                                                                          
+WES0502131/10/25      1477                                                                          
+WES0502231/10/25       903                                                                          
+WES0502331/10/25       870                                                                          
+WES0502531/10/25         1                                                                          
+WES0502831/10/25       515                                                                          
+WESEXPRE31/10/25        49                                                                          
+WESTADO 31/10/25         2                                                                          
+WESTRUT131/10/25        16                                                                          
+WESTRUT231/10/25       105                                                                          
+WESTRUT_31/10/25       322                                                                          
+WETATEC 31/10/25         9                                                                          
+WETIPEDM31/10/25        31                                                                          
+WETLAYO531/10/25        30                                                                          
+WETLAYOU31/10/25         1                                                                          
+WEVEMENU31/10/25         1                                                                          
+WEVENOTA31/10/25         1                                                                          
+WEXCECOE31/10/25        14                                                                          
+WEXOTIPL31/10/25        25                                                                          
+WEXPCCUS31/10/25         1                                                                          
+WFASES  31/10/25         6                                                                          
+WFASORD 31/10/25        29                                                                          
+WFATULOT31/10/25        27                                                                          
+WFATUR1831/10/25        10                                                                          
+WFATURE131/10/25         3                                                                          
+WFBOLETO31/10/25       106                                                                          
+WFCMAT  31/10/25        18                                                                          
+WFORMLOT31/10/25       124                                                                          
+WFUNCION31/10/25         4                                                                          
+WFUNCOES31/10/25         5                                                                          
+WGARMOVI31/10/25         2                                                                          
+WGASTOSM31/10/25         3                                                                          
+WGEXTGEP31/10/25         1                                                                          
+WGEXTGER31/10/25        77                                                                          
+WGRMOTPE31/10/25         1                                                                          
+WGRUPO  31/10/25        35                                                                          
+WHISCUST31/10/25         2                                                                          
+WHISMATE31/10/25         1                                                                          
+WHISPED 31/10/25       191                                                                          
+WHISTNOT31/10/25         9                                                                          
+WHISTORI31/10/25         2                                                                          
+WIMPARQL31/10/25         2                                                                          
+WIMPNF0331/10/25         1                                                                          
+WINVENTA31/10/25        11                                                                          
+WITEENT 31/10/25       138                                                                          
+WITENS  31/10/25       319                                                                          
+WITESAI 31/10/25        22                                                                          
+WLACAR1431/10/25         1                                                                          
+WLBOLETO31/10/25       110                                                                          
+WLCEMPR131/10/25         3                                                                          
+WLIMCRED31/10/25      1020                                                                          
+WLIMPTEM31/10/25         2                                                                          
+WLISCOMP31/10/25        55                                                                          
+WLISGRUP31/10/25         6                                                                          
+WLOGACES31/10/25         9                                                                          
+WLOGUSER31/10/25         2                                                                          
+WLOTECA231/10/25       129                                                                          
+WLOTECAR31/10/25       331                                                                          
+WLOTEFIL31/10/25       176                                                                          
+WLOTPRO431/10/25        35                                                                          
+WLOTPRO531/10/25         3                                                                          
+WLOTPROD31/10/25       110                                                                          
+WMAQUINA31/10/25         2                                                                          
+WMDFCARG31/10/25         1                                                                          
+WMDFE   31/10/25         5                                                                          
+WMDFNF  31/10/25         2                                                                          
+WMENUCCP31/10/25         1                                                                          
+WMETAS  31/10/25         1                                                                          
+WMFLUXOC31/10/25        62                                                                          
+WMODCOBR31/10/25         7                                                                          
+WMOTPERD31/10/25        22                                                                          
+WMOVCFOP31/10/25         6                                                                          
+WMOVIR0131/10/25         2                                                                          
+WMOVIREP31/10/25         8                                                                          
+WMUCOLET31/10/25        40                                                                          
+WMUENSAC31/10/25         1                                                                          
+WMULISTP31/10/25         6                                                                          
+WMUOPLCC31/10/25       176                                                                          
+WMUOPNF 31/10/25         3                                                                          
+WMUPROG131/10/25        25                                                                          
+WMUREL1031/10/25         1                                                                          
+WMURELCO31/10/25        27                                                                          
+WMURELDE31/10/25         2                                                                          
+WMURELE531/10/25        11                                                                          
+WMURELNE31/10/25         1                                                                          
+WMURELNF31/10/25       212                                                                          
+WMURELP131/10/25       166                                                                          
+WMURELP331/10/25        18                                                                          
+WMURELP931/10/25         9                                                                          
+WMURELPE31/10/25       221                                                                          
+WMURESVE31/10/25         8                                                                          
+WMURLPEF31/10/25        21                                                                          
+WMUTITBA31/10/25         1                                                                          
+WMUTODOS31/10/25       728                                                                          
+WNENT01 31/10/25        18                                                                          
+WNFCAR0131/10/25         6                                                                          
+WNFDI02 31/10/25         1                                                                          
+WNFEI00831/10/25        26                                                                          
+WNFEIPGT31/10/25         8                                                                          
+WNOTAS3 31/10/25         1                                                                          
+WNOTASAI31/10/25       325                                                                          
+WNOTASW 31/10/25       166                                                                          
+WNOTASW331/10/25        10                                                                          
+WNOTENT 31/10/25       151                                                                          
+WNRNOTSA31/10/25       393                                                                          
+WNTVASS831/10/25        31                                                                          
+WNTVPED131/10/25       562                                                                          
+WNTVPED831/10/25       227                                                                          
+WOBSOPNO31/10/25        10                                                                          
+WOPERA  31/10/25         4                                                                          
+WORDEM  31/10/25       244                                                                          
+WORDEM1131/10/25         2                                                                          
+WORDEM1631/10/25         3                                                                          
+WPAGARD 31/10/25         3                                                                          
+WPAGART 31/10/25        21                                                                          
+WPASFAS331/10/25        58                                                                          
+WPEDCART31/10/25        19                                                                          
+WPEDID1831/10/25        23                                                                          
+WPEDID7731/10/25       131                                                                          
+WPEDIDO331/10/25       166                                                                          
+WPEDIDO431/10/25        33                                                                          
+WPEDIDO831/10/25         6                                                                          
+WPEDIDOS31/10/25       897                                                                          
+WPEDOB0031/10/25       231                                                                          
+WPEDOBSS31/10/25         5                                                                          
+WPEDRSPR31/10/25         2                                                                          
+WPEDSITU31/10/25        24                                                                          
+WPERDAS 31/10/25        30                                                                          
+WPERDENT31/10/25        28                                                                          
+WPERIODO31/10/25         1                                                                          
+WPGEFILT31/10/25         2                                                                          
+WPGPRO0531/10/25        29                                                                          
+WPLANILH31/10/25        85                                                                          
+WPLANOC 31/10/25         5                                                                          
+WPOSIBC 31/10/25         1                                                                          
+WPOSIBCO31/10/25         1                                                                          
+WPREENSA31/10/25        34                                                                          
+WPRJ012 31/10/25         9                                                                          
+WPRJ014 31/10/25         7                                                                          
+WPRJ016 31/10/25        56                                                                          
+WPRJ216 31/10/25        27                                                                          
+WPRJ218 31/10/25         5                                                                          
+WPRJETIC31/10/25         7                                                                          
+WPRJETIM31/10/25         1                                                                          
+WPRJETIP31/10/25        12                                                                          
+WPRJETIQ31/10/25        50                                                                          
+WPRJETRE31/10/25        53                                                                          
+WPROCES431/10/25         3                                                                          
+WPROCESS31/10/25        35                                                                          
+WPROCUSR31/10/25         9                                                                          
+WPRODU2 31/10/25        15                                                                          
+WPRODUTO31/10/25      2085                                                                          
+WPROJDAT31/10/25        27                                                                          
+WPROJEMB31/10/25       227                                                                          
+WPROJMOV31/10/25        87                                                                          
+WPROJPED31/10/25        14                                                                          
+WPRTIPO 31/10/25        53                                                                          
+WQLDOCUM31/10/25         1                                                                          
+WQUALIFI31/10/25         1                                                                          
+WRAZCAI131/10/25         1                                                                          
+WRECEBER31/10/25       152                                                                          
+WREGNO0831/10/25         1                                                                          
+WRELATCX31/10/25        24                                                                          
+WRELGERA31/10/25         1                                                                          
+WRELNF0131/10/25         9                                                                          
+WRENEG0131/10/25         2                                                                          
+WRENEG0431/10/25         3                                                                          
+WREPLOUT31/10/25         1                                                                          
+WREPORTE31/10/25        45                                                                          
+WREQCMP 31/10/25         1                                                                          
+WREQCOM931/10/25         6                                                                          
+WREQCOMP31/10/25        58                                                                          
+WREQDEVL31/10/25         1                                                                          
+WREQUISI31/10/25       122                                                                          
+WRESERVA31/10/25       309                                                                          
+WRESOLAS31/10/25        50                                                                          
+WRESOPER31/10/25        10                                                                          
+WSELETIT31/10/25        14                                                                          
+WSELVARC31/10/25       388                                                                          
+WSETORCC31/10/25         1                                                                          
+WSUBFILH31/10/25       105                                                                          
+WTABPRVE31/10/25        54                                                                          
+WTELAADM31/10/25       295                                                                          
+WTELAAUX31/10/25        13                                                                          
+WTELACON31/10/25         1                                                                          
+WTELAENG31/10/25       182                                                                          
+WTELAEST31/10/25        42                                                                          
+WTELAF2 31/10/25       139                                                                          
+WTELAF2031/10/25         1                                                                          
+WTELAFIS31/10/25         3                                                                          
+WTELAGER31/10/25         2                                                                          
+WTELAIND31/10/25       359                                                                          
+WTELAVEN31/10/25       368                                                                          
+WTINSPTE31/10/25        19                                                                          
+WTIPACAB31/10/25        38                                                                          
+WTIPASSI31/10/25        40                                                                          
+WTIPINCL31/10/25        20                                                                          
+WTITBANC31/10/25        17                                                                          
+WTITBEXC31/10/25       206                                                                          
+WTITBLOQ31/10/25         1                                                                          
+WTITULOE31/10/25       112                                                                          
+WTITULOS31/10/25       563                                                                          
+WTITUOU131/10/25        17                                                                          
+WTITUOUT31/10/25        85                                                                          
+WTOQMOEN31/10/25        15                                                                          
+WTOQMOSA31/10/25         3                                                                          
+WTRANSAC31/10/25         2                                                                          
+WTRANSPO31/10/25        27                                                                          
+WTRIBU  31/10/25         1                                                                          
+WULTCOMP31/10/25         4                                                                          
+WUMORREP31/10/25         1                                                                          
+WUMPROST31/10/25         1                                                                          
+WUMPRTIP31/10/25         1                                                                          
+WVENDEDO31/10/25        74                                                                          
+WVEREST231/10/25       235                                                                          
+WVLRANTE31/10/25         6                                                                          
+WVLRANTI31/10/25         6                                                                          
+WZCADITE31/10/25        11                                                                          
+WZOOMPR231/10/25        50                                                                          
+WZOOMPRO31/10/25       410                                                                          
+WZPERDEN31/10/25         4                                                                          
+XLICE99831/10/25         1                                                                          
+XLICE99931/10/25         1                                                                          
+WMULTI  15/10/25         1                                                                          

@@ -1,0 +1,8 @@
+#USO#1#FORWOOD#2#28/07/25#3#73.584.245/0001-87#5#MADRESILVA INDUSTRIA DE MOVEIS LTDA#6#             
+WACESC1 28/07/25         1                                                                          
+WACESC2 28/07/25         2                                                                          
+WACESM1 28/07/25        12                                                                          
+WACESM2 28/07/25         4                                                                          
+WACESW1 28/07/25         0                                                                          
+WACESW2 28/07/25         0                                                                          
+WMULTI  29/07/25         1                                                                          

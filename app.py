@@ -2066,16 +2066,18 @@ def fetch_orders(filters):
                 GROUP BY prjmpedid
             ),
             linha_info AS (
-                SELECT ordped AS pedido,
-                       STRING_AGG(linha_value, ', ') AS linha
+                SELECT sub.prjmpedid AS pedido,
+                       STRING_AGG(sub.linha_value, ', ') AS linha
                 FROM (
-                    SELECT DISTINCT o.ordped, COALESCE(lp.lotdes, lp.lotcod::text) AS linha_value
-                    FROM ordem o
+                    SELECT DISTINCT pm.prjmpedid,
+                                    COALESCE(lp.lotdes, lp.lotcod::text) AS linha_value
+                    FROM projmovi pm
+                    JOIN ordem o ON o.ordem = pm.prjmcontr
                     LEFT JOIN loteprod lp ON o.lotcod = lp.lotcod
-                    WHERE o.ordped IS NOT NULL
+                    WHERE pm.prjmpedid IS NOT NULL
                           AND COALESCE(lp.lotdes, lp.lotcod::text) IS NOT NULL
                 ) sub
-                GROUP BY ordped
+                GROUP BY sub.prjmpedid
             )
             SELECT
                 p.pedido,
@@ -2141,9 +2143,10 @@ def fetch_orders(filters):
             query += """
                 AND EXISTS (
                     SELECT 1
-                    FROM ordem o
+                    FROM projmovi pm
+                    JOIN ordem o ON o.ordem = pm.prjmcontr
                     LEFT JOIN loteprod lp ON o.lotcod = lp.lotcod
-                    WHERE o.ordped = p.pedido
+                    WHERE pm.prjmpedid = p.pedido
                       AND (CAST(o.lotcod AS TEXT) ILIKE %s OR COALESCE(lp.lotdes, '') ILIKE %s)
                 )
             """
@@ -2221,19 +2224,16 @@ def orders_list():
         'load_lot': (request.args.get('load_lot') or '').strip() or None,
         'production_lot': (request.args.get('production_lot') or '').strip() or None,
         'line': (request.args.get('line') or '').strip() or None,
-        'start_date': (
-            (start_date_param or '').strip() or None
-            if start_date_param is not None
-            else first_day_of_month.strftime('%Y-%m-%d')
-        ),
-        'end_date': (
-            (end_date_param or '').strip() or None
-            if end_date_param is not None
-            else last_day_of_month.strftime('%Y-%m-%d')
-        ),
+        'start_date': (start_date_param or '').strip() or None,
+        'end_date': (end_date_param or '').strip() or None,
     }
 
-    orders, error_message = fetch_orders(filters)
+    query_filters = filters.copy()
+    if not request.args:
+        query_filters['start_date'] = first_day_of_month.strftime('%Y-%m-%d')
+        query_filters['end_date'] = last_day_of_month.strftime('%Y-%m-%d')
+
+    orders, error_message = fetch_orders(query_filters)
 
     if error_message:
         flash(error_message, 'danger')

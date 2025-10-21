@@ -1,0 +1,429 @@
+{
+"Results":[
+ {
+  "id": "60008d0e3877c40001286669",
+  "nome_atributo": " Acucar de Coco",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62fcf6c889b9ab0001887d81",
+  "nome_atributo": "Abacaxi com Leite Condensado",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60d62ffe20991f00010262bc",
+  "nome_atributo": "Acai com Guarana",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60008c133877c40001286457",
+  "nome_atributo": "Amendoim",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "63811357ee0218000166458c",
+  "nome_atributo": "Amora",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6304df8af2663400018bb154",
+  "nome_atributo": "Apple Dream",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6377a9ed56f2190001a9c83a",
+  "nome_atributo": "Apple Twist",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62012b3d2090c2000100de03",
+  "nome_atributo": "Avela",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "5bb931a53495e6000158771b",
+  "nome_atributo": "Banana",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60aea7ae0aa25c000166a63c",
+  "nome_atributo": "Baunilha",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "640249b808a7cf00013e7367",
+  "nome_atributo": "BEIJINHO",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6304df8574faa60001f01424",
+  "nome_atributo": "Black Widow",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "61f9662d38df120001a43f65",
+  "nome_atributo": "BLUE ICE",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6127f4895936210001d333cd",
+  "nome_atributo": "Brigadeiro",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "63f60f4886463d00017129a9",
+  "nome_atributo": "Buenissimo",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "5bb932233495e60001587722",
+  "nome_atributo": "Cafe com chocolate - mocaccino",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6123f0785936210001cfdbfa",
+  "nome_atributo": "Cappuccino",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6425a2cd5af9c30001492540",
+  "nome_atributo": "Cheddar",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "63592ad68345c90001230b3e",
+  "nome_atributo": "chocolate",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62ac8f46d788f90001cd08e3",
+  "nome_atributo": "Chocolate Amargo",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60008eb53877c4000128694e",
+  "nome_atributo": "Chocolate Amargo Castanha",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6127f4755936210001d333c6",
+  "nome_atributo": "Chocolate Branco",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6142257e3619c00001bc546a",
+  "nome_atributo": "Chocolate Branco com Morango",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "63810f46dee4dd0001b2b233",
+  "nome_atributo": "Chocolate com Coco",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62ac8b380e886000017c464b",
+  "nome_atributo": "Chocolate Maltado",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62fcf6b189b9ab0001887d6e",
+  "nome_atributo": "Chocolate Trunfado",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6021418bdcb4e50001a7c32a",
+  "nome_atributo": "Churros",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "601ab9f8344fcc00018b1966",
+  "nome_atributo": "Churros c\/ doce de leite",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62cd84bc317ad20001f93961",
+  "nome_atributo": "Citrus",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62ac8b31a34ffd0001ade383",
+  "nome_atributo": "Coco",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6103293a007a3b0001b156ff",
+  "nome_atributo": "Cookies",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6103290c007a3b0001b156f7",
+  "nome_atributo": "Cookies and Cream",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60008d663877c40001286719",
+  "nome_atributo": "Cookies Nibs de Cacau",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6142258f3619c00001bc5472",
+  "nome_atributo": "Cotton Candy",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "61f9663438df120001a43f67",
+  "nome_atributo": "COTTON CANDY",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6304df81f2663400018bb141",
+  "nome_atributo": "Creme de Coco com Castanha",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "61032890007a3b0001b156e6",
+  "nome_atributo": "Dark Chocolate Truffle",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "61032a33007a3b0001b1570d",
+  "nome_atributo": "Doce de Coco",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60008e833877c400012868f2",
+  "nome_atributo": "Doce de Leite",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6124edb05936210001d0a75e",
+  "nome_atributo": "Flocos com Chocolate Chips",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60d5e08120991f000102455f",
+  "nome_atributo": "Fresh lemon",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "601aba2b344fcc00018b1992",
+  "nome_atributo": "Frutas Amarelas",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60aea89e0aa25c000166a6a1",
+  "nome_atributo": "Frutas Vermelhas",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60008ca33877c40001286598",
+  "nome_atributo": "Granulada",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6086e1f73f65c80001bf06a2",
+  "nome_atributo": "Guarana",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60aea8bf0aa25c000166a6b8",
+  "nome_atributo": "Ice Blue",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62fcf6c1951a5b0001673084",
+  "nome_atributo": "Integral Crocante",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62fcf6b889b9ab0001887d72",
+  "nome_atributo": "Iogurte com Coco",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6142256334b54b000181ebbb",
+  "nome_atributo": "Iogurte Grego com Morango",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60d4f09820991f000101cefc",
+  "nome_atributo": "Jabuticaba",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6086e09c3f65c80001bf052f",
+  "nome_atributo": "Laranja",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60d4f0a620991f000101cf04",
+  "nome_atributo": "Laranja e Limao",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6142255434b54b000181ebac",
+  "nome_atributo": "Leite",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "633edbd1684e990001231be7",
+  "nome_atributo": "Leite Condensado",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62012b488189170001febcd0",
+  "nome_atributo": "Leite em po",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "610329dc007a3b0001b1570a",
+  "nome_atributo": "Leite Ninho",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "601aba03344fcc00018b1971",
+  "nome_atributo": "Leite ninho c\/ creme de avela",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6086e1de3f65c80001bf067d",
+  "nome_atributo": "Limao",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "61f9663a38df120001a43f69",
+  "nome_atributo": "LIMAO YUZU",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60aea8da0aa25c000166a6cc",
+  "nome_atributo": "Limao Yuzu",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60aea8490aa25c000166a676",
+  "nome_atributo": "Maca Verde",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6086e1b33f65c80001bf0661",
+  "nome_atributo": "Maracuja",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62a8898dd788f90001c605f7",
+  "nome_atributo": "Melancia",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62d560cee27e8d00014560b0",
+  "nome_atributo": "Merengue de Morango",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "61032871007a3b0001b156e0",
+  "nome_atributo": "Milk Caramel",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62fcf6bd951a5b0001673079",
+  "nome_atributo": "Milk-shake de Morango",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60aea8080aa25c000166a662",
+  "nome_atributo": "Morango",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "63810f4087fc5c0001067386",
+  "nome_atributo": "Napolitano",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "61032a51007a3b0001b15711",
+  "nome_atributo": "Natural",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "647a1ba29976ef0001091500",
+  "nome_atributo": "Oleo de Linhaca",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60d9e347a2f49b00019508c5",
+  "nome_atributo": "Parmesao",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "61032a2e007a3b0001b1570c",
+  "nome_atributo": "Peanut Butter",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62fcf6b5951a5b000167305c",
+  "nome_atributo": "Pudim",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "61032a50007a3b0001b15710",
+  "nome_atributo": "Romeu e Julieta",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60008e6c3877c400012868c7",
+  "nome_atributo": "Salted Caramelo\/Amendoim",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "5bb931423495e60001587718",
+  "nome_atributo": "Sem sabor",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "640249c008a7cf00013e736f",
+  "nome_atributo": "SENSACAO",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6142254b34b54b000181eba0",
+  "nome_atributo": "Sorvete de Frutas",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "6086e2153f65c80001bf06c6",
+  "nome_atributo": "Tangerina",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "633edbe2684e990001231c3f",
+  "nome_atributo": "Torta de Banana",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "633edbdb684e990001231c13",
+  "nome_atributo": "Torta de Limao",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60008cbc3877c400012865cd",
+  "nome_atributo": "Tradicional",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "62fcf6c489b9ab0001887d7e",
+  "nome_atributo": "Tradicional Integral",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "601aba1c344fcc00018b1982",
+  "nome_atributo": "Uva",
+  "tipo_atributo": "SABOR"
+ },
+ {
+  "id": "60d5e07420991f000102455a",
+  "nome_atributo": "Vitamina de frutas",
+  "tipo_atributo": "SABOR"
+ }
+]
+}
