@@ -1,1 +1,0 @@
-CREATE TRIGGER tg_pesrlog_sequencia BEFORE INSERT ON PESRLOG FOR EACH ROW EXECUTE PROCEDURE fn_pesrlog_sequencia();

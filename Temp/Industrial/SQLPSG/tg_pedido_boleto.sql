@@ -1,5 +1,0 @@
-CREATE TRIGGER tg_pedido_boleto
-    AFTER INSERT OR UPDATE OR DELETE
-    ON PEDIDO
-    FOR EACH ROW
-    EXECUTE PROCEDURE fn_pedido_boleto();
