@@ -2202,9 +2202,9 @@ def fetch_orders(filters):
             query += f"""
                 AND EXISTS (
                     SELECT 1
-                    FROM projmovi pm
-                    JOIN ordem o ON o.ordem = pm.prjmcontr
-                    WHERE pm.prjmpedid = p.pedido
+                    FROM acaorde2 ao
+                    JOIN ordem o ON o.ordem = ao.acaoorde
+                    WHERE ao.acaopedi = p.pedido
                       AND CAST(o.lotcod AS TEXT) IN ({placeholders})
                 )
             """
