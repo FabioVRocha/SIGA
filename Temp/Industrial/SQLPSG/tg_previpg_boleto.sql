@@ -1,0 +1,5 @@
+CREATE TRIGGER tg_previpg_boleto
+    AFTER INSERT OR UPDATE OR DELETE
+    ON PREVIPG
+    FOR EACH ROW
+    EXECUTE PROCEDURE fn_previpg_boleto();
