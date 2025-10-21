@@ -2315,7 +2315,7 @@ def fetch_orders(filters):
 
             orders.append({
                 'pedido': row[0],
-                'sequencia_lote': row[1],
+                'lcaseque': row[1],
                 'cliente_codigo': row[2],
                 'cliente_nome': row[3],
                 'cidade_uf': row[4],

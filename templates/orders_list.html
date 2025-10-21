@@ -110,7 +110,7 @@
                     {% set pedido_status_class = 'status-kpi-blue' if kpi_status == 3 else ('status-kpi-green' if kpi_status == 2 else ('status-kpi-yellow' if kpi_status == 1 else 'status-kpi-red')) %}
                     <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};">
                         <td class="py-3 px-4 whitespace-nowrap font-semibold {{ pedido_status_class }}">{{ order.pedido or 'N/A' }}</td>
-                        <td class="py-3 px-4 whitespace-nowrap">{{ order.sequencia_lote or 'N/A' }}</td>
+                        <td class="py-3 px-4 whitespace-nowrap">{{ order.lcaseque or 'N/A' }}</td>
                         <td class="py-3 px-4 whitespace-nowrap">{{ order.cliente_codigo or 'N/A' }}</td>
                         <td class="py-3 px-4 whitespace-nowrap">{{ order.cliente_nome or 'N/A' }}</td>
                         <td class="py-3 px-4 whitespace-nowrap">{{ order.cidade_uf or 'N/A' }}</td>
