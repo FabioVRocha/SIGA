@@ -12,6 +12,7 @@ from functools import wraps # Para criar um decorador de login
 from werkzeug.security import generate_password_hash, check_password_hash
 import re # Para expressões regulares, usado para parsear rgcdes
 import json # Para lidar com dados JSON (para parâmetros de usuário)
+from math import isclose
 
 # Importa as configurações do arquivo config.py
 from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE
@@ -2047,6 +2048,50 @@ def operations_list():
 def transporters_list():
     return render_template('placeholder.html', page_title="Lista de Transportadoras", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
 
+def calculate_order_kpi(reservado_raw, separado_raw, carregado_raw):
+    """
+    Reproduz a regra DAX que classifica o status do pedido com base em Reservado, Separado e Carregado.
+    Retorna:
+        None  -> reservado ou separado em branco (cor vermelha)
+        0     -> separado igual a zero (cor vermelha)
+        1     -> separado entre 0 e reservado (cor amarela)
+        2     -> separado igual a reservado e carregado menor que reservado (cor verde)
+        3     -> carregado igual a reservado (cor azul)
+    """
+    if reservado_raw is None or separado_raw is None:
+        return None
+
+    try:
+        reservado = float(reservado_raw)
+    except (TypeError, ValueError):
+        reservado = 0.0
+
+    try:
+        separado = float(separado_raw)
+    except (TypeError, ValueError):
+        separado = 0.0
+
+    try:
+        carregado = float(carregado_raw) if carregado_raw is not None else 0.0
+    except (TypeError, ValueError):
+        carregado = 0.0
+
+    rel_tol = 1e-6
+    abs_tol = 1e-6
+
+    def is_less_than(a, b):
+        return a < b and not isclose(a, b, rel_tol=rel_tol, abs_tol=abs_tol)
+
+    if isclose(separado, 0.0, rel_tol=rel_tol, abs_tol=abs_tol):
+        return 0
+    if separado > 0 and is_less_than(separado, reservado):
+        return 1
+    if isclose(separado, reservado, rel_tol=rel_tol, abs_tol=abs_tol) and is_less_than(carregado, reservado):
+        return 2
+    if isclose(carregado, reservado, rel_tol=rel_tol, abs_tol=abs_tol):
+        return 3
+    return None
+
 # --- Rotas de Placeholder para o Menu (Vendas) ---
 def fetch_orders(filters):
     """Busca os pedidos com agregações de quantidade, reservas, separações e carregamentos."""
@@ -2237,6 +2282,11 @@ def fetch_orders(filters):
         cur.close()
 
         for row in rows:
+            reservado_raw = row[6]
+            separado_raw = row[7]
+            carregado_raw = row[8]
+            kpi_status = calculate_order_kpi(reservado_raw, separado_raw, carregado_raw)
+
             orders.append({
                 'pedido': row[0],
                 'sequencia_lote': row[1],
@@ -2244,10 +2294,11 @@ def fetch_orders(filters):
                 'cliente_nome': row[3],
                 'cidade_uf': row[4],
                 'quantidade_total': float(row[5]) if row[5] is not None else 0.0,
-                'reservado': float(row[6]) if row[6] is not None else 0.0,
-                'separado': float(row[7]) if row[7] is not None else 0.0,
-                'carregado': float(row[8]) if row[8] is not None else 0.0,
-                'linha': row[9]
+                'reservado': float(reservado_raw) if reservado_raw is not None else 0.0,
+                'separado': float(separado_raw) if separado_raw is not None else 0.0,
+                'carregado': float(carregado_raw) if carregado_raw is not None else 0.0,
+                'linha': row[9],
+                'kpi_status': kpi_status
             })
 
     except Error as e:
