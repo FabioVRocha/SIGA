@@ -232,8 +232,37 @@
                 </div>
             </div>
             <div class="form-group">
-                <label for="line" class="form-label">Linha:</label>
-                <input type="text" id="line" name="line" class="form-input" value="{{ filters.line or '' }}" placeholder="Linha do pedido">
+                <label class="form-label">Linha:</label>
+                <div id="lineDropdownContainer" class="relative">
+                    <button type="button" id="lineDropdownToggle" class="form-input cursor-pointer flex items-center justify-between" aria-haspopup="listbox" aria-expanded="false">
+                        <span id="lineDropdownLabel" class="text-left truncate">Selecione linhas</span>
+                        <i class="fas fa-chevron-down ml-2 text-gray-500"></i>
+                    </button>
+                    <div id="lineDropdown" class="hidden absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg p-3">
+                        <div class="max-h-60 overflow-y-auto space-y-2">
+                            {% if product_line_options %}
+                                {% for line in product_line_options %}
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            class="line-checkbox"
+                                            name="lines"
+                                            value="{{ line }}"
+                                            data-display="{{ line }}"
+                                            {% if line in (filters.lines or []) %}checked{% endif %}
+                                        >
+                                        <span class="text-sm text-gray-700">{{ line }}</span>
+                                    </label>
+                                {% endfor %}
+                            {% else %}
+                                <p class="text-sm text-gray-500">Nenhuma linha disponível.</p>
+                            {% endif %}
+                        </div>
+                        <div class="flex justify-end pt-2 mt-2 border-t border-gray-200">
+                            <button type="button" id="lineClearBtn" class="text-sm text-red-600 hover:underline">Limpar selecao</button>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="form-group grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -314,6 +343,15 @@ document.addEventListener('DOMContentLoaded', () => {
             checkboxSelector: '.production-lot-checkbox',
             defaultLabel: 'Selecione lotes de producao',
             clearBtnId: 'productionLotClearBtn',
+        }),
+        createDropdownConfig({
+            containerId: 'lineDropdownContainer',
+            dropdownId: 'lineDropdown',
+            toggleId: 'lineDropdownToggle',
+            labelId: 'lineDropdownLabel',
+            checkboxSelector: '.line-checkbox',
+            defaultLabel: 'Selecione linhas',
+            clearBtnId: 'lineClearBtn',
         }),
     ].filter(Boolean);
 

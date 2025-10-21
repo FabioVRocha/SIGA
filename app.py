@@ -2276,7 +2276,12 @@ def fetch_orders(filters):
             """
             params.extend(production_lots_filter)
 
-        if filters.get('line'):
+        lines_filter = filters.get('lines') or []
+        if lines_filter:
+            placeholders = ', '.join(['%s'] * len(lines_filter))
+            query += f" AND COALESCE(linha.linha, '') IN ({placeholders})"
+            params.extend(lines_filter)
+        elif filters.get('line'):
             query += " AND COALESCE(linha.linha, '') ILIKE %s"
             params.append(f"%{filters['line']}%")
 
@@ -2349,11 +2354,15 @@ def orders_list():
     production_lots_param = [
         value.strip() for value in request.args.getlist('production_lots') if value and value.strip()
     ]
+    line_param = [
+        value.strip() for value in request.args.getlist('lines') if value and value.strip()
+    ]
 
     filters = {
         'load_lot': (request.args.get('load_lot') or '').strip() or None,
         'load_lots': load_lots_param,
         'production_lots': production_lots_param,
+        'lines': line_param,
         'line': (request.args.get('line') or '').strip() or None,
         'start_date': (start_date_param or '').strip() or None,
         'end_date': (end_date_param or '').strip() or None,
@@ -2382,6 +2391,7 @@ def orders_list():
         filters=filters,
         load_lot_options=get_distinct_load_lots(),
         production_lot_options=get_distinct_production_lots(),
+        product_line_options=get_distinct_product_lines(),
         totals=totals,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
