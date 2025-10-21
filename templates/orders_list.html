@@ -158,8 +158,41 @@
         </div>
         <form id="filterForm" action="{{ url_for('orders_list') }}" method="GET" class="space-y-4">
             <div class="form-group">
-                <label for="load_lot" class="form-label">Lote de Carga:</label>
-                <input type="text" id="load_lot" name="load_lot" class="form-input" value="{{ filters.load_lot or '' }}" placeholder="Código ou descrição do lote de carga">
+                <label class="form-label">Lote de Carga:</label>
+                <div id="loadLotDropdownContainer" class="relative">
+                    <button type="button" id="loadLotDropdownToggle" class="form-input cursor-pointer flex items-center justify-between" aria-haspopup="listbox" aria-expanded="false">
+                        <span id="loadLotDropdownLabel" class="text-left truncate">Selecione lotes de carga</span>
+                        <i class="fas fa-chevron-down ml-2 text-gray-500"></i>
+                    </button>
+                    <div id="loadLotDropdown" class="hidden absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg p-3">
+                        <div class="max-h-60 overflow-y-auto space-y-2">
+                            {% if load_lot_options %}
+                                {% for lot in load_lot_options %}
+                                    {% set lot_display = lot.code %}
+                                    {% if lot.description %}
+                                        {% set lot_display = lot.code ~ ' - ' ~ lot.description %}
+                                    {% endif %}
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            class="load-lot-checkbox"
+                                            name="load_lots"
+                                            value="{{ lot.code }}"
+                                            data-display="{{ lot_display }}"
+                                            {% if lot.code in (filters.load_lots or []) %}checked{% endif %}
+                                        >
+                                        <span class="text-sm text-gray-700">{{ lot_display }}</span>
+                                    </label>
+                                {% endfor %}
+                            {% else %}
+                                <p class="text-sm text-gray-500">Nenhum lote de carga encontrado.</p>
+                            {% endif %}
+                        </div>
+                        <div class="flex justify-end pt-2 mt-2 border-t border-gray-200">
+                            <button type="button" id="loadLotClearBtn" class="text-sm text-red-600 hover:underline">Limpar selecao</button>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="form-group">
                 <label class="form-label">Lote de Producao:</label>
@@ -229,42 +262,94 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
     const clearFiltersBtn = document.getElementById('clearFiltersBtn');
     const filterForm = document.getElementById('filterForm');
-    const productionLotDropdownContainer = document.getElementById('productionLotDropdownContainer');
-    const productionLotDropdown = document.getElementById('productionLotDropdown');
-    const productionLotDropdownToggle = document.getElementById('productionLotDropdownToggle');
-    const productionLotDropdownLabel = document.getElementById('productionLotDropdownLabel');
-    const productionLotCheckboxes = productionLotDropdownContainer ? Array.from(productionLotDropdownContainer.querySelectorAll('.production-lot-checkbox')) : [];
-    const productionLotClearBtn = document.getElementById('productionLotClearBtn');
 
     if (!filterModal) {
         return;
     }
 
-    filterModal.style.display = 'none';
+    const createDropdownConfig = ({
+        containerId,
+        dropdownId,
+        toggleId,
+        labelId,
+        checkboxSelector,
+        defaultLabel,
+        clearBtnId,
+    }) => {
+        const container = document.getElementById(containerId);
+        if (!container) {
+            return null;
+        }
+        const dropdown = document.getElementById(dropdownId);
+        const toggle = document.getElementById(toggleId);
+        const label = document.getElementById(labelId);
+        const clearBtn = clearBtnId ? document.getElementById(clearBtnId) : null;
+        const checkboxes = Array.from(container.querySelectorAll(checkboxSelector));
+        return {
+            container,
+            dropdown,
+            toggle,
+            label,
+            clearBtn,
+            checkboxes,
+            defaultLabel,
+        };
+    };
 
-    const updateProductionLotLabel = () => {
-        if (!productionLotDropdownLabel) {
+    const dropdownConfigs = [
+        createDropdownConfig({
+            containerId: 'loadLotDropdownContainer',
+            dropdownId: 'loadLotDropdown',
+            toggleId: 'loadLotDropdownToggle',
+            labelId: 'loadLotDropdownLabel',
+            checkboxSelector: '.load-lot-checkbox',
+            defaultLabel: 'Selecione lotes de carga',
+            clearBtnId: 'loadLotClearBtn',
+        }),
+        createDropdownConfig({
+            containerId: 'productionLotDropdownContainer',
+            dropdownId: 'productionLotDropdown',
+            toggleId: 'productionLotDropdownToggle',
+            labelId: 'productionLotDropdownLabel',
+            checkboxSelector: '.production-lot-checkbox',
+            defaultLabel: 'Selecione lotes de producao',
+            clearBtnId: 'productionLotClearBtn',
+        }),
+    ].filter(Boolean);
+
+    const closeDropdown = (config) => {
+        if (config.dropdown) {
+            config.dropdown.classList.add('hidden');
+        }
+        if (config.toggle) {
+            config.toggle.setAttribute('aria-expanded', 'false');
+        }
+    };
+
+    const openDropdown = (config) => {
+        if (config.dropdown) {
+            config.dropdown.classList.remove('hidden');
+        }
+        if (config.toggle) {
+            config.toggle.setAttribute('aria-expanded', 'true');
+        }
+    };
+
+    const updateDropdownLabel = (config) => {
+        if (!config.label) {
             return;
         }
-        const selected = productionLotCheckboxes.filter((checkbox) => checkbox.checked);
+        const selected = config.checkboxes.filter((checkbox) => checkbox.checked);
         if (selected.length === 0) {
-            productionLotDropdownLabel.textContent = 'Selecione lotes de producao';
+            config.label.textContent = config.defaultLabel;
         } else if (selected.length === 1) {
-            productionLotDropdownLabel.textContent = selected[0].dataset.display || selected[0].value;
+            config.label.textContent = selected[0].dataset.display || selected[0].value;
         } else {
-            productionLotDropdownLabel.textContent = `${selected.length} lotes selecionados`;
+            config.label.textContent = `${selected.length} lotes selecionados`;
         }
     };
 
-    const closeProductionLotDropdown = () => {
-        if (!productionLotDropdown) {
-            return;
-        }
-        productionLotDropdown.classList.add('hidden');
-        if (productionLotDropdownToggle) {
-            productionLotDropdownToggle.setAttribute('aria-expanded', 'false');
-        }
-    };
+    filterModal.style.display = 'none';
 
     const openModal = () => {
         filterModal.style.display = 'flex';
@@ -272,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const closeModal = () => {
         filterModal.style.display = 'none';
-        closeProductionLotDropdown();
+        dropdownConfigs.forEach((config) => closeDropdown(config));
     };
 
     if (openFilterModalBtn) {
@@ -288,9 +373,11 @@ document.addEventListener('DOMContentLoaded', () => {
             closeModal();
             return;
         }
-        if (productionLotDropdownContainer && !productionLotDropdownContainer.contains(event.target)) {
-            closeProductionLotDropdown();
-        }
+        dropdownConfigs.forEach((config) => {
+            if (config.container && !config.container.contains(event.target)) {
+                closeDropdown(config);
+            }
+        });
     });
 
     if (clearFiltersBtn) {
@@ -299,44 +386,50 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (productionLotDropdownToggle && productionLotDropdown) {
-        productionLotDropdownToggle.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const isHidden = productionLotDropdown.classList.contains('hidden');
-            if (isHidden) {
-                productionLotDropdown.classList.remove('hidden');
-                productionLotDropdownToggle.setAttribute('aria-expanded', 'true');
-            } else {
-                closeProductionLotDropdown();
-            }
-        });
-    }
-
-    if (productionLotDropdown) {
-        productionLotDropdown.addEventListener('click', (event) => {
-            event.stopPropagation();
-        });
-    }
-
-    if (productionLotCheckboxes.length > 0) {
-        productionLotCheckboxes.forEach((checkbox) => {
-            checkbox.addEventListener('change', updateProductionLotLabel);
-        });
-        updateProductionLotLabel();
-    } else if (productionLotDropdownLabel) {
-        productionLotDropdownLabel.textContent = 'Selecione lotes de producao';
-    }
-
-    if (productionLotClearBtn) {
-        productionLotClearBtn.addEventListener('click', (event) => {
-            event.preventDefault();
-            productionLotCheckboxes.forEach((checkbox) => {
-                checkbox.checked = false;
+    dropdownConfigs.forEach((config) => {
+        if (config.toggle && config.dropdown) {
+            config.toggle.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const isHidden = config.dropdown.classList.contains('hidden');
+                if (isHidden) {
+                    dropdownConfigs.forEach((otherConfig) => {
+                        if (otherConfig !== config) {
+                            closeDropdown(otherConfig);
+                        }
+                    });
+                    openDropdown(config);
+                } else {
+                    closeDropdown(config);
+                }
             });
-            updateProductionLotLabel();
-            closeProductionLotDropdown();
-        });
-    }
+        }
+
+        if (config.dropdown) {
+            config.dropdown.addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+        }
+
+        if (config.checkboxes.length > 0) {
+            config.checkboxes.forEach((checkbox) => {
+                checkbox.addEventListener('change', () => updateDropdownLabel(config));
+            });
+            updateDropdownLabel(config);
+        } else if (config.label) {
+            config.label.textContent = config.defaultLabel;
+        }
+
+        if (config.clearBtn) {
+            config.clearBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                config.checkboxes.forEach((checkbox) => {
+                    checkbox.checked = false;
+                });
+                updateDropdownLabel(config);
+                closeDropdown(config);
+            });
+        }
+    });
 
     if (filterForm) {
         filterForm.addEventListener('submit', () => {

@@ -436,6 +436,39 @@ def get_distinct_production_lots():
                 conn.close()
     return production_lots
 
+
+def get_distinct_load_lots():
+    """Busca todos os lotes de carga disponiveis no ERP."""
+    conn = get_erp_db_connection()
+    load_lots = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT lcacod, COALESCE(lcades, '')
+                FROM lotecar
+                ORDER BY lcacod DESC, COALESCE(lcades, '') DESC
+                """
+            )
+            rows = cur.fetchall()
+            cur.close()
+            for lcacod, lcades in rows:
+                code = str(lcacod) if lcacod is not None else ''
+                description = lcades or ''
+                load_lots.append(
+                    {
+                        'code': code,
+                        'description': description,
+                    }
+                )
+        except Error as e:
+            print(f'Erro ao buscar lotes de carga distintos: {e}')
+        finally:
+            if conn:
+                conn.close()
+    return load_lots
+
 def get_distinct_vendors():
     """Busca todos os vendedores distintos e seus status presentes no ERP."""
     conn = get_erp_db_connection()
@@ -2213,7 +2246,15 @@ def fetch_orders(filters):
 
         params = []
 
-        if filters.get('load_lot'):
+        load_lots_filter = filters.get('load_lots') or []
+        if load_lots_filter:
+            if has_lcacod_column:
+                placeholders = ', '.join(['%s'] * len(load_lots_filter))
+                query += f" AND CAST(p.lcacod AS TEXT) IN ({placeholders})"
+                params.extend(load_lots_filter)
+            else:
+                print("Coluna 'lcacod' ausente na tabela 'pedido'; filtro 'Lote de Carga' foi ignorado.")
+        elif filters.get('load_lot'):
             if has_lcacod_column:
                 query += " AND (CAST(p.lcacod AS TEXT) ILIKE %s OR COALESCE(lc.lcades, '') ILIKE %s)"
                 params.append(f"%{filters['load_lot']}%")
@@ -2302,12 +2343,16 @@ def orders_list():
 
     start_date_param = request.args.get('start_date')
     end_date_param = request.args.get('end_date')
+    load_lots_param = [
+        value.strip() for value in request.args.getlist('load_lots') if value and value.strip()
+    ]
     production_lots_param = [
         value.strip() for value in request.args.getlist('production_lots') if value and value.strip()
     ]
 
     filters = {
         'load_lot': (request.args.get('load_lot') or '').strip() or None,
+        'load_lots': load_lots_param,
         'production_lots': production_lots_param,
         'line': (request.args.get('line') or '').strip() or None,
         'start_date': (start_date_param or '').strip() or None,
@@ -2335,6 +2380,7 @@ def orders_list():
         'orders_list.html',
         orders=orders,
         filters=filters,
+        load_lot_options=get_distinct_load_lots(),
         production_lot_options=get_distinct_production_lots(),
         totals=totals,
         system_version=SYSTEM_VERSION,
