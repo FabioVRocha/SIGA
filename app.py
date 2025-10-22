@@ -34,6 +34,27 @@ AVAILABLE_PARAMETER_REPORTS = [
     ('invoices_mirror', 'Espelho de Notas Fiscais Faturadas'),
 ]
 
+ORDER_APPROVAL_STATUS_OPTIONS = [
+    {'code': 'S', 'label': 'Aprovado'},
+    {'code': 'N', 'label': 'Não Aprovado'},
+    {'code': 'C', 'label': 'Cancelado'},
+]
+
+ORDER_APPROVAL_STATUS_LABELS = {
+    option['code']: option['label'] for option in ORDER_APPROVAL_STATUS_OPTIONS
+}
+
+ORDER_SITUATION_OPTIONS = [
+    {'code': 'A', 'label': 'Atendido'},
+    {'code': '', 'label': 'Em Aberto'},
+    {'code': 'C', 'label': 'Cancelado'},
+    {'code': 'P', 'label': 'Parcial'},
+]
+
+ORDER_SITUATION_LABELS = {
+    option['code']: option['label'] for option in ORDER_SITUATION_OPTIONS
+}
+
 
 def format_currency_brl(value):
     """Formata valores numéricos no padrão de moeda brasileira."""
@@ -2233,7 +2254,9 @@ def fetch_orders(filters):
                 COALESCE(proj.reservado, 0) AS reservado,
                 COALESCE(proj.separado, 0) AS separado,
                 COALESCE(proj.carregado, 0) AS carregado,
-                COALESCE(linha.linha, 'OUTROS') AS linha
+                COALESCE(linha.linha, 'OUTROS') AS linha,
+                COALESCE(p.pedaprova, '') AS approval_status_code,
+                COALESCE(p.pedsitua, '') AS situation_code
             FROM pedido p
             LEFT JOIN empresa e ON p.pedcliente = e.empresa
             LEFT JOIN cidade c ON p.pedentcid = c.cidade
@@ -2362,6 +2385,18 @@ def fetch_orders(filters):
             params.append(f"%{linha_filter}%")
             query += " AND COALESCE(linha.linha, 'OUTROS') ILIKE %s"
 
+        approval_status_filter = filters.get('approval_statuses') or []
+        if approval_status_filter:
+            placeholders = ', '.join(['%s'] * len(approval_status_filter))
+            query += f" AND COALESCE(p.pedaprova, '') IN ({placeholders})"
+            params.extend(approval_status_filter)
+
+        situation_filter = filters.get('situations') or []
+        if situation_filter:
+            placeholders = ', '.join(['%s'] * len(situation_filter))
+            query += f" AND COALESCE(p.pedsitua, '') IN ({placeholders})"
+            params.extend(situation_filter)
+
         if filters.get('start_date'):
             try:
                 start_date = datetime.datetime.strptime(filters['start_date'], '%Y-%m-%d').date()
@@ -2408,6 +2443,8 @@ def fetch_orders(filters):
             separado_raw = row[7]
             carregado_raw = row[8]
             kpi_status = calculate_order_kpi(reservado_raw, separado_raw, carregado_raw)
+            approval_code = (row[10] or '').strip() if len(row) > 10 else ''
+            situation_code = (row[11] or '').strip() if len(row) > 11 else ''
 
             orders.append({
                 'pedido': row[0],
@@ -2420,6 +2457,10 @@ def fetch_orders(filters):
                 'separado': float(separado_raw) if separado_raw is not None else 0.0,
                 'carregado': float(carregado_raw) if carregado_raw is not None else 0.0,
                 'linha': row[9],
+                'approval_status_code': approval_code,
+                'approval_status': ORDER_APPROVAL_STATUS_LABELS.get(approval_code, 'Não Informado'),
+                'situation_code': situation_code,
+                'situation': ORDER_SITUATION_LABELS.get(situation_code, 'Não Informada'),
                 'kpi_status': kpi_status
             })
 
@@ -2649,6 +2690,20 @@ def orders_list():
     line_param = [
         value.strip() for value in request.args.getlist('lines') if value and value.strip()
     ]
+    approval_status_param = []
+    for raw_value in request.args.getlist('approval_statuses'):
+        if raw_value is None:
+            continue
+        code = (raw_value or '').strip().upper()
+        if code in ORDER_APPROVAL_STATUS_LABELS:
+            approval_status_param.append(code)
+    situation_param = []
+    for raw_value in request.args.getlist('situations'):
+        if raw_value is None:
+            continue
+        code = (raw_value or '').strip().upper()
+        if code in ORDER_SITUATION_LABELS:
+            situation_param.append(code)
 
     column_filters = {
         'filter_pedido': (request.args.get('filter_pedido') or '').strip(),
@@ -2695,6 +2750,8 @@ def orders_list():
         'end_date': (end_date_param or '').strip() or None,
         'sort_by': sort_by_param,
         'sort_order': sort_order_param,
+        'approval_statuses': approval_status_param,
+        'situations': situation_param,
     }
     filters.update(column_filters)
 
@@ -2722,6 +2779,8 @@ def orders_list():
         load_lot_options=get_distinct_load_lots(),
         production_lot_options=get_distinct_production_lots(),
         product_line_options=get_distinct_product_lines(),
+        approval_status_options=ORDER_APPROVAL_STATUS_OPTIONS,
+        situation_options=ORDER_SITUATION_OPTIONS,
         totals=totals,
         sort_by=sort_by_param,
         sort_order=sort_order_param,

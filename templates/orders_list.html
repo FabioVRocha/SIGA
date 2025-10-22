@@ -173,6 +173,12 @@
                 {% for selected_line in filters.lines or [] %}
                 <input type="hidden" name="lines" value="{{ selected_line }}">
                 {% endfor %}
+                {% for status_code in filters.approval_statuses or [] %}
+                <input type="hidden" name="approval_statuses" value="{{ status_code }}">
+                {% endfor %}
+                {% for situation_code in filters.situations or [] %}
+                <input type="hidden" name="situations" value="{{ situation_code }}">
+                {% endfor %}
                 {% if filters.line %}
                 <input type="hidden" name="line" value="{{ filters.line }}">
                 {% endif %}
@@ -333,18 +339,23 @@
             </form>
         </div>
         {% if orders %}
+        {% set total_reservado = totals.reservado or 0 %}
+        {% set total_separado = totals.separado or 0 %}
+        {% set total_carregado = totals.carregado or 0 %}
+        {% set percentual_separado = (total_separado / total_reservado * 100) if total_reservado else 0 %}
+        {% set percentual_carregado = (total_carregado / total_separado * 100) if total_separado else 0 %}
         <div class="bg-gray-100 p-4 rounded-lg mt-4 flex flex-wrap justify-center gap-2">
             <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
                 Quantidade Total: <span>{{ totals.quantidade_total | format_decimal_br }}</span>
             </div>
             <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
-                Reservado: <span>{{ totals.reservado | format_decimal_br }}</span>
+                Reservado: <span>{{ total_reservado | format_decimal_br }}</span>
             </div>
             <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
-                Separado: <span>{{ totals.separado | format_decimal_br }}</span>
+                Separado: <span>{{ total_separado | format_decimal_br }}</span> <span>({{ percentual_separado | format_decimal_br(2) }}%)</span>
             </div>
             <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
-                Carregado: <span>{{ totals.carregado | format_decimal_br }}</span>
+                Carregado: <span>{{ total_carregado | format_decimal_br }}</span> <span>({{ percentual_carregado | format_decimal_br(2) }}%)</span>
             </div>
         </div>
         <div class="status-legend">
@@ -558,6 +569,74 @@
                     </div>
                 </div>
             </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Status do Pedido:</label>
+                    <div id="approvalStatusDropdownContainer" class="relative">
+                        <button type="button" id="approvalStatusDropdownToggle" class="form-input cursor-pointer flex items-center justify-between" aria-haspopup="listbox" aria-expanded="false">
+                            <span id="approvalStatusDropdownLabel" class="text-left truncate">Selecione status do pedido</span>
+                            <i class="fas fa-chevron-down ml-2 text-gray-500"></i>
+                        </button>
+                        <div id="approvalStatusDropdown" class="hidden absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg p-3">
+                            <div class="max-h-60 overflow-y-auto space-y-2">
+                                {% if approval_status_options %}
+                                    {% for status in approval_status_options %}
+                                        <label class="flex items-center space-x-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                class="approval-status-checkbox"
+                                                name="approval_statuses"
+                                                value="{{ status.code }}"
+                                                data-display="{{ status.label }}"
+                                                {% if status.code in (filters.approval_statuses or []) %}checked{% endif %}
+                                            >
+                                            <span class="text-sm text-gray-700">{{ status.label }}</span>
+                                        </label>
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-sm text-gray-500">Nenhum status disponivel.</p>
+                                {% endif %}
+                            </div>
+                            <div class="flex justify-end pt-2 mt-2 border-t border-gray-200">
+                                <button type="button" id="approvalStatusClearBtn" class="text-sm text-red-600 hover:underline">Limpar selecao</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Situação:</label>
+                    <div id="situationDropdownContainer" class="relative">
+                        <button type="button" id="situationDropdownToggle" class="form-input cursor-pointer flex items-center justify-between" aria-haspopup="listbox" aria-expanded="false">
+                            <span id="situationDropdownLabel" class="text-left truncate">Selecione situações</span>
+                            <i class="fas fa-chevron-down ml-2 text-gray-500"></i>
+                        </button>
+                        <div id="situationDropdown" class="hidden absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg p-3">
+                            <div class="max-h-60 overflow-y-auto space-y-2">
+                                {% if situation_options %}
+                                    {% for situation in situation_options %}
+                                        <label class="flex items-center space-x-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                class="situation-checkbox"
+                                                name="situations"
+                                                value="{{ situation.code }}"
+                                                data-display="{{ situation.label }}"
+                                                {% if situation.code in (filters.situations or []) %}checked{% endif %}
+                                            >
+                                            <span class="text-sm text-gray-700">{{ situation.label }}</span>
+                                        </label>
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-sm text-gray-500">Nenhuma situação disponivel.</p>
+                                {% endif %}
+                            </div>
+                            <div class="flex justify-end pt-2 mt-2 border-t border-gray-200">
+                                <button type="button" id="situationClearBtn" class="text-sm text-red-600 hover:underline">Limpar selecao</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="form-group grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label for="start_date" class="form-label">Data do Pedido (início):</label>
@@ -613,6 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
         checkboxSelector,
         defaultLabel,
         clearBtnId,
+        countLabel = 'itens',
     }) => {
         const container = document.getElementById(containerId);
         if (!container) {
@@ -631,6 +711,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clearBtn,
             checkboxes,
             defaultLabel,
+            countLabel,
         };
     };
 
@@ -643,6 +724,7 @@ document.addEventListener('DOMContentLoaded', () => {
             checkboxSelector: '.load-lot-checkbox',
             defaultLabel: 'Selecione lotes de carga',
             clearBtnId: 'loadLotClearBtn',
+            countLabel: 'lotes',
         }),
         createDropdownConfig({
             containerId: 'productionLotDropdownContainer',
@@ -652,6 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
             checkboxSelector: '.production-lot-checkbox',
             defaultLabel: 'Selecione lotes de producao',
             clearBtnId: 'productionLotClearBtn',
+            countLabel: 'lotes',
         }),
         createDropdownConfig({
             containerId: 'lineDropdownContainer',
@@ -661,6 +744,27 @@ document.addEventListener('DOMContentLoaded', () => {
             checkboxSelector: '.line-checkbox',
             defaultLabel: 'Selecione linhas',
             clearBtnId: 'lineClearBtn',
+            countLabel: 'linhas',
+        }),
+        createDropdownConfig({
+            containerId: 'approvalStatusDropdownContainer',
+            dropdownId: 'approvalStatusDropdown',
+            toggleId: 'approvalStatusDropdownToggle',
+            labelId: 'approvalStatusDropdownLabel',
+            checkboxSelector: '.approval-status-checkbox',
+            defaultLabel: 'Selecione status do pedido',
+            clearBtnId: 'approvalStatusClearBtn',
+            countLabel: 'status',
+        }),
+        createDropdownConfig({
+            containerId: 'situationDropdownContainer',
+            dropdownId: 'situationDropdown',
+            toggleId: 'situationDropdownToggle',
+            labelId: 'situationDropdownLabel',
+            checkboxSelector: '.situation-checkbox',
+            defaultLabel: 'Selecione situações',
+            clearBtnId: 'situationClearBtn',
+            countLabel: 'situações',
         }),
     ].filter(Boolean);
 
@@ -692,7 +796,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (selected.length === 1) {
             config.label.textContent = selected[0].dataset.display || selected[0].value;
         } else {
-            config.label.textContent = `${selected.length} lotes selecionados`;
+            const countLabel = config.countLabel || 'itens';
+            config.label.textContent = `${selected.length} ${countLabel} selecionados`;
         }
     };
 
@@ -733,6 +838,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     url.searchParams.set('sort_order', nextOrder);
                     window.location.href = url.toString();
                 }
+            });
+        });
+    }
+
+    const debounce = (callback, delay = 300) => {
+        let timeoutId;
+        return (...args) => {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            timeoutId = setTimeout(() => {
+                callback.apply(null, args);
+            }, delay);
+        };
+    };
+
+    if (columnFilterForm && columnFilterInputs.length > 0) {
+        const submitColumnFilters = () => {
+            if (typeof columnFilterForm.requestSubmit === 'function') {
+                columnFilterForm.requestSubmit();
+            } else {
+                columnFilterForm.submit();
+            }
+        };
+        const debouncedColumnSubmit = debounce(submitColumnFilters, 300);
+
+        columnFilterInputs.forEach((input) => {
+            input.addEventListener('input', () => {
+                debouncedColumnSubmit();
             });
         });
     }
