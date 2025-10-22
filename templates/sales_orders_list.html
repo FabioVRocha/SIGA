@@ -84,9 +84,31 @@
         border: 1px solid var(--clr-border);
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
-    .modal-body-scroll {
-        max-height: 70vh;
+    #orderDetailsModal .modal-content {
+        width: 100%;
+        max-width: 80rem;
+        max-height: 90vh;
         overflow-y: auto;
+    }
+    .order-summary-card {
+        background-color: var(--clr-card-bg);
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+    }
+    .order-summary-label {
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--clr-text-secondary);
+    }
+    .order-summary-value {
+        margin-top: 0.35rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
     }
 </style>
 
@@ -240,40 +262,69 @@
 </div>
 
 <div id="orderDetailsModal" class="modal">
-    <div class="modal-content" style="max-width: 64rem;">
-        <div class="flex justify-between items-center mb-4">
+    <div class="modal-content order-detail-modal-content p-6 md:p-8 rounded-xl space-y-4">
+        <div class="flex items-center justify-between">
             <h2 class="section-heading">Detalhes do Pedido</h2>
-            <button id="closeOrderDetailsModalBtn" class="close-button">&times;</button>
+            <button id="closeOrderDetailsModalBtn" class="close-button" aria-label="Fechar detalhes do pedido">&times;</button>
         </div>
-        <div class="space-y-4 modal-body-scroll">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-dark-blue">
-                <div><span class="font-semibold">Pedido:</span> <span id="orderDetailsPedido">-</span></div>
-                <div><span class="font-semibold">Cliente:</span> <span id="orderDetailsCliente">-</span></div>
-                <div><span class="font-semibold">Cidade:</span> <span id="orderDetailsCidade">-</span></div>
-                <div><span class="font-semibold">UF:</span> <span id="orderDetailsUf">-</span></div>
-                <div><span class="font-semibold">Data do Pedido:</span> <span id="orderDetailsDataPedido">-</span></div>
-                <div><span class="font-semibold">Lote de Produção:</span> <span id="orderDetailsLoteProducao">-</span></div>
-                <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="orderDetailsLoteCarga">-</span></div>
+        <div id="orderDetailsLoading" class="py-6 text-center text-sm text-dark-blue hidden">
+            <i class="fas fa-spinner fa-spin mr-2"></i> Carregando detalhes do pedido...
+        </div>
+        <div id="orderDetailsError" class="py-6 text-center text-sm text-red-600 hidden"></div>
+        <div id="orderDetailsContent" class="space-y-4 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-dark-blue">
+                <div><span class="font-semibold">Pedido:</span> <span id="orderDetailsPedido">--</span></div>
+                <div><span class="font-semibold">Cliente:</span> <span id="orderDetailsCliente">--</span></div>
+                <div><span class="font-semibold">Cidade:</span> <span id="orderDetailsCidade">--</span></div>
+                <div><span class="font-semibold">UF:</span> <span id="orderDetailsUf">--</span></div>
+                <div><span class="font-semibold">Data do Pedido:</span> <span id="orderDetailsDataPedido">--</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Produção:</span> <span id="orderDetailsLoteProducao">--</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="orderDetailsLoteCarga">--</span></div>
             </div>
             <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-slate-100 text-xs uppercase text-dark-blue">
-                        <tr>
-                            <th scope="col" class="px-4 py-2 text-left">Código do Produto</th>
-                            <th scope="col" class="px-4 py-2 text-left">Sequência</th>
-                            <th scope="col" class="px-4 py-2 text-left">Produto</th>
-                            <th scope="col" class="px-4 py-2 text-right">Quantidade</th>
-                            <th scope="col" class="px-4 py-2 text-right">Valor Tabela</th>
-                            <th scope="col" class="px-4 py-2 text-right">% Desconto</th>
-                            <th scope="col" class="px-4 py-2 text-right">Valor Unitário</th>
-                            <th scope="col" class="px-4 py-2 text-right">IPI</th>
-                            <th scope="col" class="px-4 py-2 text-right">% Frete</th>
-                            <th scope="col" class="px-4 py-2 text-right">Valor Frete</th>
-                            <th scope="col" class="px-4 py-2 text-right">Valor Total</th>
+                <table class="min-w-full bg-white rounded-xl overflow-hidden">
+                    <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                        <tr class="text-xs font-medium uppercase tracking-wider">
+                            <th scope="col" class="px-4 py-3 text-left">Código do Produto</th>
+                            <th scope="col" class="px-4 py-3 text-left">Sequência</th>
+                            <th scope="col" class="px-4 py-3 text-left">Produto</th>
+                            <th scope="col" class="px-4 py-3 text-right">Quantidade</th>
+                            <th scope="col" class="px-4 py-3 text-right">Valor Tabela</th>
+                            <th scope="col" class="px-4 py-3 text-right">% Desconto</th>
+                            <th scope="col" class="px-4 py-3 text-right">Valor Unitário</th>
+                            <th scope="col" class="px-4 py-3 text-right">IPI</th>
+                            <th scope="col" class="px-4 py-3 text-right">% Frete</th>
+                            <th scope="col" class="px-4 py-3 text-right">Valor Frete</th>
+                            <th scope="col" class="px-4 py-3 text-right">Valor Total</th>
                         </tr>
                     </thead>
                     <tbody id="orderDetailsItemsBody" class="text-sm text-dark-blue"></tbody>
                 </table>
+            </div>
+            <div id="orderDetailsSummary" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 hidden">
+                <div class="order-summary-card">
+                    <p class="order-summary-label">Quantidade Total</p>
+                    <p id="orderSummaryQuantity" class="order-summary-value">--</p>
+                </div>
+                <div class="order-summary-card">
+                    <p class="order-summary-label">Valor dos Produtos</p>
+                    <p id="orderSummaryProducts" class="order-summary-value">--</p>
+                </div>
+                <div class="order-summary-card">
+                    <p class="order-summary-label">Valor do IPI</p>
+                    <p id="orderSummaryIpi" class="order-summary-value">--</p>
+                </div>
+                <div class="order-summary-card">
+                    <p class="order-summary-label">Valor do Frete</p>
+                    <p id="orderSummaryFrete" class="order-summary-value">--</p>
+                </div>
+                <div class="order-summary-card">
+                    <p class="order-summary-label">Valor Total</p>
+                    <p id="orderSummaryTotal" class="order-summary-value">--</p>
+                </div>
+            </div>
+            <div id="orderDetailsEmptyState" class="hidden text-sm text-center text-slate-muted">
+                Nenhum item encontrado para este pedido.
             </div>
         </div>
     </div>
@@ -298,16 +349,54 @@ document.addEventListener('DOMContentLoaded', () => {
     const orderDetailsDataEl = document.getElementById('orderDetailsDataPedido');
     const orderDetailsLoteProducaoEl = document.getElementById('orderDetailsLoteProducao');
     const orderDetailsLoteCargaEl = document.getElementById('orderDetailsLoteCarga');
+    const orderDetailsLoadingEl = document.getElementById('orderDetailsLoading');
+    const orderDetailsErrorEl = document.getElementById('orderDetailsError');
+    const orderDetailsContentEl = document.getElementById('orderDetailsContent');
     const orderDetailsItemsBody = document.getElementById('orderDetailsItemsBody');
+    const orderDetailsEmptyStateEl = document.getElementById('orderDetailsEmptyState');
+    const orderDetailsSummaryEl = document.getElementById('orderDetailsSummary');
+    const orderSummaryQuantityEl = document.getElementById('orderSummaryQuantity');
+    const orderSummaryProductsEl = document.getElementById('orderSummaryProducts');
+    const orderSummaryIpiEl = document.getElementById('orderSummaryIpi');
+    const orderSummaryFreteEl = document.getElementById('orderSummaryFrete');
+    const orderSummaryTotalEl = document.getElementById('orderSummaryTotal');
     
     const sortableButtons = document.querySelectorAll('[data-sort-column]');
     const sortByInput = document.getElementById('columnSortByInput');
     const sortOrderInput = document.getElementById('columnSortOrderInput');
 
-    const setTextContent = (element, value, fallback = '-') => {
+    const safeText = (value, fallback = '--') => {
+        if (value === undefined || value === null) {
+            return fallback;
+        }
+        const text = String(value).trim();
+        return text === '' ? fallback : text;
+    };
+
+    const setTextContent = (element, value, fallback = '--') => {
         if (!element) return;
-        const text = value !== undefined && value !== null && `${value}`.trim() !== '' ? value : fallback;
-        element.textContent = text;
+        element.textContent = safeText(value, fallback);
+    };
+
+    const setListContent = (element, value, fallback = '--') => {
+        if (!element) return;
+        element.textContent = '';
+        const values = Array.isArray(value)
+            ? value
+            : String(value || '')
+                  .split(';')
+                  .map((item) => item.trim())
+                  .filter((item) => item.length > 0);
+        if (values.length === 0) {
+            element.textContent = fallback;
+            return;
+        }
+        values.forEach((item, index) => {
+            if (index > 0) {
+                element.appendChild(document.createElement('br'));
+            }
+            element.appendChild(document.createTextNode(item));
+        });
     };
 
     const formatNumber = (value, decimals = 2) => {
@@ -334,63 +423,167 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const formatPercentage = (value) => `${formatNumber(value, 2)}%`;
 
+    const toNumber = (value) => {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : 0;
+    };
+
+    const resetOrderSummary = () => {
+        if (!orderDetailsSummaryEl) return;
+        orderDetailsSummaryEl.classList.add('hidden');
+        if (orderSummaryQuantityEl) orderSummaryQuantityEl.textContent = '--';
+        if (orderSummaryProductsEl) orderSummaryProductsEl.textContent = '--';
+        if (orderSummaryIpiEl) orderSummaryIpiEl.textContent = '--';
+        if (orderSummaryFreteEl) orderSummaryFreteEl.textContent = '--';
+        if (orderSummaryTotalEl) orderSummaryTotalEl.textContent = '--';
+    };
+
+    const updateOrderSummary = (totals) => {
+        if (!orderDetailsSummaryEl || !totals) return;
+        if (orderSummaryQuantityEl) orderSummaryQuantityEl.textContent = formatNumber(totals.quantidade, 2);
+        if (orderSummaryProductsEl) orderSummaryProductsEl.textContent = formatCurrency(totals.produtos);
+        if (orderSummaryIpiEl) orderSummaryIpiEl.textContent = formatCurrency(totals.ipi);
+        if (orderSummaryFreteEl) orderSummaryFreteEl.textContent = formatCurrency(totals.frete);
+        if (orderSummaryTotalEl) orderSummaryTotalEl.textContent = formatCurrency(totals.total);
+        orderDetailsSummaryEl.classList.remove('hidden');
+    };
+
     const updateOrderHeader = (header = {}) => {
         setTextContent(orderDetailsPedidoEl, header.pedido);
         setTextContent(orderDetailsClienteEl, header.cliente);
         setTextContent(orderDetailsCidadeEl, header.cidade);
         setTextContent(orderDetailsUfEl, header.uf);
         setTextContent(orderDetailsDataEl, header.data_pedido);
-        setTextContent(orderDetailsLoteProducaoEl, header.lote_producao);
+        setListContent(orderDetailsLoteProducaoEl, header.lote_producao);
         setTextContent(orderDetailsLoteCargaEl, header.lote_carga);
     };
 
     const renderOrderItems = (items = []) => {
         if (!orderDetailsItemsBody) return;
         orderDetailsItemsBody.innerHTML = '';
+        resetOrderSummary();
 
         if (!Array.isArray(items) || items.length === 0) {
-            const emptyRow = document.createElement('tr');
-            const emptyCell = document.createElement('td');
-            emptyCell.colSpan = 11;
-            emptyCell.className = 'px-4 py-6 text-center text-sm text-slate-muted';
-            emptyCell.textContent = 'Nenhum item encontrado para este pedido.';
-            emptyRow.appendChild(emptyCell);
-            orderDetailsItemsBody.appendChild(emptyRow);
+            if (orderDetailsEmptyStateEl) {
+                orderDetailsEmptyStateEl.classList.remove('hidden');
+            }
             return;
         }
 
+        if (orderDetailsEmptyStateEl) {
+            orderDetailsEmptyStateEl.classList.add('hidden');
+        }
+
+        const totals = {
+            quantidade: 0,
+            produtos: 0,
+            ipi: 0,
+            frete: 0,
+            total: 0,
+        };
+
         items.forEach((item) => {
+            const quantityValue = toNumber(item.quantidade_total);
+            const productsValue = toNumber(item.valor_unitario_total);
+            const ipiValue = toNumber(item.valor_ipi);
+            const freightValue = toNumber(item.valor_frete);
+            const totalValue = toNumber(item.valor_total);
+
             const row = document.createElement('tr');
             row.className = 'hover-row text-sm text-dark-blue';
 
             const cells = [
-                { value: item.codigo_produto || '-', align: 'text-left' },
-                { value: item.sequencia || '-', align: 'text-left' },
-                { value: item.produto || '-', align: 'text-left' },
-                { value: formatNumber(item.quantidade_total, 2), align: 'text-right' },
-                { value: formatCurrency(item.valor_tabela), align: 'text-right' },
-                { value: formatPercentage(item.percentual_desconto), align: 'text-right' },
-                { value: formatCurrency(item.valor_unitario_total), align: 'text-right' },
-                { value: formatCurrency(item.valor_ipi), align: 'text-right' },
-                { value: formatPercentage(item.percentual_frete), align: 'text-right' },
-                { value: formatCurrency(item.valor_frete), align: 'text-right' },
-                { value: formatCurrency(item.valor_total), align: 'text-right' },
+                { text: safeText(item.codigo_produto), className: 'py-3 px-4 whitespace-nowrap font-semibold' },
+                { text: safeText(item.sequencia), className: 'py-3 px-4 whitespace-nowrap' },
+                { text: safeText(item.produto), className: 'py-3 px-4 whitespace-nowrap' },
+                { text: formatNumber(quantityValue, 2), className: 'py-3 px-4 whitespace-nowrap text-right' },
+                { text: formatCurrency(item.valor_tabela), className: 'py-3 px-4 whitespace-nowrap text-right' },
+                { text: formatPercentage(item.percentual_desconto), className: 'py-3 px-4 whitespace-nowrap text-right' },
+                { text: formatCurrency(productsValue), className: 'py-3 px-4 whitespace-nowrap text-right' },
+                { text: formatCurrency(ipiValue), className: 'py-3 px-4 whitespace-nowrap text-right' },
+                { text: formatPercentage(item.percentual_frete), className: 'py-3 px-4 whitespace-nowrap text-right' },
+                { text: formatCurrency(freightValue), className: 'py-3 px-4 whitespace-nowrap text-right' },
+                { text: formatCurrency(totalValue), className: 'py-3 px-4 whitespace-nowrap text-right' },
             ];
 
             cells.forEach((cellData) => {
                 const cell = document.createElement('td');
-                cell.className = `px-4 py-2 whitespace-nowrap ${cellData.align}`;
-                cell.textContent = cellData.value;
+                cell.className = cellData.className;
+                cell.textContent = cellData.text;
                 row.appendChild(cell);
             });
 
+            totals.quantidade += quantityValue;
+            totals.produtos += productsValue;
+            totals.ipi += ipiValue;
+            totals.frete += freightValue;
+            totals.total += totalValue;
+
             orderDetailsItemsBody.appendChild(row);
         });
+
+        updateOrderSummary(totals);
     };
 
     const resetOrderDetailsModal = () => {
         updateOrderHeader({});
-        renderOrderItems([]);
+        resetOrderSummary();
+        if (orderDetailsItemsBody) {
+            orderDetailsItemsBody.innerHTML = '';
+        }
+        if (orderDetailsEmptyStateEl) {
+            orderDetailsEmptyStateEl.classList.add('hidden');
+        }
+        if (orderDetailsLoadingEl) {
+            orderDetailsLoadingEl.classList.add('hidden');
+        }
+        if (orderDetailsErrorEl) {
+            orderDetailsErrorEl.classList.add('hidden');
+            orderDetailsErrorEl.textContent = '';
+        }
+        if (orderDetailsContentEl) {
+            orderDetailsContentEl.classList.add('hidden');
+        }
+    };
+
+    const showOrderDetailsLoading = () => {
+        if (orderDetailsLoadingEl) {
+            orderDetailsLoadingEl.classList.remove('hidden');
+        }
+        if (orderDetailsErrorEl) {
+            orderDetailsErrorEl.classList.add('hidden');
+        }
+        if (orderDetailsContentEl) {
+            orderDetailsContentEl.classList.add('hidden');
+        }
+    };
+
+    const showOrderDetailsContent = () => {
+        if (orderDetailsContentEl) {
+            orderDetailsContentEl.classList.remove('hidden');
+        }
+        if (orderDetailsLoadingEl) {
+            orderDetailsLoadingEl.classList.add('hidden');
+        }
+        if (orderDetailsErrorEl) {
+            orderDetailsErrorEl.classList.add('hidden');
+        }
+    };
+
+    const showOrderDetailsError = (message) => {
+        if (orderDetailsErrorEl) {
+            orderDetailsErrorEl.textContent = message || 'Não foi possível carregar os detalhes do pedido.';
+            orderDetailsErrorEl.classList.remove('hidden');
+        }
+        if (orderDetailsLoadingEl) {
+            orderDetailsLoadingEl.classList.add('hidden');
+        }
+        if (orderDetailsContentEl) {
+            orderDetailsContentEl.classList.add('hidden');
+        }
+        if (orderDetailsEmptyStateEl) {
+            orderDetailsEmptyStateEl.classList.add('hidden');
+        }
     };
 
     const openOrderDetailsModal = () => {
@@ -659,6 +852,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!pedido) return;
 
             resetOrderDetailsModal();
+            openOrderDetailsModal();
+            showOrderDetailsLoading();
 
             const originalInnerHTML = button.innerHTML;
             button.disabled = true;
@@ -684,10 +879,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 updateOrderHeader(data.header || {});
                 renderOrderItems(Array.isArray(data.items) ? data.items : []);
-                openOrderDetailsModal();
+                showOrderDetailsContent();
             } catch (error) {
-                console.error(error);
-                alert(error.message || 'Não foi possível carregar os detalhes do pedido.');
+                console.error('Erro ao carregar detalhes do pedido:', error);
+                showOrderDetailsError(error.message);
             } finally {
                 button.innerHTML = originalInnerHTML;
                 button.disabled = false;
