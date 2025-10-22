@@ -84,6 +84,32 @@
         border: 1px solid var(--clr-border);
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
+    .action-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.4rem 0.85rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--clr-light-blue);
+        background-color: transparent;
+        color: var(--clr-light-blue);
+        font-size: 0.75rem;
+        font-weight: 600;
+        transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    .action-button:hover,
+    .action-button:focus-visible {
+        background-color: rgba(79, 131, 204, 0.12);
+        color: var(--clr-dark-blue);
+        border-color: var(--clr-dark-blue);
+    }
+    .action-button i {
+        font-size: 0.75rem;
+    }
+    .modal-body-scroll {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
 </style>
 
 <div class="space-y-6">
@@ -131,7 +157,8 @@
                             <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'situation' %}active{% endif %}" data-sort-column="situation"><span>Situação</span><i class="fas {% if sort_by == 'situation' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
                             <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'occurrence' %}active{% endif %}" data-sort-column="occurrence"><span>Ocorrência</span><i class="fas {% if sort_by == 'occurrence' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
                             <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'production_lots_display' %}active{% endif %}" data-sort-column="production_lots_display"><span>Lote Produção</span><i class="fas {% if sort_by == 'production_lots_display' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
-                            <th scope="col" class="px-4 py-3 text-left rounded-tr-lg"><button type="button" class="sort-button {% if sort_by == 'load_lot' %}active{% endif %}" data-sort-column="load_lot"><span>Lote Carga</span><i class="fas {% if sort_by == 'load_lot' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'load_lot' %}active{% endif %}" data-sort-column="load_lot"><span>Lote Carga</span><i class="fas {% if sort_by == 'load_lot' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-center rounded-tr-lg"><span>Ações</span></th>
                         </tr>
                         <tr class="bg-slate-100 text-xs text-dark-blue">
                             <th scope="col" class="px-4 py-2"><input type="text" name="filter_pedido" value="{{ filters.filter_pedido or '' }}" class="filter-input column-filter-input" placeholder="Pedido"></th>
@@ -151,6 +178,7 @@
                                     <button type="button" id="clearColumnFiltersBtn" class="text-xs text-red-600 hover:underline">Limpar</button>
                                 </div>
                             </th>
+                            <th scope="col" class="px-4 py-2"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -175,11 +203,17 @@
                             <td class="py-2 px-4 whitespace-nowrap">{{ order.occurrence or '-' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap">{{ order.production_lots_display or '-' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap">{{ order.load_lot or '-' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-center">
+                                <button type="button" class="action-button view-order-btn" data-order-id="{{ order.pedido }}" aria-label="Visualizar pedido {{ order.pedido }}">
+                                    <i class="fas fa-eye"></i>
+                                    <span>Visualizar</span>
+                                </button>
+                            </td>
                         </tr>
                         {% endfor %}
                         {% else %}
                         <tr>
-                            <td colspan="12" class="py-6 px-4 text-center text-sm text-slate-muted">
+                            <td colspan="13" class="py-6 px-4 text-center text-sm text-slate-muted">
                                 Nenhum pedido encontrado. Ajuste os filtros ou utilize os campos de busca acima.
                             </td>
                         </tr>
@@ -225,6 +259,46 @@
             </div>
             <!-- Hidden inputs for column filters -->
         </form>
+</div>
+</div>
+
+<div id="orderDetailsModal" class="modal">
+    <div class="modal-content" style="max-width: 64rem;">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="section-heading">Detalhes do Pedido</h2>
+            <button id="closeOrderDetailsModalBtn" class="close-button">&times;</button>
+        </div>
+        <div class="space-y-4 modal-body-scroll">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-dark-blue">
+                <div><span class="font-semibold">Pedido:</span> <span id="orderDetailsPedido">-</span></div>
+                <div><span class="font-semibold">Cliente:</span> <span id="orderDetailsCliente">-</span></div>
+                <div><span class="font-semibold">Cidade:</span> <span id="orderDetailsCidade">-</span></div>
+                <div><span class="font-semibold">UF:</span> <span id="orderDetailsUf">-</span></div>
+                <div><span class="font-semibold">Data do Pedido:</span> <span id="orderDetailsDataPedido">-</span></div>
+                <div><span class="font-semibold">Lote de Produção:</span> <span id="orderDetailsLoteProducao">-</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="orderDetailsLoteCarga">-</span></div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-slate-100 text-xs uppercase text-dark-blue">
+                        <tr>
+                            <th scope="col" class="px-4 py-2 text-left">Código do Produto</th>
+                            <th scope="col" class="px-4 py-2 text-left">Sequência</th>
+                            <th scope="col" class="px-4 py-2 text-left">Produto</th>
+                            <th scope="col" class="px-4 py-2 text-right">Quantidade</th>
+                            <th scope="col" class="px-4 py-2 text-right">Valor Tabela</th>
+                            <th scope="col" class="px-4 py-2 text-right">% Desconto</th>
+                            <th scope="col" class="px-4 py-2 text-right">Valor Unitário</th>
+                            <th scope="col" class="px-4 py-2 text-right">IPI</th>
+                            <th scope="col" class="px-4 py-2 text-right">% Frete</th>
+                            <th scope="col" class="px-4 py-2 text-right">Valor Frete</th>
+                            <th scope="col" class="px-4 py-2 text-right">Valor Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orderDetailsItemsBody" class="text-sm text-dark-blue"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -238,10 +312,134 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearFiltersBtn = document.getElementById('clearFiltersBtn');
     const filterForm = document.getElementById('filterForm');
     const columnFilterForm = document.getElementById('columnFilterForm');
+    const orderDetailsModal = document.getElementById('orderDetailsModal');
+    const closeOrderDetailsModalBtn = document.getElementById('closeOrderDetailsModalBtn');
+    const orderDetailsPedidoEl = document.getElementById('orderDetailsPedido');
+    const orderDetailsClienteEl = document.getElementById('orderDetailsCliente');
+    const orderDetailsCidadeEl = document.getElementById('orderDetailsCidade');
+    const orderDetailsUfEl = document.getElementById('orderDetailsUf');
+    const orderDetailsDataEl = document.getElementById('orderDetailsDataPedido');
+    const orderDetailsLoteProducaoEl = document.getElementById('orderDetailsLoteProducao');
+    const orderDetailsLoteCargaEl = document.getElementById('orderDetailsLoteCarga');
+    const orderDetailsItemsBody = document.getElementById('orderDetailsItemsBody');
     
     const sortableButtons = document.querySelectorAll('[data-sort-column]');
     const sortByInput = document.getElementById('columnSortByInput');
     const sortOrderInput = document.getElementById('columnSortOrderInput');
+
+    const setTextContent = (element, value, fallback = '-') => {
+        if (!element) return;
+        const text = value !== undefined && value !== null && `${value}`.trim() !== '' ? value : fallback;
+        element.textContent = text;
+    };
+
+    const formatNumber = (value, decimals = 2) => {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+            return Number(0).toLocaleString('pt-BR', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals,
+            });
+        }
+        return number.toLocaleString('pt-BR', {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+        });
+    };
+
+    const formatCurrency = (value) => {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+            return Number(0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+        return number.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    };
+
+    const formatPercentage = (value) => `${formatNumber(value, 2)}%`;
+
+    const updateOrderHeader = (header = {}) => {
+        setTextContent(orderDetailsPedidoEl, header.pedido);
+        setTextContent(orderDetailsClienteEl, header.cliente);
+        setTextContent(orderDetailsCidadeEl, header.cidade);
+        setTextContent(orderDetailsUfEl, header.uf);
+        setTextContent(orderDetailsDataEl, header.data_pedido);
+        setTextContent(orderDetailsLoteProducaoEl, header.lote_producao);
+        setTextContent(orderDetailsLoteCargaEl, header.lote_carga);
+    };
+
+    const renderOrderItems = (items = []) => {
+        if (!orderDetailsItemsBody) return;
+        orderDetailsItemsBody.innerHTML = '';
+
+        if (!Array.isArray(items) || items.length === 0) {
+            const emptyRow = document.createElement('tr');
+            const emptyCell = document.createElement('td');
+            emptyCell.colSpan = 11;
+            emptyCell.className = 'px-4 py-6 text-center text-sm text-slate-muted';
+            emptyCell.textContent = 'Nenhum item encontrado para este pedido.';
+            emptyRow.appendChild(emptyCell);
+            orderDetailsItemsBody.appendChild(emptyRow);
+            return;
+        }
+
+        items.forEach((item) => {
+            const row = document.createElement('tr');
+            row.className = 'hover-row text-sm text-dark-blue';
+
+            const cells = [
+                { value: item.codigo_produto || '-', align: 'text-left' },
+                { value: item.sequencia || '-', align: 'text-left' },
+                { value: item.produto || '-', align: 'text-left' },
+                { value: formatNumber(item.quantidade_total, 2), align: 'text-right' },
+                { value: formatCurrency(item.valor_tabela), align: 'text-right' },
+                { value: formatPercentage(item.percentual_desconto), align: 'text-right' },
+                { value: formatCurrency(item.valor_unitario_total), align: 'text-right' },
+                { value: formatCurrency(item.valor_ipi), align: 'text-right' },
+                { value: formatPercentage(item.percentual_frete), align: 'text-right' },
+                { value: formatCurrency(item.valor_frete), align: 'text-right' },
+                { value: formatCurrency(item.valor_total), align: 'text-right' },
+            ];
+
+            cells.forEach((cellData) => {
+                const cell = document.createElement('td');
+                cell.className = `px-4 py-2 whitespace-nowrap ${cellData.align}`;
+                cell.textContent = cellData.value;
+                row.appendChild(cell);
+            });
+
+            orderDetailsItemsBody.appendChild(row);
+        });
+    };
+
+    const resetOrderDetailsModal = () => {
+        updateOrderHeader({});
+        renderOrderItems([]);
+    };
+
+    const openOrderDetailsModal = () => {
+        if (!orderDetailsModal) return;
+        orderDetailsModal.style.display = 'flex';
+    };
+
+    const closeOrderDetailsModal = () => {
+        if (!orderDetailsModal) return;
+        orderDetailsModal.style.display = 'none';
+        resetOrderDetailsModal();
+    };
+
+    resetOrderDetailsModal();
+
+    if (closeOrderDetailsModalBtn) {
+        closeOrderDetailsModalBtn.addEventListener('click', closeOrderDetailsModal);
+    }
+
+    if (orderDetailsModal) {
+        orderDetailsModal.addEventListener('click', (event) => {
+            if (event.target === orderDetailsModal) {
+                closeOrderDetailsModal();
+            }
+        });
+    }
 
     // Generic Dropdown Logic
     const createDropdown = (id, label, name, options, selected, isMulti=true) => {
@@ -421,7 +619,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === filterModal) closeFilterModal();
     });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeFilterModal();
+        if (e.key !== 'Escape') return;
+        if (filterModal && filterModal.style.display === 'flex') {
+            closeFilterModal();
+        }
+        if (orderDetailsModal && orderDetailsModal.style.display === 'flex') {
+            closeOrderDetailsModal();
+        }
     });
     
     // Sorting
@@ -466,6 +670,53 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         columnFilterInputs.forEach(input => input.value = '');
         columnFilterForm.submit();
+    });
+
+    const viewOrderButtons = document.querySelectorAll('.view-order-btn');
+
+    viewOrderButtons.forEach((button) => {
+        button.addEventListener('click', async () => {
+            if (!orderDetailsModal) return;
+
+            const pedido = button.dataset.orderId;
+            if (!pedido) return;
+
+            resetOrderDetailsModal();
+
+            const originalInnerHTML = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Carregando...</span>';
+
+            try {
+                const response = await fetch(`/orders/${encodeURIComponent(pedido)}/details`);
+                let data = null;
+                try {
+                    data = await response.json();
+                } catch {
+                    data = null;
+                }
+
+                if (!response.ok) {
+                    const message = data && data.error ? data.error : 'Não foi possível carregar os detalhes do pedido.';
+                    throw new Error(message);
+                }
+
+                if (!data) {
+                    throw new Error('Resposta inválida do servidor.');
+                }
+
+                updateOrderHeader(data.header || {});
+                renderOrderItems(Array.isArray(data.items) ? data.items : []);
+                openOrderDetailsModal();
+            } catch (error) {
+                console.error(error);
+                alert(error.message || 'Não foi possível carregar os detalhes do pedido.');
+            } finally {
+                button.innerHTML = originalInnerHTML;
+                button.disabled = false;
+                button.blur();
+            }
+        });
     });
 
     // Sync column filters with modal form on submit

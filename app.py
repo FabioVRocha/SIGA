@@ -2555,7 +2555,7 @@ def fetch_sales_orders(filters):
     conn = get_erp_db_connection()
 
     if not conn:
-        return orders, "N�o foi poss�vel conectar ao banco de dados do ERP."
+        return orders, "Não foi possível conectar ao banco de dados do ERP."
 
     has_lcapecod_column = False
     has_peddesval_column = False
@@ -2577,7 +2577,7 @@ def fetch_sales_orders(filters):
         if result:
             has_lcapecod_column = bool(result[0])
     except Error as e:
-        print(f"Erro ao verificar a coluna 'lcapecod' na tabela 'pedido' (relat�rio de vendas): {e}")
+        print(f"Erro ao verificar a coluna 'lcapecod' na tabela 'pedido' (relatório de vendas): {e}")
     finally:
         if column_check_cursor:
             column_check_cursor.close()
@@ -2809,7 +2809,7 @@ def fetch_sales_orders(filters):
                 if has_lcapecod_column:
                     query += " AND p.lcapecod IS NULL"
                 else:
-                    print("Filtro 'Lote de Carga = N�o' ignorado: coluna 'lcapecod' ausente.")
+                    print("Filtro 'Lote de Carga = Não' ignorado: coluna 'lcapecod' ausente.")
 
         has_production_lot = [value.strip().lower() for value in filters.get('has_production_lot', []) if value]
         if has_production_lot:
@@ -2911,11 +2911,11 @@ def fetch_sales_orders(filters):
                     'linha': linha or 'OUTROS',
                     'approval_status_code': approval_status_code or '',
                     'approval_status': ORDER_APPROVAL_STATUS_LABELS.get(
-                        (approval_status_code or '').strip(), 'N�o Informado'
+                        (approval_status_code or '').strip(), 'Não Informado'
                     ),
                     'situation_code': situation_code or '',
                     'situation': ORDER_SITUATION_LABELS.get(
-                        (situation_code or '').strip(), 'N�o Informada'
+                        (situation_code or '').strip(), 'Não Informada'
                     ),
                     'occurrence_code': occurrence_code or '',
                     'occurrence': occurrence_display,
@@ -3077,17 +3077,21 @@ def fetch_order_details(pedido_code):
         items_cur.execute(
             """
             SELECT
-                COALESCE(pm.prjmproex::text, '') AS codigo_produto,
-                COALESCE(pm.prjmpedse::text, '') AS sequencia,
+                COALESCE(pp.pprproduto::text, '') AS codigo_produto,
+                COALESCE(pp.pprseq::text, '') AS sequencia,
                 COALESCE(prod.pronome, '') AS produto,
-                SUM(CASE WHEN pm.prjmovtip = 'R' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS reservado,
-                SUM(CASE WHEN pm.prjmovtip = 'P' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS separado,
-                SUM(CASE WHEN pm.prjmovtip = 'C' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS carregado
-            FROM projmovi pm
-            LEFT JOIN produto prod ON prod.produto = pm.prjmproex
-            WHERE CAST(pm.prjmpedid AS TEXT) = %s
-            GROUP BY pm.prjmproex, pm.prjmpedse, prod.pronome
-            ORDER BY pm.prjmpedse, pm.prjmproex
+                SUM(COALESCE(pp.pprquanti, 0)) AS quantidade_total,
+                SUM(COALESCE(pp.pprlista, 0)) AS valor_tabela,
+                AVG(COALESCE(pp.pprdesc1, 0)) AS percentual_desconto,
+                SUM(COALESCE(pp.pprvalor, 0)) AS valor_unitario_total,
+                SUM(COALESCE(pp.pprvlipi, 0)) AS valor_ipi,
+                SUM(COALESCE(pp.pprvlsoma, 0)) AS valor_bruto_total,
+                SUM(COALESCE(pp.pprdescped, 0)) AS desconto_pedido_total
+            FROM pedprodu pp
+            LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+            WHERE CAST(pp.pedido AS TEXT) = %s
+            GROUP BY pp.pprproduto, pp.pprseq, prod.pronome
+            ORDER BY pp.pprseq, pp.pprproduto
             """,
             (pedido_value,),
         )
@@ -3095,21 +3099,69 @@ def fetch_order_details(pedido_code):
         items_cur.close()
 
         for item_row in item_rows:
-            codigo_produto, sequencia, produto_nome, reservado_raw, separado_raw, carregado_raw = item_row
-            reservado = float(reservado_raw) if reservado_raw is not None else 0.0
-            separado = float(separado_raw) if separado_raw is not None else 0.0
-            carregado = float(carregado_raw) if carregado_raw is not None else 0.0
-            kpi_status = calculate_order_kpi(reservado_raw, separado_raw, carregado_raw)
+            (
+                codigo_produto,
+                sequencia,
+                produto_nome,
+                quantidade_total_raw,
+                valor_tabela_raw,
+                percentual_desc_raw,
+                valor_unitario_raw,
+                valor_ipi_raw,
+                valor_bruto_raw,
+                desconto_pedido_raw,
+            ) = item_row
+
+            try:
+                quantidade_total = float(quantidade_total_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                quantidade_total = 0.0
+
+            try:
+                valor_tabela = float(valor_tabela_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                valor_tabela = 0.0
+
+            try:
+                percentual_desc = float(percentual_desc_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                percentual_desc = 0.0
+
+            try:
+                valor_unitario_total = float(valor_unitario_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                valor_unitario_total = 0.0
+
+            try:
+                valor_ipi = float(valor_ipi_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                valor_ipi = 0.0
+
+            try:
+                valor_bruto = float(valor_bruto_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                valor_bruto = 0.0
+
+            try:
+                desconto_pedido = float(desconto_pedido_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                desconto_pedido = 0.0
+
+            valor_total = valor_bruto - desconto_pedido
 
             details['items'].append(
                 {
                     'codigo_produto': codigo_produto,
                     'sequencia': sequencia,
                     'produto': produto_nome,
-                    'reservado': reservado,
-                    'separado': separado,
-                    'carregado': carregado,
-                    'kpi_status': kpi_status,
+                    'quantidade_total': quantidade_total,
+                    'valor_tabela': valor_tabela,
+                    'percentual_desconto': percentual_desc,
+                    'valor_unitario_total': valor_unitario_total,
+                    'valor_ipi': valor_ipi,
+                    'percentual_frete': 0.0,
+                    'valor_frete': 0.0,
+                    'valor_total': valor_total,
                 }
             )
 
@@ -3307,11 +3359,11 @@ def sales_orders_list():
 
     load_lot_filter_options = [
         {'value': 'yes', 'label': 'Sim'},
-        {'value': 'no', 'label': 'N�o'},
+        {'value': 'no', 'label': 'Não'},
     ]
     production_lot_filter_options = [
         {'value': 'yes', 'label': 'Sim'},
-        {'value': 'no', 'label': 'N�o'},
+        {'value': 'no', 'label': 'Não'},
     ]
 
     return render_template(
