@@ -511,6 +511,79 @@ def get_distinct_vendors():
             conn.close()
     return vendors
 
+def get_sales_order_vendors():
+    """
+    Retorna os vendedores relacionados a pedidos de venda com seus respectivos c�digos.
+    """
+    conn = get_erp_db_connection()
+    vendor_options = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT DISTINCT
+                    COALESCE(v.vendedor::text, '') AS vendedor_codigo,
+                    COALESCE(v.vennome, '') AS vendedor_nome
+                FROM pedido p
+                LEFT JOIN vendedor v ON v.vendedor = p.pedrepres
+                WHERE p.pedrepres IS NOT NULL
+                ORDER BY COALESCE(v.vennome, ''), COALESCE(v.vendedor::text, '')
+                """
+            )
+            rows = cur.fetchall()
+            cur.close()
+            for code, name in rows:
+                vendor_options.append(
+                    {
+                        'code': code or '',
+                        'name': name or '',
+                    }
+                )
+        except Error as e:
+            print(f'Erro ao buscar vendedores de pedidos de venda: {e}')
+        finally:
+            conn.close()
+    return vendor_options
+
+def get_distinct_occurrences():
+    """
+    Retorna as ocorr�ncias cadastradas no acompanhamento de pedidos.
+    """
+    conn = get_erp_db_connection()
+    occurrences = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(peds1oco::text, '') AS occurrence_code,
+                    COALESCE(peds1doco, '') AS occurrence_description
+                FROM acompanh
+                ORDER BY occurrence_code, occurrence_description
+                """
+            )
+            raw_rows = cur.fetchall()
+            cur.close()
+            occurrence_map = {}
+            for code, description in raw_rows:
+                if code not in occurrence_map or (not occurrence_map[code] and description):
+                    occurrence_map[code] = description
+            occurrences = [
+                {
+                    'code': code,
+                    'description': occurrence_map[code] or '',
+                }
+                for code in sorted(occurrence_map.keys())
+                if code or occurrence_map[code]
+            ]
+        except Error as e:
+            print(f'Erro ao buscar ocorr�ncias de pedidos: {e}')
+        finally:
+            conn.close()
+    return occurrences
+
 
 def get_distinct_vendor_statuses():
     """Busca todos os status de vendedores distintos presentes no ERP."""
@@ -2473,6 +2546,362 @@ def fetch_orders(filters):
 
     return orders, error_message
 
+def fetch_sales_orders(filters):
+    """
+    Busca os pedidos de venda com agregados de quantidade, valor, ocorr�ncia e informa��es de lote.
+    """
+    orders = []
+    error_message = None
+    conn = get_erp_db_connection()
+
+    if not conn:
+        return orders, "N�o foi poss�vel conectar ao banco de dados do ERP."
+
+    has_lcapecod_column = False
+    column_check_cursor = None
+
+    try:
+        column_check_cursor = conn.cursor()
+        column_check_cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'pedido'
+                  AND column_name = 'lcapecod'
+            )
+            """
+        )
+        result = column_check_cursor.fetchone()
+        if result:
+            has_lcapecod_column = bool(result[0])
+    except Error as e:
+        print(f"Erro ao verificar a coluna 'lcapecod' na tabela 'pedido' (relat�rio de vendas): {e}")
+    finally:
+        if column_check_cursor:
+            column_check_cursor.close()
+
+    city_expression = (
+        "CASE "
+        "WHEN COALESCE(c.cidnome, '') <> '' THEN c.cidnome "
+        "WHEN COALESCE(p.pedentcid::text, '') <> '' THEN p.pedentcid::text "
+        "ELSE '' "
+        "END"
+    )
+    state_expression = (
+        "CASE "
+        "WHEN COALESCE(c.estado, '') <> '' THEN c.estado "
+        "WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text "
+        "ELSE '' "
+        "END"
+    )
+
+    load_lot_select = (
+        "CAST(p.lcapecod AS TEXT) AS load_lot_code,\n"
+        "                COALESCE(lc.lcades, '') AS load_lot_description,\n"
+    )
+    load_lot_join = "LEFT JOIN lotecar lc ON lc.lcacod = p.lcapecod"
+
+    if not has_lcapecod_column:
+        load_lot_select = "NULL AS load_lot_code,\n                '' AS load_lot_description,\n"
+        load_lot_join = ""
+
+    try:
+        cur = conn.cursor()
+        query = f"""
+            WITH pedprod AS (
+                SELECT
+                    pedido,
+                    SUM(COALESCE(pprquanti, 0)) AS quantidade_total,
+                    SUM(COALESCE(pprvlsoma, 0)) AS valor_bruto_total,
+                    SUM(COALESCE(pprdescped, 0)) AS desconto_total
+                FROM pedprodu
+                GROUP BY pedido
+            ),
+            linha_info AS (
+                SELECT
+                    sub.pedido,
+                    (ARRAY_AGG(sub.linha_value ORDER BY sub.priority))[1] AS linha
+                FROM (
+                    SELECT DISTINCT
+                        base_data.pedido,
+                        CASE
+                            WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 'MADRESILVA'
+                            WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 'PETRA'
+                            WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 'GARLAND'
+                            WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 'GLASSMADRE'
+                            WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 'CAVILHAS'
+                            WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 'SOLARE'
+                            WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 'ESPUMA'
+                            ELSE 'OUTROS'
+                        END AS linha_value,
+                        CASE
+                            WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 1
+                            WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 2
+                            WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 3
+                            WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 4
+                            WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 5
+                            WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 6
+                            WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 7
+                            ELSE 999
+                        END AS priority
+                    FROM (
+                        SELECT
+                            pp.pedido,
+                            UPPER(COALESCE(g.grunome, '')) AS group_name_upper
+                        FROM pedprodu pp
+                        LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+                        LEFT JOIN grupo g ON g.grupo = prod.grupo
+                        WHERE pp.pedido IS NOT NULL
+                    ) base_data
+                ) sub
+                GROUP BY sub.pedido
+            ),
+            production_lots AS (
+                SELECT
+                    CAST(lots.pedido AS TEXT) AS pedido,
+                    STRING_AGG(lots.lot_display, '; ' ORDER BY lots.lot_display) AS production_lots_display
+                FROM (
+                    SELECT DISTINCT
+                        ao.acaopedi AS pedido,
+                        CASE
+                            WHEN COALESCE(lp.lotcod::text, '') <> '' THEN
+                                lp.lotcod::text ||
+                                CASE
+                                    WHEN COALESCE(lp.lotdes, '') <> '' THEN ' - ' || lp.lotdes
+                                    ELSE ''
+                                END
+                            ELSE ''
+                        END AS lot_display
+                    FROM acaorde2 ao
+                    JOIN ordem o ON o.ordem = ao.acaoorde
+                    LEFT JOIN loteprod lp ON lp.lotcod = o.lotcod
+                    WHERE ao.acaopedi IS NOT NULL
+                ) lots
+                WHERE lots.lot_display <> ''
+                GROUP BY lots.pedido
+            ),
+            occurrences AS (
+                SELECT DISTINCT ON (peds1ped)
+                    CAST(peds1ped AS TEXT) AS pedido,
+                    COALESCE(peds1oco::text, '') AS occurrence_code,
+                    COALESCE(peds1doco, '') AS occurrence_description
+                FROM acompanh
+                ORDER BY peds1ped,
+                         peds1data DESC NULLS LAST,
+                         peds1hora DESC NULLS LAST,
+                         peds1seq DESC NULLS LAST,
+                         peds1rseq DESC NULLS LAST
+            )
+            SELECT
+                CAST(p.pedido AS TEXT) AS pedido,
+                p.peddata,
+                COALESCE(p.pedtppvco::text, '') AS codigo,
+                COALESCE(e.empnome, '') AS cliente,
+                {city_expression} AS cidade,
+                {state_expression} AS estado,
+                COALESCE(pedprod.quantidade_total, 0) AS quantidade_total,
+                COALESCE(pedprod.valor_bruto_total, 0) AS valor_bruto_total,
+                COALESCE(pedprod.desconto_total, 0) AS desconto_total,
+                COALESCE(pedprod.valor_bruto_total, 0) - COALESCE(pedprod.desconto_total, 0) AS valor_total,
+                COALESCE(linha.linha, 'OUTROS') AS linha,
+                COALESCE(p.pedaprova, '') AS approval_status_code,
+                COALESCE(p.pedsitua, '') AS situation_code,
+                COALESCE(occ.occurrence_code, '') AS occurrence_code,
+                COALESCE(occ.occurrence_description, '') AS occurrence_description,
+                COALESCE(prod.production_lots_display, '') AS production_lots_display,
+                {load_lot_select}
+                COALESCE(v.vendedor::text, '') AS vendor_code,
+                COALESCE(v.vennome, '') AS vendor_name
+            FROM pedido p
+            LEFT JOIN empresa e ON e.empresa = p.pedcliente
+            LEFT JOIN cidade c ON c.cidade = p.pedentcid
+            LEFT JOIN pedprod ON pedprod.pedido = p.pedido
+            LEFT JOIN linha_info linha ON linha.pedido = p.pedido
+            LEFT JOIN production_lots prod ON prod.pedido = CAST(p.pedido AS TEXT)
+            LEFT JOIN occurrences occ ON occ.pedido = CAST(p.pedido AS TEXT)
+            LEFT JOIN vendedor v ON v.vendedor = p.pedrepres
+            {load_lot_join}
+            WHERE 1 = 1
+        """
+
+        params = []
+
+        cities = [value.strip() for value in filters.get('cities', []) if value and value.strip()]
+        if cities:
+            placeholders = ', '.join(['%s'] * len(cities))
+            query += f" AND {city_expression} IN ({placeholders})"
+            params.extend(cities)
+
+        states = [value.strip() for value in filters.get('states', []) if value and value.strip()]
+        if states:
+            placeholders = ', '.join(['%s'] * len(states))
+            query += f" AND {state_expression} IN ({placeholders})"
+            params.extend(states)
+
+        vendors = [value.strip() for value in filters.get('vendors', []) if value and value.strip()]
+        if vendors:
+            placeholders = ', '.join(['%s'] * len(vendors))
+            query += f" AND COALESCE(p.pedrepres::text, '') IN ({placeholders})"
+            params.extend(vendors)
+
+        statuses = [value.strip().upper() for value in filters.get('statuses', []) if value]
+        if statuses:
+            placeholders = ', '.join(['%s'] * len(statuses))
+            query += f" AND COALESCE(p.pedaprova, '') IN ({placeholders})"
+            params.extend(statuses)
+
+        situations = [value.strip().upper() for value in filters.get('situations', []) if value]
+        if situations:
+            placeholders = ', '.join(['%s'] * len(situations))
+            query += f" AND COALESCE(p.pedsitua, '') IN ({placeholders})"
+            params.extend(situations)
+
+        occurrences = [value.strip() for value in filters.get('occurrences', []) if value and value.strip()]
+        if occurrences:
+            placeholders = ', '.join(['%s'] * len(occurrences))
+            query += f" AND COALESCE(occ.occurrence_code, '') IN ({placeholders})"
+            params.extend(occurrences)
+
+        has_load_lot = [value.strip().lower() for value in filters.get('has_load_lot', []) if value]
+        if has_load_lot:
+            wants_yes = 'yes' in has_load_lot
+            wants_no = 'no' in has_load_lot
+            if wants_yes and not wants_no:
+                if has_lcapecod_column:
+                    query += " AND p.lcapecod IS NOT NULL"
+                else:
+                    print("Filtro 'Lote de Carga = Sim' ignorado: coluna 'lcapecod' ausente.")
+            elif wants_no and not wants_yes:
+                if has_lcapecod_column:
+                    query += " AND p.lcapecod IS NULL"
+                else:
+                    print("Filtro 'Lote de Carga = N�o' ignorado: coluna 'lcapecod' ausente.")
+
+        has_production_lot = [value.strip().lower() for value in filters.get('has_production_lot', []) if value]
+        if has_production_lot:
+            wants_yes = 'yes' in has_production_lot
+            wants_no = 'no' in has_production_lot
+            if wants_yes and not wants_no:
+                query += " AND COALESCE(prod.production_lots_display, '') <> ''"
+            elif wants_no and not wants_yes:
+                query += " AND COALESCE(prod.production_lots_display, '') = ''"
+
+        start_date_str = (filters.get('start_date') or '').strip()
+        if start_date_str:
+            try:
+                start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                query += " AND p.peddata >= %s"
+                params.append(start_date)
+            except ValueError:
+                print(f"Filtro de data inicial inv�lido: {start_date_str}")
+
+        end_date_str = (filters.get('end_date') or '').strip()
+        if end_date_str:
+            try:
+                end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                query += " AND p.peddata <= %s"
+                params.append(end_date)
+            except ValueError:
+                print(f"Filtro de data final inv�lido: {end_date_str}")
+
+        query += " ORDER BY p.peddata DESC NULLS LAST, CAST(p.pedido AS TEXT) DESC"
+
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+        cur.close()
+
+        for row in rows:
+            (
+                pedido,
+                peddata,
+                codigo,
+                cliente,
+                cidade,
+                estado,
+                quantidade_total_raw,
+                valor_bruto_raw,
+                desconto_raw,
+                valor_total_raw,
+                linha,
+                approval_status_code,
+                situation_code,
+                occurrence_code,
+                occurrence_description,
+                production_lots_display,
+                load_lot_code,
+                load_lot_description,
+                vendor_code,
+                vendor_name,
+            ) = row
+
+            try:
+                quantidade_total = float(quantidade_total_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                quantidade_total = 0.0
+
+            try:
+                valor_total = float(valor_total_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                valor_total = 0.0
+
+            load_lot_value = ''
+            if load_lot_code:
+                load_lot_value = str(load_lot_code)
+                if load_lot_description:
+                    load_lot_value = f"{load_lot_value} - {load_lot_description}"
+
+            occurrence_display = ''
+            if occurrence_code and occurrence_description:
+                occurrence_display = f"{occurrence_code} - {occurrence_description}"
+            elif occurrence_code:
+                occurrence_display = occurrence_code
+            elif occurrence_description:
+                occurrence_display = occurrence_description
+
+            data_pedido = ''
+            if isinstance(peddata, (datetime.date, datetime.datetime)):
+                data_pedido = peddata.strftime('%d/%m/%Y')
+            elif peddata:
+                data_pedido = str(peddata)
+
+            orders.append(
+                {
+                    'pedido': pedido or '',
+                    'data': data_pedido,
+                    'codigo': codigo or '',
+                    'cliente': cliente or '',
+                    'cidade': cidade or '',
+                    'estado': estado or '',
+                    'quantidade_total': quantidade_total,
+                    'valor_total': valor_total,
+                    'linha': linha or 'OUTROS',
+                    'approval_status_code': approval_status_code or '',
+                    'approval_status': ORDER_APPROVAL_STATUS_LABELS.get(
+                        (approval_status_code or '').strip(), 'N�o Informado'
+                    ),
+                    'situation_code': situation_code or '',
+                    'situation': ORDER_SITUATION_LABELS.get(
+                        (situation_code or '').strip(), 'N�o Informada'
+                    ),
+                    'occurrence_code': occurrence_code or '',
+                    'occurrence': occurrence_display,
+                    'production_lots_display': production_lots_display or '',
+                    'load_lot': load_lot_value,
+                    'vendor_code': vendor_code or '',
+                    'vendor_name': vendor_name or '',
+                }
+            )
+
+    except Error as e:
+        print(f"Erro ao carregar pedidos de venda: {e}")
+        error_message = f"Erro ao carregar pedidos de venda: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+    return orders, error_message
+
 
 def fetch_order_details(pedido_code):
     """
@@ -2791,9 +3220,71 @@ def orders_list():
 @app.route('/sales_orders_list')
 @login_required
 def sales_orders_list():
+    selected_cities = [value.strip() for value in request.args.getlist('cities') if value and value.strip()]
+    selected_states = [value.strip() for value in request.args.getlist('states') if value and value.strip()]
+    selected_vendors = [value.strip() for value in request.args.getlist('vendors') if value and value.strip()]
+    selected_statuses = [
+        value.strip().upper() for value in request.args.getlist('statuses') if value and value.strip()
+    ]
+    selected_situations = [
+        value.strip().upper() for value in request.args.getlist('situations') if value and value.strip()
+    ]
+    selected_occurrences = [
+        value.strip() for value in request.args.getlist('occurrences') if value and value.strip()
+    ]
+    selected_load_lot_flags = [
+        value.strip().lower() for value in request.args.getlist('has_load_lot') if value and value.strip()
+    ]
+    selected_production_lot_flags = [
+        value.strip().lower() for value in request.args.getlist('has_production_lot') if value and value.strip()
+    ]
+
+    filters = {
+        'cities': selected_cities,
+        'states': selected_states,
+        'vendors': selected_vendors,
+        'statuses': selected_statuses,
+        'situations': selected_situations,
+        'occurrences': selected_occurrences,
+        'has_load_lot': selected_load_lot_flags,
+        'has_production_lot': selected_production_lot_flags,
+        'start_date': (request.args.get('start_date') or '').strip(),
+        'end_date': (request.args.get('end_date') or '').strip(),
+    }
+
+    orders, error_message = fetch_sales_orders(filters)
+
+    if error_message:
+        flash(error_message, 'danger')
+
+    totals = {
+        'quantidade_total': sum(order['quantidade_total'] for order in orders),
+        'valor_total': sum(order['valor_total'] for order in orders),
+    }
+
+    load_lot_filter_options = [
+        {'value': 'yes', 'label': 'Sim'},
+        {'value': 'no', 'label': 'N�o'},
+    ]
+    production_lot_filter_options = [
+        {'value': 'yes', 'label': 'Sim'},
+        {'value': 'no', 'label': 'N�o'},
+    ]
+
     return render_template(
-        'placeholder.html',
+        'sales_orders_list.html',
         page_title="Pedidos de Vendas",
+        orders=orders,
+        totals=totals,
+        filters=filters,
+        city_options=get_distinct_cities(),
+        state_options=get_distinct_states(),
+        vendor_options=get_sales_order_vendors(),
+        occurrence_options=get_distinct_occurrences(),
+        approval_status_options=ORDER_APPROVAL_STATUS_OPTIONS,
+        situation_options=ORDER_SITUATION_OPTIONS,
+        load_lot_filter_options=load_lot_filter_options,
+        production_lot_filter_options=production_lot_filter_options,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
