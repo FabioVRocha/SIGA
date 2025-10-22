@@ -2821,6 +2821,15 @@ def fetch_sales_orders(filters):
             elif wants_no and not wants_yes:
                 query += " AND COALESCE(prod.production_lots_display, '') = ''"
 
+        load_lot_filter = (filters.get('filter_load_lot') or '').strip()
+        if load_lot_filter:
+            if has_lcapecod_column:
+                query += " AND (CAST(p.lcapecod AS TEXT) ILIKE %s OR COALESCE(lc.lcades, '') ILIKE %s)"
+                like_pattern = f"%{load_lot_filter}%"
+                params.extend([like_pattern, like_pattern])
+            else:
+                print("Filtro de coluna 'Lote Carga' ignorado: coluna 'lcapecod' ausente.")
+
         start_date_str = (filters.get('start_date') or '').strip()
         if start_date_str:
             try:
@@ -3411,6 +3420,23 @@ def sales_orders_list():
         'start_date': (request.args.get('start_date') or '').strip(),
         'end_date': (request.args.get('end_date') or '').strip(),
     }
+
+    column_filters = {
+        'filter_pedido': (request.args.get('filter_pedido') or '').strip(),
+        'filter_data': (request.args.get('filter_data') or '').strip(),
+        'filter_codigo': (request.args.get('filter_codigo') or '').strip(),
+        'filter_cliente': (request.args.get('filter_cliente') or '').strip(),
+        'filter_quantidade_total': (request.args.get('filter_quantidade_total') or '').strip(),
+        'filter_valor_total': (request.args.get('filter_valor_total') or '').strip(),
+        'filter_linha': (request.args.get('filter_linha') or '').strip(),
+        'filter_approval_status': (request.args.get('filter_approval_status') or '').strip(),
+        'filter_situation': (request.args.get('filter_situation') or '').strip(),
+        'filter_occurrence': (request.args.get('filter_occurrence') or '').strip(),
+        'filter_production_lots_display': (request.args.get('filter_production_lots_display') or '').strip(),
+        'filter_load_lot': (request.args.get('filter_load_lot') or '').strip(),
+    }
+
+    filters.update(column_filters)
 
     if 'start_date' not in request.args and 'end_date' not in request.args:
         filters['start_date'] = first_day_of_month.strftime('%Y-%m-%d')
