@@ -84,28 +84,6 @@
         border: 1px solid var(--clr-border);
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
-    .action-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        padding: 0.4rem 0.85rem;
-        border-radius: 0.5rem;
-        border: 1px solid var(--clr-light-blue);
-        background-color: transparent;
-        color: var(--clr-light-blue);
-        font-size: 0.75rem;
-        font-weight: 600;
-        transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-    }
-    .action-button:hover,
-    .action-button:focus-visible {
-        background-color: rgba(79, 131, 204, 0.12);
-        color: var(--clr-dark-blue);
-        border-color: var(--clr-dark-blue);
-    }
-    .action-button i {
-        font-size: 0.75rem;
-    }
     .modal-body-scroll {
         max-height: 70vh;
         overflow-y: auto;
@@ -204,9 +182,8 @@
                             <td class="py-2 px-4 whitespace-nowrap">{{ order.production_lots_display or '-' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap">{{ order.load_lot or '-' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap text-center">
-                                <button type="button" class="action-button view-order-btn" data-order-id="{{ order.pedido }}" aria-label="Visualizar pedido {{ order.pedido }}">
-                                    <i class="fas fa-eye"></i>
-                                    <span>Visualizar</span>
+                                <button type="button" class="icon-button view-order-btn" data-order-id="{{ order.pedido }}" aria-label="Visualizar pedido {{ order.pedido }}" title="Visualizar pedido {{ order.pedido }}">
+                                    <i class="fas fa-eye text-blue-600 hover:text-blue-800"></i>
                                 </button>
                             </td>
                         </tr>
