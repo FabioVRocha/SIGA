@@ -196,13 +196,13 @@
                             </th>
                             <th scope="col" class="px-4 py-3 text-left">
                                 <button type="button" class="sort-button {% if sort_by == 'lcaseque' %}active{% endif %}" data-sort-column="lcaseque">
-                                    <span>Seq. Lote</span>
+                                    <span>Seq.</span>
                                     <i class="fas {% if sort_by == 'lcaseque' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
                                 </button>
                             </th>
                             <th scope="col" class="px-4 py-3 text-left">
                                 <button type="button" class="sort-button {% if sort_by == 'cliente_codigo' %}active{% endif %}" data-sort-column="cliente_codigo">
-                                    <span>Cód. Cliente</span>
+                                    <span>Código</span>
                                     <i class="fas {% if sort_by == 'cliente_codigo' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
                                 </button>
                             </th>
@@ -257,10 +257,10 @@
                                 <input type="text" name="filter_pedido" value="{{ filters.filter_pedido or '' }}" class="filter-input column-filter-input" placeholder="Pedido">
                             </th>
                             <th scope="col" class="px-4 py-2">
-                                <input type="text" name="filter_seq_lote" value="{{ filters.filter_seq_lote or '' }}" class="filter-input column-filter-input" placeholder="Seq. Lote">
+                                <input type="text" name="filter_seq_lote" value="{{ filters.filter_seq_lote or '' }}" class="filter-input column-filter-input" placeholder="Seq.">
                             </th>
                             <th scope="col" class="px-4 py-2">
-                                <input type="text" name="filter_cliente_codigo" value="{{ filters.filter_cliente_codigo or '' }}" class="filter-input column-filter-input" placeholder="Cód. Cliente">
+                                <input type="text" name="filter_cliente_codigo" value="{{ filters.filter_cliente_codigo or '' }}" class="filter-input column-filter-input" placeholder="Código">
                             </th>
                             <th scope="col" class="px-4 py-2">
                                 <input type="text" name="filter_cliente_nome" value="{{ filters.filter_cliente_nome or '' }}" class="filter-input column-filter-input" placeholder="Cliente">
@@ -298,17 +298,17 @@
                         {% set kpi_status = order.kpi_status %}
                         {% set pedido_status_class = 'status-kpi-blue' if kpi_status == 3 else ('status-kpi-green' if kpi_status == 2 else ('status-kpi-yellow' if kpi_status == 1 else 'status-kpi-red')) %}
                         <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};">
-                            <td class="py-3 px-4 whitespace-nowrap font-semibold {{ pedido_status_class }}">{{ order.pedido or 'N/A' }}</td>
-                            <td class="py-3 px-4 whitespace-nowrap">{{ order.lcaseque or 'N/A' }}</td>
-                            <td class="py-3 px-4 whitespace-nowrap">{{ order.cliente_codigo or 'N/A' }}</td>
-                            <td class="py-3 px-4 whitespace-nowrap">{{ order.cliente_nome or 'N/A' }}</td>
-                            <td class="py-3 px-4 whitespace-nowrap">{{ order.cidade_uf or 'N/A' }}</td>
-                            <td class="py-3 px-4 whitespace-nowrap text-right">{{ order.quantidade_total | format_decimal_br }}</td>
-                            <td class="py-3 px-4 whitespace-nowrap text-right">{{ order.reservado | format_decimal_br }}</td>
-                            <td class="py-3 px-4 whitespace-nowrap text-right">{{ order.separado | format_decimal_br }}</td>
-                            <td class="py-3 px-4 whitespace-nowrap text-right">{{ order.carregado | format_decimal_br }}</td>
-                            <td class="py-3 px-4 whitespace-nowrap">{{ order.linha or 'N/A' }}</td>
-                            <td class="py-3 px-4 whitespace-nowrap text-center">
+                            <td class="py-2 px-4 whitespace-nowrap font-semibold {{ pedido_status_class }}">{{ order.pedido or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.lcaseque or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.cliente_codigo or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.cliente_nome or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.cidade_uf or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.quantidade_total | format_decimal_br }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.reservado | format_decimal_br }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.separado | format_decimal_br }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.carregado | format_decimal_br }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.linha or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-center">
                                 <button
                                     type="button"
                                     class="icon-button order-detail-button"
