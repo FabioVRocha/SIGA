@@ -35,6 +35,34 @@
         background-color: rgba(79, 131, 204, 0.12);
         transition: background-color 0.2s ease-in-out;
     }
+    .sort-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: none;
+        border: none;
+        color: inherit;
+        font: inherit;
+        text-transform: inherit;
+        width: 100%;
+        padding: 0;
+        cursor: pointer;
+    }
+    .sort-button:focus-visible {
+        outline: 2px solid var(--clr-light-blue);
+        outline-offset: 2px;
+    }
+    .sort-button.justify-end {
+        justify-content: flex-end;
+    }
+    .sort-icon {
+        font-size: 0.75rem;
+        opacity: 0.5;
+    }
+    .sort-button.active .sort-icon {
+        opacity: 1;
+        color: var(--clr-light-blue);
+    }
     .form-input, .filter-input {
         width: 100%;
         padding: 0.5rem 0.75rem;
@@ -57,6 +85,12 @@
         background-color: var(--clr-card-bg);
         border: 1px solid var(--clr-border);
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    #orderDetailModal .modal-content {
+        width: 100%;
+        max-width: 60rem;
+        max-height: 90vh;
+        overflow-y: auto;
     }
     .status-kpi-red {
         color: #dc2626;
@@ -125,16 +159,69 @@
             <table class="min-w-full bg-white rounded-xl overflow-hidden">
                 <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
                     <tr class="text-xs font-medium uppercase tracking-wider">
-                        <th scope="col" class="px-4 py-3 text-left rounded-tl-lg">Pedido</th>
-                        <th scope="col" class="px-4 py-3 text-left">Seq. Lote</th>
-                        <th scope="col" class="px-4 py-3 text-left">Cód. Cliente</th>
-                        <th scope="col" class="px-4 py-3 text-left">Cliente</th>
-                        <th scope="col" class="px-4 py-3 text-left">Cidade/UF</th>
-                        <th scope="col" class="px-4 py-3 text-right">Quantidade</th>
-                        <th scope="col" class="px-4 py-3 text-right">Reservado</th>
-                        <th scope="col" class="px-4 py-3 text-right">Separado</th>
-                        <th scope="col" class="px-4 py-3 text-right">Carregado</th>
-                        <th scope="col" class="px-4 py-3 text-left rounded-tr-lg">Linha</th>
+                        <th scope="col" class="px-4 py-3 text-left rounded-tl-lg">
+                            <button type="button" class="sort-button {% if sort_by == 'pedido' %}active{% endif %}" data-sort-column="pedido">
+                                <span>Pedido</span>
+                                <i class="fas {% if sort_by == 'pedido' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </button>
+                        </th>
+                        <th scope="col" class="px-4 py-3 text-left">
+                            <button type="button" class="sort-button {% if sort_by == 'lcaseque' %}active{% endif %}" data-sort-column="lcaseque">
+                                <span>Seq. Lote</span>
+                                <i class="fas {% if sort_by == 'lcaseque' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </button>
+                        </th>
+                        <th scope="col" class="px-4 py-3 text-left">
+                            <button type="button" class="sort-button {% if sort_by == 'cliente_codigo' %}active{% endif %}" data-sort-column="cliente_codigo">
+                                <span>Cód. Cliente</span>
+                                <i class="fas {% if sort_by == 'cliente_codigo' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </button>
+                        </th>
+                        <th scope="col" class="px-4 py-3 text-left">
+                            <button type="button" class="sort-button {% if sort_by == 'cliente_nome' %}active{% endif %}" data-sort-column="cliente_nome">
+                                <span>Cliente</span>
+                                <i class="fas {% if sort_by == 'cliente_nome' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </button>
+                        </th>
+                        <th scope="col" class="px-4 py-3 text-left">
+                            <button type="button" class="sort-button {% if sort_by == 'cidade_uf' %}active{% endif %}" data-sort-column="cidade_uf">
+                                <span>Cidade/UF</span>
+                                <i class="fas {% if sort_by == 'cidade_uf' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </button>
+                        </th>
+                        <th scope="col" class="px-4 py-3 text-right">
+                            <button type="button" class="sort-button justify-end {% if sort_by == 'quantidade_total' %}active{% endif %}" data-sort-column="quantidade_total">
+                                <span>Quantidade</span>
+                                <i class="fas {% if sort_by == 'quantidade_total' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </button>
+                        </th>
+                        <th scope="col" class="px-4 py-3 text-right">
+                            <button type="button" class="sort-button justify-end {% if sort_by == 'reservado' %}active{% endif %}" data-sort-column="reservado">
+                                <span>Reservado</span>
+                                <i class="fas {% if sort_by == 'reservado' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </button>
+                        </th>
+                        <th scope="col" class="px-4 py-3 text-right">
+                            <button type="button" class="sort-button justify-end {% if sort_by == 'separado' %}active{% endif %}" data-sort-column="separado">
+                                <span>Separado</span>
+                                <i class="fas {% if sort_by == 'separado' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </button>
+                        </th>
+                        <th scope="col" class="px-4 py-3 text-right">
+                            <button type="button" class="sort-button justify-end {% if sort_by == 'carregado' %}active{% endif %}" data-sort-column="carregado">
+                                <span>Carregado</span>
+                                <i class="fas {% if sort_by == 'carregado' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </button>
+                        </th>
+                        <th scope="col" class="px-4 py-3 text-left">
+                            <button type="button" class="sort-button {% if sort_by == 'linha' %}active{% endif %}" data-sort-column="linha">
+                                <span>Linha</span>
+                                <i class="fas {% if sort_by == 'linha' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </button>
+                        </th>
+                        <th scope="col" class="px-4 py-3 text-center rounded-tr-lg">
+                            <span>Ações</span>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -153,6 +240,17 @@
                         <td class="py-3 px-4 whitespace-nowrap text-right">{{ order.separado | format_decimal_br }}</td>
                         <td class="py-3 px-4 whitespace-nowrap text-right">{{ order.carregado | format_decimal_br }}</td>
                         <td class="py-3 px-4 whitespace-nowrap">{{ order.linha or 'N/A' }}</td>
+                        <td class="py-3 px-4 whitespace-nowrap text-center">
+                            <button
+                                type="button"
+                                class="order-detail-button btn-secondary flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold"
+                                data-pedido="{{ order.pedido }}"
+                                aria-label="Visualizar detalhes do pedido {{ order.pedido }}"
+                            >
+                                <i class="fas fa-eye"></i>
+                                <span>Visualizar</span>
+                            </button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -200,6 +298,52 @@
         </div>
         {% endif %}
     </section>
+</div>
+
+<div
+    id="orderDetailModal"
+    class="modal flex items-center justify-center"
+    data-endpoint="{{ url_for('order_details', pedido='__PLACEHOLDER__') }}"
+>
+    <div class="modal-content order-detail-modal-content p-6 md:p-8 rounded-xl space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="section-heading">Detalhes do Pedido</h2>
+            <button id="closeOrderDetailModalBtn" class="close-button" aria-label="Fechar detalhes do pedido">&times;</button>
+        </div>
+        <div id="orderDetailLoading" class="py-6 text-center text-sm text-dark-blue hidden">
+            <i class="fas fa-spinner fa-spin mr-2"></i> Carregando detalhes do pedido...
+        </div>
+        <div id="orderDetailError" class="py-6 text-center text-sm text-red-600 hidden"></div>
+        <div id="orderDetailContent" class="space-y-4 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-dark-blue">
+                <div><span class="font-semibold">Pedido:</span> <span id="orderDetailPedido">--</span></div>
+                <div><span class="font-semibold">Cliente:</span> <span id="orderDetailCliente">--</span></div>
+                <div><span class="font-semibold">Cidade:</span> <span id="orderDetailCidade">--</span></div>
+                <div><span class="font-semibold">UF:</span> <span id="orderDetailUF">--</span></div>
+                <div><span class="font-semibold">Data do Pedido:</span> <span id="orderDetailDataPedido">--</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Produção:</span> <span id="orderDetailLoteProducao">--</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="orderDetailLoteCarga">--</span></div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white rounded-xl overflow-hidden">
+                    <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                        <tr class="text-xs font-medium uppercase tracking-wider">
+                            <th scope="col" class="px-4 py-3 text-left">Código do Produto</th>
+                            <th scope="col" class="px-4 py-3 text-left">Sequência</th>
+                            <th scope="col" class="px-4 py-3 text-left">Produto</th>
+                            <th scope="col" class="px-4 py-3 text-right">Reservado</th>
+                            <th scope="col" class="px-4 py-3 text-right">Separado</th>
+                            <th scope="col" class="px-4 py-3 text-right">Carregado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orderDetailTableBody" class="text-sm text-dark-blue"></tbody>
+                </table>
+            </div>
+            <div id="orderDetailEmptyState" class="hidden text-sm text-center text-slate-muted">
+                Nenhum item encontrado para este pedido.
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="filterModal" class="modal flex items-center justify-center">
@@ -330,6 +474,8 @@
                 <button type="button" id="clearFiltersBtn" class="btn btn-secondary">Limpar Filtros</button>
                 <button type="submit" class="btn btn-primary">Aplicar Filtros</button>
             </div>
+            <input type="hidden" name="sort_by" id="sortByInput" value="{{ sort_by }}">
+            <input type="hidden" name="sort_order" id="sortOrderInput" value="{{ sort_order }}">
         </form>
     </div>
 </div>
@@ -343,10 +489,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
     const clearFiltersBtn = document.getElementById('clearFiltersBtn');
     const filterForm = document.getElementById('filterForm');
-
-    if (!filterModal) {
-        return;
-    }
+    const sortByInput = document.getElementById('sortByInput');
+    const sortOrderInput = document.getElementById('sortOrderInput');
+    const sortableButtons = document.querySelectorAll('[data-sort-column]');
 
     const createDropdownConfig = ({
         containerId,
@@ -439,29 +584,357 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    filterModal.style.display = 'none';
+    if (filterModal) {
+        filterModal.style.display = 'none';
+    }
 
-    const openModal = () => {
-        filterModal.style.display = 'flex';
+    if (sortableButtons.length > 0) {
+        sortableButtons.forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                const column = button.dataset.sortColumn;
+                if (!column) {
+                    return;
+                }
+
+                const currentSortBy = sortByInput ? sortByInput.value : '';
+                const currentSortOrder = sortOrderInput ? sortOrderInput.value : 'desc';
+                let nextOrder = 'asc';
+
+                if (currentSortBy === column && currentSortOrder === 'asc') {
+                    nextOrder = 'desc';
+                }
+
+                if (sortByInput) {
+                    sortByInput.value = column;
+                }
+
+                if (sortOrderInput) {
+                    sortOrderInput.value = nextOrder;
+                }
+
+                if (filterForm) {
+                    filterForm.submit();
+                } else {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('sort_by', column);
+                    url.searchParams.set('sort_order', nextOrder);
+                    window.location.href = url.toString();
+                }
+            });
+        });
+    }
+
+    const openFilterModal = () => {
+        if (filterModal) {
+            filterModal.style.display = 'flex';
+        }
     };
 
-    const closeModal = () => {
-        filterModal.style.display = 'none';
+    const closeFilterModal = () => {
+        if (filterModal) {
+            filterModal.style.display = 'none';
+        }
         dropdownConfigs.forEach((config) => closeDropdown(config));
     };
 
     if (openFilterModalBtn) {
-        openFilterModalBtn.addEventListener('click', openModal);
+        openFilterModalBtn.addEventListener('click', openFilterModal);
     }
 
     if (closeFilterModalBtn) {
-        closeFilterModalBtn.addEventListener('click', closeModal);
+        closeFilterModalBtn.addEventListener('click', closeFilterModal);
+    }
+
+    const detailModal = document.getElementById('orderDetailModal');
+    const closeDetailModalBtn = document.getElementById('closeOrderDetailModalBtn');
+    const orderDetailButtons = document.querySelectorAll('.order-detail-button');
+    const detailLoading = document.getElementById('orderDetailLoading');
+    const detailError = document.getElementById('orderDetailError');
+    const detailContent = document.getElementById('orderDetailContent');
+    const detailTableBody = document.getElementById('orderDetailTableBody');
+    const detailEmptyState = document.getElementById('orderDetailEmptyState');
+    const detailEndpointTemplate = detailModal ? detailModal.dataset.endpoint || '' : '';
+    const detailFields = {
+        pedido: document.getElementById('orderDetailPedido'),
+        cliente: document.getElementById('orderDetailCliente'),
+        cidade: document.getElementById('orderDetailCidade'),
+        uf: document.getElementById('orderDetailUF'),
+        dataPedido: document.getElementById('orderDetailDataPedido'),
+        loteProducao: document.getElementById('orderDetailLoteProducao'),
+        loteCarga: document.getElementById('orderDetailLoteCarga'),
+    };
+
+    const safeText = (value, fallback = 'N/A') => {
+        if (value === null || value === undefined) {
+            return fallback;
+        }
+        const trimmed = String(value).trim();
+        return trimmed === '' ? fallback : trimmed;
+    };
+
+    const setFieldText = (element, value) => {
+        if (!element) {
+            return;
+        }
+        element.textContent = safeText(value);
+    };
+
+    const setFieldList = (element, value) => {
+        if (!element) {
+            return;
+        }
+        element.textContent = '';
+        const values = Array.isArray(value)
+            ? value
+            : String(value || '')
+                  .split(';')
+                  .map((item) => item.trim())
+                  .filter((item) => item.length > 0);
+        if (values.length === 0) {
+            element.textContent = 'N/A';
+            return;
+        }
+        values.forEach((item, index) => {
+            if (index > 0) {
+                element.appendChild(document.createElement('br'));
+            }
+            element.appendChild(document.createTextNode(item));
+        });
+    };
+
+    const numberFormatter = new Intl.NumberFormat('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+
+    const formatNumber = (value) => {
+        const numericValue = Number(value);
+        if (Number.isNaN(numericValue)) {
+            return numberFormatter.format(0);
+        }
+        return numberFormatter.format(numericValue);
+    };
+
+    const getStatusClass = (status) => {
+        if (status === null || status === undefined) {
+            return 'status-kpi-red';
+        }
+        const mapping = {
+            0: 'status-kpi-red',
+            1: 'status-kpi-yellow',
+            2: 'status-kpi-green',
+            3: 'status-kpi-blue',
+        };
+        return mapping[status] || 'status-kpi-red';
+    };
+
+    const resetDetailFields = () => {
+        Object.values(detailFields).forEach((element) => {
+            if (element) {
+                element.textContent = '--';
+            }
+        });
+        if (detailTableBody) {
+            detailTableBody.innerHTML = '';
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+    };
+
+    const showDetailLoading = () => {
+        if (detailLoading) {
+            detailLoading.classList.remove('hidden');
+        }
+        if (detailError) {
+            detailError.classList.add('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.add('hidden');
+        }
+    };
+
+    const showDetailContent = () => {
+        if (detailContent) {
+            detailContent.classList.remove('hidden');
+        }
+        if (detailLoading) {
+            detailLoading.classList.add('hidden');
+        }
+        if (detailError) {
+            detailError.classList.add('hidden');
+        }
+    };
+
+    const showDetailError = (message) => {
+        if (detailError) {
+            detailError.textContent = message || 'Não foi possível carregar os detalhes do pedido.';
+            detailError.classList.remove('hidden');
+        }
+        if (detailLoading) {
+            detailLoading.classList.add('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.add('hidden');
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+    };
+
+    const renderItems = (items) => {
+        if (!detailTableBody) {
+            return;
+        }
+        detailTableBody.innerHTML = '';
+        if (!Array.isArray(items) || items.length === 0) {
+            if (detailEmptyState) {
+                detailEmptyState.classList.remove('hidden');
+            }
+            return;
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+        items.forEach((item) => {
+            const row = document.createElement('tr');
+            row.className = 'hover-row text-sm text-dark-blue';
+
+            const codeCell = document.createElement('td');
+            codeCell.className = `py-3 px-4 whitespace-nowrap font-semibold ${getStatusClass(item.kpi_status)}`;
+            codeCell.textContent = safeText(item.codigo_produto);
+
+            const sequenceCell = document.createElement('td');
+            sequenceCell.className = 'py-3 px-4 whitespace-nowrap';
+            sequenceCell.textContent = safeText(item.sequencia);
+
+            const productCell = document.createElement('td');
+            productCell.className = 'py-3 px-4 whitespace-nowrap';
+            productCell.textContent = safeText(item.produto);
+
+            const reservadoCell = document.createElement('td');
+            reservadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            reservadoCell.textContent = formatNumber(item.reservado);
+
+            const separadoCell = document.createElement('td');
+            separadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            separadoCell.textContent = formatNumber(item.separado);
+
+            const carregadoCell = document.createElement('td');
+            carregadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            carregadoCell.textContent = formatNumber(item.carregado);
+
+            row.appendChild(codeCell);
+            row.appendChild(sequenceCell);
+            row.appendChild(productCell);
+            row.appendChild(reservadoCell);
+            row.appendChild(separadoCell);
+            row.appendChild(carregadoCell);
+
+            detailTableBody.appendChild(row);
+        });
+    };
+
+    const populateDetailModal = (data) => {
+        if (!data) {
+            showDetailError('Não foi possível carregar os detalhes do pedido.');
+            return;
+        }
+        const header = data.header || {};
+        setFieldText(detailFields.pedido, header.pedido);
+        setFieldText(detailFields.cliente, header.cliente);
+        setFieldText(detailFields.cidade, header.cidade);
+        setFieldText(detailFields.uf, header.uf);
+        setFieldText(detailFields.dataPedido, header.data_pedido);
+        setFieldList(detailFields.loteProducao, header.lote_producao);
+        setFieldText(detailFields.loteCarga, header.lote_carga);
+        renderItems(Array.isArray(data.items) ? data.items : []);
+        showDetailContent();
+    };
+
+    const getDetailUrl = (pedido) => {
+        if (!detailEndpointTemplate || !pedido) {
+            return '';
+        }
+        return detailEndpointTemplate.replace('__PLACEHOLDER__', encodeURIComponent(pedido));
+    };
+
+    const openDetailModal = () => {
+        if (detailModal) {
+            detailModal.style.display = 'flex';
+        }
+    };
+
+    const closeDetailModal = () => {
+        if (detailModal) {
+            detailModal.style.display = 'none';
+        }
+        resetDetailFields();
+        if (detailLoading) {
+            detailLoading.classList.add('hidden');
+        }
+        if (detailError) {
+            detailError.classList.add('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.add('hidden');
+        }
+    };
+
+    if (closeDetailModalBtn) {
+        closeDetailModalBtn.addEventListener('click', closeDetailModal);
+    }
+
+    if (detailModal && orderDetailButtons.length > 0) {
+        orderDetailButtons.forEach((button) => {
+            button.addEventListener('click', async () => {
+                const pedido = button.dataset.pedido;
+                if (!pedido) {
+                    return;
+                }
+                openDetailModal();
+                resetDetailFields();
+                showDetailLoading();
+                const detailUrl = getDetailUrl(pedido);
+                if (!detailUrl) {
+                    showDetailError('Endpoint de detalhes não configurado.');
+                    return;
+                }
+                try {
+                    const response = await fetch(detailUrl, {
+                        headers: {
+                            Accept: 'application/json',
+                        },
+                    });
+                    let payload = null;
+                    try {
+                        payload = await response.json();
+                    } catch (parseError) {
+                        console.error('Erro ao interpretar a resposta dos detalhes do pedido:', parseError);
+                    }
+                    if (!response.ok || !payload) {
+                        const message = payload && payload.error
+                            ? payload.error
+                            : 'Não foi possível carregar os detalhes do pedido.';
+                        showDetailError(message);
+                        return;
+                    }
+                    populateDetailModal(payload);
+                } catch (fetchError) {
+                    console.error('Erro ao buscar detalhes do pedido:', fetchError);
+                    showDetailError('Não foi possível carregar os detalhes do pedido.');
+                }
+            });
+        });
     }
 
     window.addEventListener('click', (event) => {
-        if (event.target === filterModal) {
-            closeModal();
-            return;
+        if (filterModal && event.target === filterModal) {
+            closeFilterModal();
+        }
+        if (detailModal && event.target === detailModal) {
+            closeDetailModal();
         }
         dropdownConfigs.forEach((config) => {
             if (config.container && !config.container.contains(event.target)) {
@@ -523,9 +996,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (filterForm) {
         filterForm.addEventListener('submit', () => {
-            closeModal();
+            closeFilterModal();
         });
     }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            if (filterModal && filterModal.style.display === 'flex') {
+                closeFilterModal();
+            }
+            if (detailModal && detailModal.style.display === 'flex') {
+                closeDetailModal();
+            }
+        }
+    });
 });
 </script>
 {% endblock %}

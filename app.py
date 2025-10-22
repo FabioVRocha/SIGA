@@ -2301,7 +2301,26 @@ def fetch_orders(filters):
             except ValueError:
                 pass
 
-        query += " ORDER BY p.pedido DESC"
+        sort_by = (filters.get('sort_by') or 'pedido').strip()
+        sort_order = (filters.get('sort_order') or 'desc').strip().lower()
+
+        sort_column_map = {
+            'pedido': 'p.pedido',
+            'lcaseque': 'p.lcaseque',
+            'cliente_codigo': 'p.pedcliente',
+            'cliente_nome': 'empnome',
+            'cidade_uf': 'cidade_uf',
+            'quantidade_total': 'quantidade_total',
+            'reservado': 'reservado',
+            'separado': 'separado',
+            'carregado': 'carregado',
+            'linha': 'linha',
+        }
+
+        sort_column = sort_column_map.get(sort_by, 'p.pedido')
+        sort_direction = 'ASC' if sort_order == 'asc' else 'DESC'
+
+        query += f" ORDER BY {sort_column} {sort_direction}, p.pedido DESC"
 
         cur.execute(query, tuple(params))
         rows = cur.fetchall()
@@ -2337,6 +2356,202 @@ def fetch_orders(filters):
     return orders, error_message
 
 
+def fetch_order_details(pedido_code):
+    """
+    Recupera os detalhes de um pedido específico (cabeçalho e itens) a partir do ERP.
+    Retorna uma tupla (dados, erro), em que erro é um dicionário com 'message' e 'status'.
+    """
+    pedido_value = (pedido_code or '').strip()
+    if not pedido_value:
+        return None, {'message': 'Pedido inválido.', 'status': 400}
+
+    conn = get_erp_db_connection()
+    if not conn:
+        return None, {'message': 'Não foi possível conectar ao banco de dados do ERP.', 'status': 500}
+
+    has_lcapecod_column = False
+    column_check_cursor = None
+
+    try:
+        column_check_cursor = conn.cursor()
+        column_check_cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'pedido'
+                  AND column_name = 'lcapecod'
+            )
+            """
+        )
+        result = column_check_cursor.fetchone()
+        if result:
+            has_lcapecod_column = bool(result[0])
+    except Error as e:
+        print(f"Erro ao verificar a coluna 'lcapecod' na tabela 'pedido' (detalhes): {e}")
+    finally:
+        if column_check_cursor:
+            column_check_cursor.close()
+
+    try:
+        cur = conn.cursor()
+
+        load_lot_select = (
+            "CAST(p.lcapecod AS TEXT) AS load_lot_code,\n                COALESCE(lc.lcades, '') AS load_lot_description"
+            if has_lcapecod_column
+            else "NULL AS load_lot_code,\n                '' AS load_lot_description"
+        )
+        load_lot_join = "LEFT JOIN lotecar lc ON p.lcapecod = lc.lcacod" if has_lcapecod_column else ""
+
+        header_query = f"""
+            WITH production_lots AS (
+                SELECT
+                    CAST(lots.pedido AS TEXT) AS pedido,
+                    STRING_AGG(lots.lot_display, '; ' ORDER BY lots.lot_display) AS production_lots_display
+                FROM (
+                    SELECT DISTINCT
+                        ao.acaopedi AS pedido,
+                        CASE
+                            WHEN COALESCE(lp.lotcod::text, '') <> '' THEN
+                                lp.lotcod::text ||
+                                CASE
+                                    WHEN COALESCE(lp.lotdes, '') <> '' THEN ' - ' || lp.lotdes
+                                    ELSE ''
+                                END
+                            ELSE ''
+                        END AS lot_display
+                    FROM acaorde2 ao
+                    JOIN ordem o ON o.ordem = ao.acaoorde
+                    LEFT JOIN loteprod lp ON lp.lotcod = o.lotcod
+                    WHERE CAST(ao.acaopedi AS TEXT) = %s
+                ) lots
+                WHERE lots.lot_display <> ''
+                GROUP BY lots.pedido
+            )
+            SELECT
+                CAST(p.pedido AS TEXT) AS pedido,
+                p.peddata,
+                COALESCE(e.empnome, '') AS cliente,
+                CASE
+                    WHEN COALESCE(c.cidnome, '') <> '' THEN c.cidnome
+                    WHEN COALESCE(p.pedentcid::text, '') <> '' THEN p.pedentcid::text
+                    ELSE ''
+                END AS cidade,
+                CASE
+                    WHEN COALESCE(c.estado, '') <> '' THEN c.estado
+                    WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text
+                    ELSE ''
+                END AS estado,
+                COALESCE(pl.production_lots_display, '') AS production_lots_display,
+                {load_lot_select}
+            FROM pedido p
+            LEFT JOIN empresa e ON p.pedcliente = e.empresa
+            LEFT JOIN cidade c ON p.pedentcid = c.cidade
+            LEFT JOIN production_lots pl ON pl.pedido = CAST(p.pedido AS TEXT)
+            {load_lot_join}
+            WHERE CAST(p.pedido AS TEXT) = %s
+        """
+
+        cur.execute(header_query, (pedido_value, pedido_value))
+        header_row = cur.fetchone()
+        cur.close()
+
+        if not header_row:
+            return None, {'message': 'Pedido não encontrado.', 'status': 404}
+
+        (
+            pedido,
+            peddata,
+            cliente,
+            cidade,
+            estado,
+            production_lots_display,
+            load_lot_code,
+            load_lot_description,
+        ) = header_row
+
+        header_data = {
+            'pedido': pedido or '',
+            'cliente': cliente or '',
+            'cidade': cidade or '',
+            'uf': estado or '',
+            'data_pedido': '',
+            'lote_producao': production_lots_display or '',
+            'lote_carga': '',
+        }
+
+        if isinstance(peddata, (datetime.date, datetime.datetime)):
+            header_data['data_pedido'] = peddata.strftime('%d/%m/%Y')
+        elif peddata:
+            header_data['data_pedido'] = str(peddata)
+
+        if load_lot_code:
+            load_lot_str = str(load_lot_code)
+            if load_lot_description:
+                load_lot_str = f"{load_lot_str} - {load_lot_description}"
+            header_data['lote_carga'] = load_lot_str
+
+        details = {'header': header_data, 'items': []}
+
+        items_cur = conn.cursor()
+        items_cur.execute(
+            """
+            SELECT
+                COALESCE(pm.prjmproex::text, '') AS codigo_produto,
+                COALESCE(pm.prjmpedse::text, '') AS sequencia,
+                COALESCE(prod.pronome, '') AS produto,
+                SUM(CASE WHEN pm.prjmovtip = 'R' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS reservado,
+                SUM(CASE WHEN pm.prjmovtip = 'P' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS separado,
+                SUM(CASE WHEN pm.prjmovtip = 'C' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS carregado
+            FROM projmovi pm
+            LEFT JOIN produto prod ON prod.produto = pm.prjmproex
+            WHERE CAST(pm.prjmpedid AS TEXT) = %s
+            GROUP BY pm.prjmproex, pm.prjmpedse, prod.pronome
+            ORDER BY pm.prjmpedse, pm.prjmproex
+            """,
+            (pedido_value,),
+        )
+        item_rows = items_cur.fetchall()
+        items_cur.close()
+
+        for item_row in item_rows:
+            codigo_produto, sequencia, produto_nome, reservado_raw, separado_raw, carregado_raw = item_row
+            reservado = float(reservado_raw) if reservado_raw is not None else 0.0
+            separado = float(separado_raw) if separado_raw is not None else 0.0
+            carregado = float(carregado_raw) if carregado_raw is not None else 0.0
+            kpi_status = calculate_order_kpi(reservado_raw, separado_raw, carregado_raw)
+
+            details['items'].append(
+                {
+                    'codigo_produto': codigo_produto,
+                    'sequencia': sequencia,
+                    'produto': produto_nome,
+                    'reservado': reservado,
+                    'separado': separado,
+                    'carregado': carregado,
+                    'kpi_status': kpi_status,
+                }
+            )
+
+        return details, None
+    except Error as e:
+        print(f"Erro ao carregar detalhes do pedido {pedido_value}: {e}")
+        return None, {'message': 'Erro ao carregar detalhes do pedido.', 'status': 500}
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route('/orders/<path:pedido>/details')
+@login_required
+def order_details(pedido):
+    details, error = fetch_order_details(pedido)
+    if error:
+        status_code = error.get('status', 500)
+        return jsonify({'error': error.get('message', 'Erro ao carregar detalhes do pedido.')}), status_code
+    return jsonify(details)
+
+
 @app.route('/orders_list')
 @login_required
 def orders_list():
@@ -2358,6 +2573,28 @@ def orders_list():
         value.strip() for value in request.args.getlist('lines') if value and value.strip()
     ]
 
+    sort_by_param = (request.args.get('sort_by') or 'pedido').strip()
+    sort_order_param = (request.args.get('sort_order') or 'desc').strip().lower()
+
+    allowed_sort_columns = {
+        'pedido',
+        'lcaseque',
+        'cliente_codigo',
+        'cliente_nome',
+        'cidade_uf',
+        'quantidade_total',
+        'reservado',
+        'separado',
+        'carregado',
+        'linha',
+    }
+
+    if sort_by_param not in allowed_sort_columns:
+        sort_by_param = 'pedido'
+
+    if sort_order_param not in {'asc', 'desc'}:
+        sort_order_param = 'desc'
+
     filters = {
         'load_lot': (request.args.get('load_lot') or '').strip() or None,
         'load_lots': load_lots_param,
@@ -2366,10 +2603,12 @@ def orders_list():
         'line': (request.args.get('line') or '').strip() or None,
         'start_date': (start_date_param or '').strip() or None,
         'end_date': (end_date_param or '').strip() or None,
+        'sort_by': sort_by_param,
+        'sort_order': sort_order_param,
     }
 
     query_filters = filters.copy()
-    if not request.args:
+    if 'start_date' not in request.args and 'end_date' not in request.args:
         query_filters['start_date'] = first_day_of_month.strftime('%Y-%m-%d')
         query_filters['end_date'] = last_day_of_month.strftime('%Y-%m-%d')
 
@@ -2393,6 +2632,8 @@ def orders_list():
         production_lot_options=get_distinct_production_lots(),
         product_line_options=get_distinct_product_lines(),
         totals=totals,
+        sort_by=sort_by_param,
+        sort_order=sort_order_param,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
