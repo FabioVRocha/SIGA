@@ -2632,15 +2632,40 @@ def fetch_sales_orders(filters):
         load_lot_join = ""
 
     if has_peddesval_column:
+        valor_total_expression = "COALESCE(pedprod.valor_bruto_total, 0) - COALESCE(p.peddesval, 0)"
         discount_select = (
             "                COALESCE(p.peddesval, 0) AS desconto_total,\n"
             "                COALESCE(pedprod.valor_bruto_total, 0) - COALESCE(p.peddesval, 0) AS valor_total,\n"
         )
     else:
+        valor_total_expression = "COALESCE(pedprod.valor_bruto_total, 0)"
         discount_select = (
             "                0 AS desconto_total,\n"
             "                COALESCE(pedprod.valor_bruto_total, 0) AS valor_total,\n"
         )
+
+    valor_total_cast_expression = f"CAST({valor_total_expression} AS TEXT)"
+    quantity_total_expression = "COALESCE(pedprod.quantidade_total, 0)"
+    quantity_total_cast_expression = f"CAST({quantity_total_expression} AS TEXT)"
+
+    approval_status_label_expression = (
+        "CASE UPPER(COALESCE(p.pedaprova, '')) "
+        "WHEN 'S' THEN 'Aprovado' "
+        "WHEN 'N' THEN 'Não Aprovado' "
+        "WHEN 'C' THEN 'Cancelado' "
+        "ELSE 'Não Informado' "
+        "END"
+    )
+
+    situation_label_expression = (
+        "CASE UPPER(COALESCE(p.pedsitua, '')) "
+        "WHEN 'A' THEN 'Atendido' "
+        "WHEN '' THEN 'Em Aberto' "
+        "WHEN 'C' THEN 'Cancelado' "
+        "WHEN 'P' THEN 'Parcial' "
+        "ELSE 'Não Informada' "
+        "END"
+    )
 
     try:
         cur = conn.cursor()
