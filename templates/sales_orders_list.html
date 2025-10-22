@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Pedidos de Vendas{% endblock %}
+{% block title %}Pedidos de Venda{% endblock %}
 
-{% block page_title %}Pedidos de Vendas{% endblock %}
+{% block page_title %}Pedidos de Venda{% endblock %}
 
 {% block content %}
 <style>
@@ -18,443 +18,212 @@
             padding: 2rem;
         }
     }
-    .filter-dropdown {
-        position: relative;
+    .section-heading {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
     }
-    .filter-dropdown__toggle {
-        width: 100%;
-        display: flex;
-        justify-content: space-between;
+    .text-dark-blue {
+        color: var(--clr-dark-blue);
+    }
+    .text-slate-muted {
+        color: var(--clr-text-secondary);
+    }
+    .hover-row:hover {
+        background-color: rgba(79, 131, 204, 0.12);
+        transition: background-color 0.2s ease-in-out;
+    }
+    .sort-button {
+        display: inline-flex;
         align-items: center;
+        gap: 0.35rem;
+        background: none;
+        border: none;
+        color: inherit;
+        font: inherit;
+        text-transform: inherit;
+        width: 100%;
+        padding: 0;
+        cursor: pointer;
+    }
+    .sort-button:focus-visible {
+        outline: 2px solid var(--clr-light-blue);
+        outline-offset: 2px;
+    }
+    .sort-button.justify-end {
+        justify-content: flex-end;
+    }
+    .sort-icon {
+        font-size: 0.75rem;
+        opacity: 0.5;
+    }
+    .sort-button.active .sort-icon {
+        opacity: 1;
+        color: var(--clr-light-blue);
+    }
+    .form-input, .filter-input {
+        width: 100%;
         padding: 0.5rem 0.75rem;
         border: 1px solid var(--clr-border);
         border-radius: 0.5rem;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         color: var(--clr-dark-blue);
         background-color: var(--clr-white);
         transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
-    .filter-dropdown__toggle:hover {
+    .form-input::placeholder, .filter-input::placeholder {
+        color: var(--clr-text-secondary);
+    }
+    .form-input:focus, .filter-input:focus {
         border-color: var(--clr-light-blue);
+        box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.15);
+        outline: none;
     }
-    .filter-dropdown__toggle:focus-visible {
-        outline: 2px solid var(--clr-light-blue);
-        outline-offset: 2px;
-    }
-    .filter-dropdown__menu {
-        position: absolute;
-        top: calc(100% + 0.5rem);
-        left: 0;
-        width: 100%;
-        max-height: 16rem;
-        overflow-y: auto;
-        background-color: var(--clr-white);
+    .modal-content {
+        background-color: var(--clr-card-bg);
         border: 1px solid var(--clr-border);
-        border-radius: 0.75rem;
-        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
-        z-index: 30;
-    }
-    .filter-dropdown__menu label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 0.75rem;
-        font-size: 0.8rem;
-        color: var(--clr-dark-blue);
-    }
-    .filter-dropdown__menu label:hover {
-        background-color: rgba(79, 131, 204, 0.1);
-    }
-    .filter-dropdown__clear {
-        width: 100%;
-        text-align: right;
-        padding: 0.5rem 0.75rem;
-        border-top: 1px solid var(--clr-border);
-        font-size: 0.75rem;
-        color: var(--clr-light-blue);
-        background-color: transparent;
-    }
-    .filter-dropdown__clear:hover {
-        text-decoration: underline;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
 </style>
 
 <div class="space-y-6">
     <section class="list-section">
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
             <div>
-                <h2 class="text-lg font-semibold text-gray-800">Pedidos de Vendas</h2>
-                <p class="text-xs text-gray-500">
-                    Exibindo {{ orders|length if orders else 0 }} registros.
-                </p>
+                <h2 class="section-heading">Pedidos de Venda</h2>
+                <p class="text-xs text-slate-muted">Total de {{ orders|length if orders else 0 }} registros encontrados.</p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex justify-end w-full md:w-auto">
                 <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
                     <i class="fas fa-filter mr-2"></i> Filtrar
                 </button>
-                <a href="{{ url_for('sales_orders_list') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
-                    <i class="fas fa-eraser mr-2"></i> Limpar
-                </a>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 text-sm">
-            <div class="p-3 rounded-lg bg-slate-100 border border-slate-200">
-                <p class="text-xs text-slate-500 uppercase tracking-wide">Quantidade Total</p>
-                <p class="text-lg font-semibold text-slate-800">
-                    {{ totals.quantidade_total | format_decimal_br(0) }}
-                </p>
-            </div>
-            <div class="p-3 rounded-lg bg-slate-100 border border-slate-200">
-                <p class="text-xs text-slate-500 uppercase tracking-wide">Valor Total</p>
-                <p class="text-lg font-semibold text-slate-800">
-                    {{ totals.valor_total | format_currency_brl }}
-                </p>
-            </div>
-        </div>
+        <div class="overflow-x-auto">
+            <form id="columnFilterForm" action="{{ url_for('sales_orders_list') }}" method="GET" class="space-y-3">
+                <!-- Hidden inputs for existing filters from modal -->
+                {% for city in filters.cities or [] %}<input type="hidden" name="cities" value="{{ city }}">{% endfor %}
+                {% for state in filters.states or [] %}<input type="hidden" name="states" value="{{ state }}">{% endfor %}
+                {% for vendor in filters.vendors or [] %}<input type="hidden" name="vendors" value="{{ vendor }}">{% endfor %}
+                {% for status in filters.statuses or [] %}<input type="hidden" name="statuses" value="{{ status }}">{% endfor %}
+                {% for situation in filters.situations or [] %}<input type="hidden" name="situations" value="{{ situation }}">{% endfor %}
+                {% for occurrence in filters.occurrences or [] %}<input type="hidden" name="occurrences" value="{{ occurrence }}">{% endfor %}
+                {% for val in filters.has_load_lot or [] %}<input type="hidden" name="has_load_lot" value="{{ val }}">{% endfor %}
+                {% for val in filters.has_production_lot or [] %}<input type="hidden" name="has_production_lot" value="{{ val }}">{% endfor %}
+                {% if filters.start_date %}<input type="hidden" name="start_date" value="{{ filters.start_date }}">{% endif %}
+                {% if filters.end_date %}<input type="hidden" name="end_date" value="{{ filters.end_date }}">{% endif %}
+                
+                <input type="hidden" name="sort_by" id="columnSortByInput" value="{{ sort_by }}">
+                <input type="hidden" name="sort_order" id="columnSortOrderInput" value="{{ sort_order }}">
 
-        <div class="overflow-x-auto mt-6">
-            <table class="min-w-full bg-white rounded-xl overflow-hidden">
-                <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
-                    <tr class="text-xs font-medium uppercase tracking-wider">
-                        <th class="px-4 py-3 text-left">Pedido</th>
-                        <th class="px-4 py-3 text-left">Data</th>
-                        <th class="px-4 py-3 text-left">C&oacute;digo</th>
-                        <th class="px-4 py-3 text-left">Cliente</th>
-                        <th class="px-4 py-3 text-right">Quantidade</th>
-                        <th class="px-4 py-3 text-right">Valor</th>
-                        <th class="px-4 py-3 text-left">Linha</th>
-                        <th class="px-4 py-3 text-left">Status</th>
-                        <th class="px-4 py-3 text-left">Situa&ccedil;&atilde;o</th>
-                        <th class="px-4 py-3 text-left">Ocorr&ecirc;ncia</th>
-                        <th class="px-4 py-3 text-left">Lote de Produ&ccedil;&atilde;o</th>
-                        <th class="px-4 py-3 text-left">Lote de Carga</th>
-                    </tr>
-                </thead>
-                <tbody class="text-xs text-gray-700">
-                    {% if orders %}
-                        {% for order in orders %}
-                        <tr class="odd:bg-white even:bg-slate-50">
-                            <td class="px-4 py-3 font-semibold text-gray-800">{{ order.pedido }}</td>
-                            <td class="px-4 py-3">{{ order.data or '-' }}</td>
-                            <td class="px-4 py-3">{{ order.codigo or '-' }}</td>
-                            <td class="px-4 py-3">
-                                <div class="font-medium text-gray-800">{{ order.cliente or '-' }}</div>
-                                {% if order.cidade or order.estado %}
-                                <div class="text-[11px] text-gray-500">
-                                    {{ order.cidade }}{% if order.estado %} / {{ order.estado }}{% endif %}
+                <table class="min-w-full bg-white rounded-xl overflow-hidden">
+                    <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                        <tr class="text-xs font-medium uppercase tracking-wider">
+                            <th scope="col" class="px-4 py-3 text-left rounded-tl-lg"><button type="button" class="sort-button {% if sort_by == 'pedido' %}active{% endif %}" data-sort-column="pedido"><span>Pedido</span><i class="fas {% if sort_by == 'pedido' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'data' %}active{% endif %}" data-sort-column="data"><span>Data</span><i class="fas {% if sort_by == 'data' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'codigo' %}active{% endif %}" data-sort-column="codigo"><span>Código</span><i class="fas {% if sort_by == 'codigo' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'cliente' %}active{% endif %}" data-sort-column="cliente"><span>Cliente</span><i class="fas {% if sort_by == 'cliente' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'quantidade_total' %}active{% endif %}" data-sort-column="quantidade_total"><span>Quantidade</span><i class="fas {% if sort_by == 'quantidade_total' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'valor_total' %}active{% endif %}" data-sort-column="valor_total"><span>Valor</span><i class="fas {% if sort_by == 'valor_total' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'linha' %}active{% endif %}" data-sort-column="linha"><span>Linha</span><i class="fas {% if sort_by == 'linha' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'approval_status' %}active{% endif %}" data-sort-column="approval_status"><span>Status</span><i class="fas {% if sort_by == 'approval_status' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'situation' %}active{% endif %}" data-sort-column="situation"><span>Situação</span><i class="fas {% if sort_by == 'situation' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'occurrence' %}active{% endif %}" data-sort-column="occurrence"><span>Ocorrência</span><i class="fas {% if sort_by == 'occurrence' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'production_lots_display' %}active{% endif %}" data-sort-column="production_lots_display"><span>Lote Produção</span><i class="fas {% if sort_by == 'production_lots_display' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left rounded-tr-lg"><button type="button" class="sort-button {% if sort_by == 'load_lot' %}active{% endif %}" data-sort-column="load_lot"><span>Lote Carga</span><i class="fas {% if sort_by == 'load_lot' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                        </tr>
+                        <tr class="bg-slate-100 text-xs text-dark-blue">
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_pedido" value="{{ filters.filter_pedido or '' }}" class="filter-input column-filter-input" placeholder="Pedido"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_data" value="{{ filters.filter_data or '' }}" class="filter-input column-filter-input" placeholder="Data"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_codigo" value="{{ filters.filter_codigo or '' }}" class="filter-input column-filter-input" placeholder="Código"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_cliente" value="{{ filters.filter_cliente or '' }}" class="filter-input column-filter-input" placeholder="Cliente"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_quantidade_total" value="{{ filters.filter_quantidade_total or '' }}" class="filter-input column-filter-input text-right" placeholder="Qtd."></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_valor_total" value="{{ filters.filter_valor_total or '' }}" class="filter-input column-filter-input text-right" placeholder="Valor"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_linha" value="{{ filters.filter_linha or '' }}" class="filter-input column-filter-input" placeholder="Linha"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_approval_status" value="{{ filters.filter_approval_status or '' }}" class="filter-input column-filter-input" placeholder="Status"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_situation" value="{{ filters.filter_situation or '' }}" class="filter-input column-filter-input" placeholder="Situação"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_occurrence" value="{{ filters.filter_occurrence or '' }}" class="filter-input column-filter-input" placeholder="Ocorrência"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_production_lots_display" value="{{ filters.filter_production_lots_display or '' }}" class="filter-input column-filter-input" placeholder="Lote Produção"></th>
+                            <th scope="col" class="px-4 py-2 text-center">
+                                <div class="flex items-center justify-center gap-3">
+                                    <button type="submit" class="text-xs font-semibold text-blue-700 hover:underline">Aplicar</button>
+                                    <button type="button" id="clearColumnFiltersBtn" class="text-xs text-red-600 hover:underline">Limpar</button>
                                 </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if orders %}
+                        {% for order in orders %}
+                        {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
+                        <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};">
+                            <td class="py-2 px-4 whitespace-nowrap font-semibold">{{ order.pedido }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.data or '-' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.codigo or '-' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">
+                                <div class="font-medium">{{ order.cliente or '-' }}</div>
+                                {% if order.cidade or order.estado %}
+                                <div class="text-xs text-slate-muted">{{ order.cidade }}{% if order.estado %} / {{ order.estado }}{% endif %}</div>
                                 {% endif %}
                             </td>
-                            <td class="px-4 py-3 text-right">{{ order.quantidade_total | format_decimal_br(0) }}</td>
-                            <td class="px-4 py-3 text-right">{{ order.valor_total | format_currency_brl }}</td>
-                            <td class="px-4 py-3">{{ order.linha }}</td>
-                            <td class="px-4 py-3">{{ order.approval_status }}</td>
-                            <td class="px-4 py-3">{{ order.situation }}</td>
-                            <td class="px-4 py-3">{{ order.occurrence or '-' }}</td>
-                            <td class="px-4 py-3">{{ order.production_lots_display or '-' }}</td>
-                            <td class="px-4 py-3">{{ order.load_lot or '-' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.quantidade_total | format_decimal_br(0) }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.valor_total | format_currency_brl }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.linha }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.approval_status }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.situation }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.occurrence or '-' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.production_lots_display or '-' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.load_lot or '-' }}</td>
                         </tr>
                         {% endfor %}
-                    {% else %}
+                        {% else %}
                         <tr>
-                            <td colspan="12" class="px-4 py-6 text-center text-gray-500">
-                                Nenhum pedido encontrado para os filtros informados.
+                            <td colspan="12" class="py-6 px-4 text-center text-sm text-slate-muted">
+                                Nenhum pedido encontrado. Ajuste os filtros ou utilize os campos de busca acima.
                             </td>
                         </tr>
-                    {% endif %}
-                </tbody>
-                {% if orders %}
-                <tfoot class="bg-slate-100 text-xs font-semibold text-gray-700">
-                    <tr>
-                        <td colspan="4" class="px-4 py-3 text-right">Totais:</td>
-                        <td class="px-4 py-3 text-right">{{ totals.quantidade_total | format_decimal_br(0) }}</td>
-                        <td class="px-4 py-3 text-right">{{ totals.valor_total | format_currency_brl }}</td>
-                        <td colspan="6"></td>
-                    </tr>
-                </tfoot>
-                {% endif %}
-            </table>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </form>
         </div>
+        {% if orders %}
+        <div class="bg-gray-100 p-4 rounded-lg mt-4 flex flex-wrap justify-center gap-4">
+            <div class="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg text-sm font-semibold">
+                Quantidade Total: <span>{{ totals.quantidade_total | format_decimal_br(0) }}</span>
+            </div>
+            <div class="bg-green-100 text-green-800 px-4 py-2 rounded-lg text-sm font-semibold">
+                Valor Total: <span>{{ totals.valor_total | format_currency_brl }}</span>
+            </div>
+        </div>
+        {% else %}
+        <div class="text-center py-12 px-4 text-sm text-slate-muted">
+            <div class="flex flex-col items-center gap-3">
+                <i class="fas fa-file-invoice-dollar text-2xl" style="color: var(--clr-medium-gray);"></i>
+                <p class="font-semibold text-dark-blue">Nenhum pedido de venda encontrado.</p>
+                <p>Use o botão "Filtrar" para ajustar sua busca.</p>
+            </div>
+        </div>
+        {% endif %}
     </section>
 </div>
 
-<div id="filterModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-black bg-opacity-40 p-4">
-    <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-            <h3 class="text-lg font-semibold text-gray-800">Filtrar pedidos</h3>
-            <button id="closeFilterModalBtn" class="text-gray-500 hover:text-gray-700">
-                <i class="fas fa-times text-lg"></i>
-            </button>
+<div id="filterModal" class="modal">
+    <div class="modal-content" style="max-width: 56rem;">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="section-heading">Filtrar Pedidos de Venda</h2>
+            <button id="closeFilterModalBtn" class="close-button">&times;</button>
         </div>
-        <form id="filterForm" method="get" action="{{ url_for('sales_orders_list') }}" class="px-6 py-5 space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                        Cidade
-                    </label>
-                    <div class="filter-dropdown" data-dropdown>
-                        <button type="button"
-                                class="filter-dropdown__toggle"
-                                data-dropdown-toggle
-                                data-target="cityDropdownMenu"
-                                data-default-label="Selecione cidades">
-                            <span data-dropdown-label>Selecione cidades</span>
-                            <i class="fas fa-chevron-down text-xs"></i>
-                        </button>
-                        <div id="cityDropdownMenu" class="filter-dropdown__menu hidden" data-dropdown-menu>
-                            <div class="max-h-48 overflow-y-auto">
-                                {% for city in city_options %}
-                                <label>
-                                    <input type="checkbox"
-                                           name="cities"
-                                           value="{{ city }}"
-                                           data-label="{{ city }}"
-                                           {% if city in filters.cities %}checked{% endif %}>
-                                    <span>{{ city }}</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                            <button type="button" class="filter-dropdown__clear" data-dropdown-clear>Limpar</button>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                        Estado
-                    </label>
-                    <div class="filter-dropdown" data-dropdown>
-                        <button type="button"
-                                class="filter-dropdown__toggle"
-                                data-dropdown-toggle
-                                data-target="stateDropdownMenu"
-                                data-default-label="Selecione estados">
-                            <span data-dropdown-label>Selecione estados</span>
-                            <i class="fas fa-chevron-down text-xs"></i>
-                        </button>
-                        <div id="stateDropdownMenu" class="filter-dropdown__menu hidden" data-dropdown-menu>
-                            <div class="max-h-48 overflow-y-auto">
-                                {% for state in state_options %}
-                                <label>
-                                    <input type="checkbox"
-                                           name="states"
-                                           value="{{ state }}"
-                                           data-label="{{ state }}"
-                                           {% if state in filters.states %}checked{% endif %}>
-                                    <span>{{ state }}</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                            <button type="button" class="filter-dropdown__clear" data-dropdown-clear>Limpar</button>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                        Vendedor
-                    </label>
-                    <div class="filter-dropdown" data-dropdown>
-                        <button type="button"
-                                class="filter-dropdown__toggle"
-                                data-dropdown-toggle
-                                data-target="vendorDropdownMenu"
-                                data-default-label="Selecione vendedores">
-                            <span data-dropdown-label>Selecione vendedores</span>
-                            <i class="fas fa-chevron-down text-xs"></i>
-                        </button>
-                        <div id="vendorDropdownMenu" class="filter-dropdown__menu hidden" data-dropdown-menu>
-                            <div class="max-h-48 overflow-y-auto">
-                                {% for vendor in vendor_options %}
-                                <label>
-                                    <input type="checkbox"
-                                           name="vendors"
-                                           value="{{ vendor.code }}"
-                                           data-label="{{ vendor.name if vendor.name else vendor.code }}"
-                                           {% if vendor.code in filters.vendors %}checked{% endif %}>
-                                    <span>{{ vendor.code }}{% if vendor.name %} - {{ vendor.name }}{% endif %}</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                            <button type="button" class="filter-dropdown__clear" data-dropdown-clear>Limpar</button>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                        Status
-                    </label>
-                    <div class="filter-dropdown" data-dropdown>
-                        <button type="button"
-                                class="filter-dropdown__toggle"
-                                data-dropdown-toggle
-                                data-target="statusDropdownMenu"
-                                data-default-label="Selecione status">
-                            <span data-dropdown-label>Selecione status</span>
-                            <i class="fas fa-chevron-down text-xs"></i>
-                        </button>
-                        <div id="statusDropdownMenu" class="filter-dropdown__menu hidden" data-dropdown-menu>
-                            <div class="max-h-48 overflow-y-auto">
-                                {% for status in approval_status_options %}
-                                <label>
-                                    <input type="checkbox"
-                                           name="statuses"
-                                           value="{{ status.code }}"
-                                           data-label="{{ status.label }}"
-                                           {% if status.code in filters.statuses %}checked{% endif %}>
-                                    <span>{{ status.label }}</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                            <button type="button" class="filter-dropdown__clear" data-dropdown-clear>Limpar</button>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                        Situa&ccedil;&atilde;o
-                    </label>
-                    <div class="filter-dropdown" data-dropdown>
-                        <button type="button"
-                                class="filter-dropdown__toggle"
-                                data-dropdown-toggle
-                                data-target="situationDropdownMenu"
-                                data-default-label="Selecione situa&ccedil;&otilde;es">
-                            <span data-dropdown-label>Selecione situa&ccedil;&otilde;es</span>
-                            <i class="fas fa-chevron-down text-xs"></i>
-                        </button>
-                        <div id="situationDropdownMenu" class="filter-dropdown__menu hidden" data-dropdown-menu>
-                            <div class="max-h-48 overflow-y-auto">
-                                {% for situation in situation_options %}
-                                <label>
-                                    <input type="checkbox"
-                                           name="situations"
-                                           value="{{ situation.code }}"
-                                           data-label="{{ situation.label }}"
-                                           {% if situation.code in filters.situations %}checked{% endif %}>
-                                    <span>{{ situation.label }}</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                            <button type="button" class="filter-dropdown__clear" data-dropdown-clear>Limpar</button>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                        Ocorr&ecirc;ncia
-                    </label>
-                    <div class="filter-dropdown" data-dropdown>
-                        <button type="button"
-                                class="filter-dropdown__toggle"
-                                data-dropdown-toggle
-                                data-target="occurrenceDropdownMenu"
-                                data-default-label="Selecione ocorr&ecirc;ncias">
-                            <span data-dropdown-label>Selecione ocorr&ecirc;ncias</span>
-                            <i class="fas fa-chevron-down text-xs"></i>
-                        </button>
-                        <div id="occurrenceDropdownMenu" class="filter-dropdown__menu hidden" data-dropdown-menu>
-                            <div class="max-h-48 overflow-y-auto">
-                                {% for occurrence in occurrence_options %}
-                                <label>
-                                    <input type="checkbox"
-                                           name="occurrences"
-                                           value="{{ occurrence.code }}"
-                                           data-label="{{ occurrence.code }}{% if occurrence.description %} - {{ occurrence.description }}{% endif %}"
-                                           {% if occurrence.code in filters.occurrences %}checked{% endif %}>
-                                    <span>
-                                        {{ occurrence.code }}{% if occurrence.description %} - {{ occurrence.description }}{% endif %}
-                                    </span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                            <button type="button" class="filter-dropdown__clear" data-dropdown-clear>Limpar</button>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                        Lote de Carga
-                    </label>
-                    <div class="filter-dropdown" data-dropdown>
-                        <button type="button"
-                                class="filter-dropdown__toggle"
-                                data-dropdown-toggle
-                                data-target="loadLotDropdownMenu"
-                                data-default-label="Selecione op&ccedil;&otilde;es">
-                            <span data-dropdown-label>Selecione op&ccedil;&otilde;es</span>
-                            <i class="fas fa-chevron-down text-xs"></i>
-                        </button>
-                        <div id="loadLotDropdownMenu" class="filter-dropdown__menu hidden" data-dropdown-menu>
-                            <div class="max-h-48 overflow-y-auto">
-                                {% for option in load_lot_filter_options %}
-                                <label>
-                                    <input type="checkbox"
-                                           name="has_load_lot"
-                                           value="{{ option.value }}"
-                                           data-label="{{ option.label }}"
-                                           {% if option.value in filters.has_load_lot %}checked{% endif %}>
-                                    <span>{{ option.label }}</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                            <button type="button" class="filter-dropdown__clear" data-dropdown-clear>Limpar</button>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                        Lote de Produ&ccedil;&atilde;o
-                    </label>
-                    <div class="filter-dropdown" data-dropdown>
-                        <button type="button"
-                                class="filter-dropdown__toggle"
-                                data-dropdown-toggle
-                                data-target="productionLotDropdownMenu"
-                                data-default-label="Selecione op&ccedil;&otilde;es">
-                            <span data-dropdown-label>Selecione op&ccedil;&otilde;es</span>
-                            <i class="fas fa-chevron-down text-xs"></i>
-                        </button>
-                        <div id="productionLotDropdownMenu" class="filter-dropdown__menu hidden" data-dropdown-menu>
-                            <div class="max-h-48 overflow-y-auto">
-                                {% for option in production_lot_filter_options %}
-                                <label>
-                                    <input type="checkbox"
-                                           name="has_production_lot"
-                                           value="{{ option.value }}"
-                                           data-label="{{ option.label }}"
-                                           {% if option.value in filters.has_production_lot %}checked{% endif %}>
-                                    <span>{{ option.label }}</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                            <button type="button" class="filter-dropdown__clear" data-dropdown-clear>Limpar</button>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                        Per&iacute;odo (Data do Pedido)
-                    </label>
-                    <div class="grid grid-cols-1 gap-3">
-                        <input type="date"
-                               name="start_date"
-                               value="{{ filters.start_date }}"
-                               class="filter-dropdown__toggle">
-                        <input type="date"
-                               name="end_date"
-                               value="{{ filters.end_date }}"
-                               class="filter-dropdown__toggle">
-                    </div>
-                </div>
+        <form id="filterForm" action="{{ url_for('sales_orders_list') }}" method="GET" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Filters will be dynamically created by JS -->
             </div>
-            <div class="flex justify-end gap-3 border-t border-gray-200 pt-4">
-                <button type="button" id="closeFilterFooterBtn" class="btn-secondary px-4 py-2 rounded-lg">
-                    Cancelar
-                </button>
-                <button type="submit" class="btn-primary px-4 py-2 rounded-lg">
-                    Aplicar filtros
-                </button>
+            <div class="flex justify-end space-x-4 mt-6">
+                <button type="button" id="clearFiltersBtn" class="btn btn-secondary">Limpar Filtros</button>
+                <button type="submit" class="btn btn-primary">Aplicar Filtros</button>
             </div>
+            <!-- Hidden inputs for column filters -->
         </form>
     </div>
 </div>
@@ -464,87 +233,261 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const filterModal = document.getElementById('filterModal');
-    const openModalBtn = document.getElementById('openFilterModalBtn');
-    const closeModalBtn = document.getElementById('closeFilterModalBtn');
-    const closeFooterBtn = document.getElementById('closeFilterFooterBtn');
+    const openFilterModalBtn = document.getElementById('openFilterModalBtn');
+    const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+    const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+    const filterForm = document.getElementById('filterForm');
+    const columnFilterForm = document.getElementById('columnFilterForm');
+    
+    const sortableButtons = document.querySelectorAll('[data-sort-column]');
+    const sortByInput = document.getElementById('columnSortByInput');
+    const sortOrderInput = document.getElementById('columnSortOrderInput');
 
-    const openModal = () => filterModal.classList.remove('hidden');
-    const closeModal = () => filterModal.classList.add('hidden');
+    // Generic Dropdown Logic
+    const createDropdown = (id, label, name, options, selected, isMulti=true) => {
+        const container = document.createElement('div');
+        container.className = 'form-group';
 
-    openModalBtn.addEventListener('click', openModal);
-    closeModalBtn.addEventListener('click', closeModal);
-    closeFooterBtn.addEventListener('click', closeModal);
+        const labelEl = document.createElement('label');
+        labelEl.className = 'form-label';
+        labelEl.textContent = label;
+        container.appendChild(labelEl);
 
-    filterModal.addEventListener('click', (event) => {
-        if (event.target === filterModal) {
-            closeModal();
+        const dropdownContainer = document.createElement('div');
+        dropdownContainer.id = `${id}DropdownContainer`;
+        dropdownContainer.className = 'relative';
+        container.appendChild(dropdownContainer);
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.id = `${id}DropdownToggle`;
+        toggleBtn.className = 'form-input cursor-pointer flex items-center justify-between';
+        toggleBtn.innerHTML = `<span id="${id}DropdownLabel" class="text-left truncate">${isMulti ? `Selecione ${label.toLowerCase()}` : 'Selecione uma opção'}</span><i class="fas fa-chevron-down ml-2 text-gray-500"></i>`;
+        dropdownContainer.appendChild(toggleBtn);
+
+        const dropdownMenu = document.createElement('div');
+        dropdownMenu.id = `${id}Dropdown`;
+        dropdownMenu.className = 'hidden absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg p-3';
+        dropdownContainer.appendChild(dropdownMenu);
+
+        const optionsContainer = document.createElement('div');
+        optionsContainer.className = 'max-h-60 overflow-y-auto space-y-2';
+        dropdownMenu.appendChild(optionsContainer);
+
+        if (options && options.length > 0) {
+            options.forEach(opt => {
+                const optionLabel = document.createElement('label');
+                optionLabel.className = 'flex items-center space-x-2 cursor-pointer';
+                
+                const input = document.createElement('input');
+                input.type = isMulti ? 'checkbox' : 'radio';
+                input.name = name;
+                input.value = opt.value;
+                input.dataset.display = opt.label;
+                if (isMulti && selected.includes(opt.value)) {
+                    input.checked = true;
+                } else if (!isMulti && selected === opt.value) {
+                    input.checked = true;
+                }
+                
+                const span = document.createElement('span');
+                span.className = 'text-sm text-gray-700';
+                span.textContent = opt.label;
+
+                optionLabel.appendChild(input);
+                optionLabel.appendChild(span);
+                optionsContainer.appendChild(optionLabel);
+            });
+        } else {
+            optionsContainer.innerHTML = `<p class="text-sm text-gray-500">Nenhuma opção disponível.</p>`;
         }
-    });
 
-    let activeDropdownMenu = null;
-    const dropdowns = document.querySelectorAll('[data-dropdown]');
-
-    dropdowns.forEach((dropdown) => {
-        const toggle = dropdown.querySelector('[data-dropdown-toggle]');
-        const menuId = toggle ? toggle.getAttribute('data-target') : null;
-        const menu = menuId ? document.getElementById(menuId) : null;
-        const labelSpan = toggle ? toggle.querySelector('[data-dropdown-label]') : null;
-        const defaultLabel = toggle ? (toggle.getAttribute('data-default-label') || 'Selecione') : 'Selecione';
-        const checkboxes = menu ? Array.from(menu.querySelectorAll('input[type="checkbox"]')) : [];
-        const clearButton = menu ? menu.querySelector('[data-dropdown-clear]') : null;
-
-        if (!toggle || !menu || !labelSpan) {
-            return;
+        if (isMulti) {
+            const footer = document.createElement('div');
+            footer.className = 'flex justify-end pt-2 mt-2 border-t border-gray-200';
+            const clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.id = `${id}ClearBtn`;
+            clearBtn.className = 'text-sm text-red-600 hover:underline';
+            clearBtn.textContent = 'Limpar seleção';
+            footer.appendChild(clearBtn);
+            dropdownMenu.appendChild(footer);
         }
+        
+        return container;
+    };
+    
+    const setupDropdown = (id, name, isMulti=true) => {
+        const container = document.getElementById(`${id}DropdownContainer`);
+        if (!container) return;
+        
+        const toggle = document.getElementById(`${id}DropdownToggle`);
+        const dropdown = document.getElementById(`${id}Dropdown`);
+        const label = document.getElementById(`${id}DropdownLabel`);
+        const clearBtn = document.getElementById(`${id}ClearBtn`);
+        const inputs = Array.from(container.querySelectorAll(`input[name="${name}"]`));
 
         const updateLabel = () => {
-            const selected = checkboxes.filter((checkbox) => checkbox.checked);
+            const selected = inputs.filter(i => i.checked);
             if (selected.length === 0) {
-                labelSpan.textContent = defaultLabel;
+                label.textContent = isMulti ? `Selecione ${label.textContent.toLowerCase()}` : 'Selecione uma opção';
             } else if (selected.length === 1) {
-                labelSpan.textContent = selected[0].dataset.label || selected[0].value;
+                label.textContent = selected[0].dataset.display || selected[0].value;
             } else {
-                labelSpan.textContent = `${selected.length} selecionados`;
+                label.textContent = `${selected.length} selecionados`;
             }
         };
 
-        toggle.addEventListener('click', (event) => {
-            event.preventDefault();
-            const isOpen = !menu.classList.contains('hidden');
-            if (activeDropdownMenu && activeDropdownMenu !== menu) {
-                activeDropdownMenu.classList.add('hidden');
-            }
-            if (isOpen) {
-                menu.classList.add('hidden');
-                activeDropdownMenu = null;
-            } else {
-                menu.classList.remove('hidden');
-                activeDropdownMenu = menu;
-            }
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.absolute.z-20').forEach(d => {
+                if (d !== dropdown) d.classList.add('hidden');
+            });
+            dropdown.classList.toggle('hidden');
         });
 
-        document.addEventListener('click', (event) => {
-            if (!dropdown.contains(event.target) && activeDropdownMenu === menu) {
-                menu.classList.add('hidden');
-                activeDropdownMenu = null;
-            }
-        });
-
-        checkboxes.forEach((checkbox) => {
-            checkbox.addEventListener('change', updateLabel);
-        });
-
-        if (clearButton) {
-            clearButton.addEventListener('click', (event) => {
-                event.preventDefault();
-                checkboxes.forEach((checkbox) => {
-                    checkbox.checked = false;
-                });
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                inputs.forEach(i => i.checked = false);
                 updateLabel();
             });
         }
 
+        inputs.forEach(i => i.addEventListener('change', () => {
+            if (!isMulti) {
+                dropdown.classList.add('hidden');
+            }
+            updateLabel();
+        }));
+        
         updateLabel();
+    };
+
+    const filterGrid = filterForm.querySelector('.grid');
+    
+    // Filter Definitions
+    const cityOptions = {{ city_options | tojson }};
+    const stateOptions = {{ state_options | tojson }};
+    const vendorOptions = {{ vendor_options | tojson }};
+    const statusOptions = {{ approval_status_options | tojson }};
+    const situationOptions = {{ situation_options | tojson }};
+    const occurrenceOptions = {{ occurrence_options | tojson }};
+    const loadLotFilterOptions = {{ load_lot_filter_options | tojson }};
+    const productionLotFilterOptions = {{ production_lot_filter_options | tojson }};
+    
+    const filters = {{ filters | tojson }};
+
+    filterGrid.appendChild(createDropdown('city', 'Cidades', 'cities', cityOptions.map(c => ({value: c, label: c})), filters.cities || []));
+    filterGrid.appendChild(createDropdown('state', 'Estados', 'states', stateOptions.map(s => ({value: s, label: s})), filters.states || []));
+    filterGrid.appendChild(createDropdown('vendor', 'Vendedores', 'vendors', vendorOptions.map(v => ({value: v.code, label: v.name || v.code})), filters.vendors || []));
+    filterGrid.appendChild(createDropdown('status', 'Status', 'statuses', statusOptions.map(s => ({value: s.code, label: s.label})), filters.statuses || []));
+    filterGrid.appendChild(createDropdown('situation', 'Situações', 'situations', situationOptions.map(s => ({value: s.code, label: s.label})), filters.situations || []));
+    filterGrid.appendChild(createDropdown('occurrence', 'Ocorrências', 'occurrences', occurrenceOptions.map(o => ({value: o.code, label: `${o.code} - ${o.description}`})), filters.occurrences || []));
+    filterGrid.appendChild(createDropdown('hasLoadLot', 'Lote de Carga', 'has_load_lot', loadLotFilterOptions.map(o => ({value: o.value, label: o.label})), filters.has_load_lot || [], false));
+    filterGrid.appendChild(createDropdown('hasProductionLot', 'Lote de Produção', 'has_production_lot', productionLotFilterOptions.map(o => ({value: o.value, label: o.label})), filters.has_production_lot || [], false));
+
+    // Date filters
+    const dateContainer = document.createElement('div');
+    dateContainer.className = 'form-group';
+    dateContainer.innerHTML = `
+        <label class="form-label">Período (Data do Pedido)</label>
+        <div class="grid grid-cols-2 gap-2">
+            <input type="date" name="start_date" class="form-input" value="${filters.start_date || ''}">
+            <input type="date" name="end_date" class="form-input" value="${filters.end_date || ''}">
+        </div>
+    `;
+    filterGrid.appendChild(dateContainer);
+
+    // Setup all created dropdowns
+    setupDropdown('city', 'cities');
+    setupDropdown('state', 'states');
+    setupDropdown('vendor', 'vendors');
+    setupDropdown('status', 'statuses');
+    setupDropdown('situation', 'situations');
+    setupDropdown('occurrence', 'occurrences');
+    setupDropdown('hasLoadLot', 'has_load_lot', false);
+    setupDropdown('hasProductionLot', 'has_production_lot', false);
+
+    // Modal handling
+    const openFilterModal = () => filterModal.style.display = 'flex';
+    const closeFilterModal = () => filterModal.style.display = 'none';
+
+    openFilterModalBtn.addEventListener('click', openFilterModal);
+    closeFilterModalBtn.addEventListener('click', closeFilterModal);
+    clearFiltersBtn.addEventListener('click', () => {
+        window.location.href = "{{ url_for('sales_orders_list') }}";
+    });
+    filterModal.addEventListener('click', (e) => {
+        if (e.target === filterModal) closeFilterModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeFilterModal();
+    });
+    
+    // Sorting
+    sortableButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const column = button.dataset.sortColumn;
+            const currentOrder = sortOrderInput.value;
+            
+            let nextOrder = 'asc';
+            if (sortByInput.value === column && currentOrder === 'asc') {
+                nextOrder = 'desc';
+            }
+            
+            sortByInput.value = column;
+            sortOrderInput.value = nextOrder;
+            
+            columnFilterForm.submit();
+        });
+    });
+
+    // Column Filtering
+    const columnFilterInputs = columnFilterForm.querySelectorAll('.column-filter-input');
+    const clearColumnFiltersBtn = document.getElementById('clearColumnFiltersBtn');
+
+    const debounce = (callback, delay = 300) => {
+        let timeoutId;
+        return (...args) => {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+                callback.apply(null, args);
+            }, delay);
+        };
+    };
+
+    const debouncedColumnSubmit = debounce(() => columnFilterForm.submit(), 500);
+
+    columnFilterInputs.forEach(input => {
+        input.addEventListener('input', debouncedColumnSubmit);
+    });
+
+    clearColumnFiltersBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        columnFilterInputs.forEach(input => input.value = '');
+        columnFilterForm.submit();
+    });
+
+    // Sync column filters with modal form on submit
+    filterForm.addEventListener('submit', () => {
+        const columnFilters = columnFilterForm.querySelectorAll('.column-filter-input');
+        columnFilters.forEach(cf => {
+            let hiddenInput = filterForm.querySelector(`input[name="${cf.name}"]`);
+            if (!hiddenInput) {
+                hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = cf.name;
+                filterForm.appendChild(hiddenInput);
+            }
+            hiddenInput.value = cf.value;
+        });
+    });
+    
+    document.addEventListener('click', (e) => {
+        const openDropdown = document.querySelector('.absolute.z-20:not(.hidden)');
+        if (openDropdown && !openDropdown.parentElement.contains(e.target)) {
+            openDropdown.classList.add('hidden');
+        }
     });
 });
 </script>
