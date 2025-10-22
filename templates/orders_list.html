@@ -88,9 +88,14 @@
     }
     #orderDetailModal .modal-content {
         width: 100%;
-        max-width: 60rem;
+        max-width: 75rem;
         max-height: 90vh;
         overflow-y: auto;
+    }
+    #orderDetailModal .modal-footer {
+        border-top: 1px solid var(--clr-border);
+        padding-top: 1rem;
+        margin-top: 1rem;
     }
     .status-kpi-red {
         color: #dc2626;
@@ -341,6 +346,26 @@
             </div>
             <div id="orderDetailEmptyState" class="hidden text-sm text-center text-slate-muted">
                 Nenhum item encontrado para este pedido.
+            </div>
+        </div>
+        <div class="modal-footer">
+            <div class="status-legend">
+                <div class="status-legend-item">
+                    <span class="status-legend-color red"></span>
+                    <span>Vermelho = Nada Separado</span>
+                </div>
+                <div class="status-legend-item">
+                    <span class="status-legend-color yellow"></span>
+                    <span>Amarelo = Parcialmente Separado</span>
+                </div>
+                <div class="status-legend-item">
+                    <span class="status-legend-color green"></span>
+                    <span>Verde = Totalmente Separado</span>
+                </div>
+                <div class="status-legend-item">
+                    <span class="status-legend-color blue"></span>
+                    <span>Azul = Totalmente Carregado</span>
+                </div>
             </div>
         </div>
     </div>
