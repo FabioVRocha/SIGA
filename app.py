@@ -2232,6 +2232,7 @@ def fetch_orders(filters):
 
     has_lcapecod_column = False
     column_check_cursor = None
+    pedprodu_columns = None
 
     try:
         column_check_cursor = conn.cursor()
@@ -2973,6 +2974,39 @@ def fetch_order_details(pedido_code):
         if column_check_cursor:
             column_check_cursor.close()
 
+    column_check_cursor = None
+
+    try:
+        column_check_cursor = conn.cursor()
+        column_check_cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'pedprodu'
+            """
+        )
+        pedprodu_columns = {
+            (row[0] or '').lower()
+            for row in column_check_cursor.fetchall()
+            if row and row[0]
+        }
+    except Error as e:
+        print(f"Erro ao verificar colunas da tabela 'pedprodu': {e}")
+        pedprodu_columns = None
+    finally:
+        if column_check_cursor:
+            column_check_cursor.close()
+
+    def build_items_aggregate(column_name, expression, alias):
+        column_key = (column_name or '').lower()
+        if pedprodu_columns is None or column_key in pedprodu_columns:
+            return expression
+        print(
+            f"Coluna opcional '{column_name}' ausente em 'pedprodu'. "
+            f"Usando valor padrão para '{alias}'."
+        )
+        return f"0 AS {alias}"
+
     try:
         cur = conn.cursor()
 
@@ -3074,27 +3108,62 @@ def fetch_order_details(pedido_code):
         details = {'header': header_data, 'items': []}
 
         items_cur = conn.cursor()
-        items_cur.execute(
-            """
+        quantidade_total_expr = build_items_aggregate(
+            'pprquanti',
+            "SUM(COALESCE(pp.pprquanti, 0)) AS quantidade_total",
+            'quantidade_total',
+        )
+        valor_tabela_expr = build_items_aggregate(
+            'pprlista',
+            "SUM(COALESCE(pp.pprlista, 0)) AS valor_tabela",
+            'valor_tabela',
+        )
+        percentual_desconto_expr = build_items_aggregate(
+            'pprdesc1',
+            "AVG(COALESCE(pp.pprdesc1, 0)) AS percentual_desconto",
+            'percentual_desconto',
+        )
+        valor_unitario_expr = build_items_aggregate(
+            'pprvalor',
+            "SUM(COALESCE(pp.pprvalor, 0)) AS valor_unitario_total",
+            'valor_unitario_total',
+        )
+        valor_ipi_expr = build_items_aggregate(
+            'pprvlipi',
+            "SUM(COALESCE(pp.pprvlipi, 0)) AS valor_ipi",
+            'valor_ipi',
+        )
+        valor_bruto_expr = build_items_aggregate(
+            'pprvlsoma',
+            "SUM(COALESCE(pp.pprvlsoma, 0)) AS valor_bruto_total",
+            'valor_bruto_total',
+        )
+        desconto_pedido_expr = build_items_aggregate(
+            'pprdescped',
+            "SUM(COALESCE(pp.pprdescped, 0)) AS desconto_pedido_total",
+            'desconto_pedido_total',
+        )
+
+        items_query = f"""
             SELECT
                 COALESCE(pp.pprproduto::text, '') AS codigo_produto,
                 COALESCE(pp.pprseq::text, '') AS sequencia,
                 COALESCE(prod.pronome, '') AS produto,
-                SUM(COALESCE(pp.pprquanti, 0)) AS quantidade_total,
-                SUM(COALESCE(pp.pprlista, 0)) AS valor_tabela,
-                AVG(COALESCE(pp.pprdesc1, 0)) AS percentual_desconto,
-                SUM(COALESCE(pp.pprvalor, 0)) AS valor_unitario_total,
-                SUM(COALESCE(pp.pprvlipi, 0)) AS valor_ipi,
-                SUM(COALESCE(pp.pprvlsoma, 0)) AS valor_bruto_total,
-                SUM(COALESCE(pp.pprdescped, 0)) AS desconto_pedido_total
+                {quantidade_total_expr},
+                {valor_tabela_expr},
+                {percentual_desconto_expr},
+                {valor_unitario_expr},
+                {valor_ipi_expr},
+                {valor_bruto_expr},
+                {desconto_pedido_expr}
             FROM pedprodu pp
             LEFT JOIN produto prod ON prod.produto = pp.pprproduto
             WHERE CAST(pp.pedido AS TEXT) = %s
             GROUP BY pp.pprproduto, pp.pprseq, prod.pronome
             ORDER BY pp.pprseq, pp.pprproduto
-            """,
-            (pedido_value,),
-        )
+            """
+
+        items_cur.execute(items_query, (pedido_value,))
         item_rows = items_cur.fetchall()
         items_cur.close()
 
