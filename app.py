@@ -13,6 +13,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import re # Para expressões regulares, usado para parsear rgcdes
 import json # Para lidar com dados JSON (para parâmetros de usuário)
 from math import isclose
+from decimal import Decimal, InvalidOperation
 
 # Importa as configurações do arquivo config.py
 from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE
@@ -2285,6 +2286,82 @@ def fetch_orders(filters):
             query += " AND COALESCE(linha.linha, '') ILIKE %s"
             params.append(f"%{filters['line']}%")
 
+        def parse_decimal_filter(raw_value):
+            if raw_value is None:
+                return None
+            value = str(raw_value).strip()
+            if not value:
+                return None
+            normalized = value.replace(' ', '')
+            if ',' in normalized and '.' in normalized:
+                normalized = normalized.replace('.', '').replace(',', '.')
+            elif ',' in normalized:
+                normalized = normalized.replace(',', '.')
+            try:
+                return Decimal(normalized)
+            except InvalidOperation:
+                return None
+
+        pedido_filter = (filters.get('filter_pedido') or '').strip()
+        if pedido_filter:
+            params.append(f"%{pedido_filter}%")
+            query += " AND CAST(p.pedido AS TEXT) ILIKE %s"
+
+        seq_lote_filter = (filters.get('filter_seq_lote') or '').strip()
+        if seq_lote_filter:
+            params.append(f"%{seq_lote_filter}%")
+            query += " AND COALESCE(CAST(p.lcaseque AS TEXT), '') ILIKE %s"
+
+        cliente_codigo_filter = (filters.get('filter_cliente_codigo') or '').strip()
+        if cliente_codigo_filter:
+            params.append(f"%{cliente_codigo_filter}%")
+            query += " AND COALESCE(CAST(p.pedcliente AS TEXT), '') ILIKE %s"
+
+        cliente_nome_filter = (filters.get('filter_cliente_nome') or '').strip()
+        if cliente_nome_filter:
+            params.append(f"%{cliente_nome_filter}%")
+            query += " AND COALESCE(e.empnome, '') ILIKE %s"
+
+        cidade_filter = (filters.get('filter_cidade_uf') or '').strip()
+        if cidade_filter:
+            like_value = f"%{cidade_filter}%"
+            query += """
+                AND (
+                    COALESCE(c.cidnome, '') ILIKE %s
+                    OR COALESCE(c.estado, '') ILIKE %s
+                    OR (COALESCE(c.cidnome, '') || '/' || COALESCE(c.estado, '')) ILIKE %s
+                    OR COALESCE(CAST(p.pedentcid AS TEXT), '') ILIKE %s
+                    OR COALESCE(CAST(p.pedentuf AS TEXT), '') ILIKE %s
+                    OR (COALESCE(CAST(p.pedentcid AS TEXT), '') || '/' || COALESCE(CAST(p.pedentuf AS TEXT), '')) ILIKE %s
+                )
+            """
+            params.extend([like_value] * 6)
+
+        quantidade_filter = parse_decimal_filter(filters.get('filter_quantidade_total'))
+        if quantidade_filter is not None:
+            query += " AND COALESCE(prod.total_quantidade, 0) = %s"
+            params.append(quantidade_filter)
+
+        reservado_filter = parse_decimal_filter(filters.get('filter_reservado'))
+        if reservado_filter is not None:
+            query += " AND COALESCE(proj.reservado, 0) = %s"
+            params.append(reservado_filter)
+
+        separado_filter = parse_decimal_filter(filters.get('filter_separado'))
+        if separado_filter is not None:
+            query += " AND COALESCE(proj.separado, 0) = %s"
+            params.append(separado_filter)
+
+        carregado_filter = parse_decimal_filter(filters.get('filter_carregado'))
+        if carregado_filter is not None:
+            query += " AND COALESCE(proj.carregado, 0) = %s"
+            params.append(carregado_filter)
+
+        linha_filter = (filters.get('filter_linha') or '').strip()
+        if linha_filter:
+            params.append(f"%{linha_filter}%")
+            query += " AND COALESCE(linha.linha, 'OUTROS') ILIKE %s"
+
         if filters.get('start_date'):
             try:
                 start_date = datetime.datetime.strptime(filters['start_date'], '%Y-%m-%d').date()
@@ -2573,6 +2650,19 @@ def orders_list():
         value.strip() for value in request.args.getlist('lines') if value and value.strip()
     ]
 
+    column_filters = {
+        'filter_pedido': (request.args.get('filter_pedido') or '').strip(),
+        'filter_seq_lote': (request.args.get('filter_seq_lote') or '').strip(),
+        'filter_cliente_codigo': (request.args.get('filter_cliente_codigo') or '').strip(),
+        'filter_cliente_nome': (request.args.get('filter_cliente_nome') or '').strip(),
+        'filter_cidade_uf': (request.args.get('filter_cidade_uf') or '').strip(),
+        'filter_quantidade_total': (request.args.get('filter_quantidade_total') or '').strip(),
+        'filter_reservado': (request.args.get('filter_reservado') or '').strip(),
+        'filter_separado': (request.args.get('filter_separado') or '').strip(),
+        'filter_carregado': (request.args.get('filter_carregado') or '').strip(),
+        'filter_linha': (request.args.get('filter_linha') or '').strip(),
+    }
+
     sort_by_param = (request.args.get('sort_by') or 'pedido').strip()
     sort_order_param = (request.args.get('sort_order') or 'desc').strip().lower()
 
@@ -2606,6 +2696,7 @@ def orders_list():
         'sort_by': sort_by_param,
         'sort_order': sort_order_param,
     }
+    filters.update(column_filters)
 
     query_filters = filters.copy()
     if 'start_date' not in request.args and 'end_date' not in request.args:
