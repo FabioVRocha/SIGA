@@ -3253,6 +3253,12 @@ def orders_list():
 @app.route('/sales_orders_list')
 @login_required
 def sales_orders_list():
+    today = datetime.date.today()
+    first_day_of_month = today.replace(day=1)
+    last_day_of_month = first_day_of_month.replace(
+        day=calendar.monthrange(today.year, today.month)[1]
+    )
+
     selected_cities = [value.strip() for value in request.args.getlist('cities') if value and value.strip()]
     selected_states = [value.strip() for value in request.args.getlist('states') if value and value.strip()]
     selected_vendors = [value.strip() for value in request.args.getlist('vendors') if value and value.strip()]
@@ -3284,6 +3290,10 @@ def sales_orders_list():
         'start_date': (request.args.get('start_date') or '').strip(),
         'end_date': (request.args.get('end_date') or '').strip(),
     }
+
+    if 'start_date' not in request.args and 'end_date' not in request.args:
+        filters['start_date'] = first_day_of_month.strftime('%Y-%m-%d')
+        filters['end_date'] = last_day_of_month.strftime('%Y-%m-%d')
 
     orders, error_message = fetch_sales_orders(filters)
 
