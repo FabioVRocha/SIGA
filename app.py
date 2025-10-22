@@ -2846,6 +2846,96 @@ def fetch_sales_orders(filters):
             elif wants_no and not wants_yes:
                 query += " AND COALESCE(prod.production_lots_display, '') = ''"
 
+        def parse_decimal_filter(raw_value):
+            if raw_value is None:
+                return None
+            value = str(raw_value).strip()
+            if not value:
+                return None
+            normalized = value.replace(' ', '')
+            if ',' in normalized and '.' in normalized:
+                normalized = normalized.replace('.', '').replace(',', '.')
+            elif ',' in normalized:
+                normalized = normalized.replace(',', '.')
+            try:
+                return Decimal(normalized)
+            except InvalidOperation:
+                return None
+
+        pedido_filter = (filters.get('filter_pedido') or '').strip()
+        if pedido_filter:
+            query += " AND CAST(p.pedido AS TEXT) ILIKE %s"
+            params.append(f"%{pedido_filter}%")
+
+        data_filter = (filters.get('filter_data') or '').strip()
+        if data_filter:
+            like_value = f"%{data_filter}%"
+            query += """
+                AND (
+                    TO_CHAR(p.peddata, 'DD/MM/YYYY') ILIKE %s
+                    OR CAST(p.peddata AS TEXT) ILIKE %s
+                )
+            """
+            params.extend([like_value, like_value])
+
+        codigo_filter = (filters.get('filter_codigo') or '').strip()
+        if codigo_filter:
+            query += " AND COALESCE(p.pedtppvco::text, '') ILIKE %s"
+            params.append(f"%{codigo_filter}%")
+
+        cliente_filter = (filters.get('filter_cliente') or '').strip()
+        if cliente_filter:
+            query += " AND COALESCE(e.empnome, '') ILIKE %s"
+            params.append(f"%{cliente_filter}%")
+
+        quantidade_filter = parse_decimal_filter(filters.get('filter_quantidade_total'))
+        if quantidade_filter is not None:
+            query += f" AND {quantity_total_expression} = %s"
+            params.append(quantidade_filter)
+
+        valor_total_filter = parse_decimal_filter(filters.get('filter_valor_total'))
+        if valor_total_filter is not None:
+            query += f" AND {valor_total_expression} = %s"
+            params.append(valor_total_filter)
+
+        linha_filter = (filters.get('filter_linha') or '').strip()
+        if linha_filter:
+            query += " AND COALESCE(linha.linha, 'OUTROS') ILIKE %s"
+            params.append(f"%{linha_filter}%")
+
+        approval_status_filter = (filters.get('filter_approval_status') or '').strip()
+        if approval_status_filter:
+            like_value = f"%{approval_status_filter}%"
+            query += f" AND (({approval_status_label_expression}) ILIKE %s OR COALESCE(p.pedaprova, '') ILIKE %s)"
+            params.extend([like_value, like_value])
+
+        situation_filter = (filters.get('filter_situation') or '').strip()
+        if situation_filter:
+            like_value = f"%{situation_filter}%"
+            query += f" AND (({situation_label_expression}) ILIKE %s OR COALESCE(p.pedsitua, '') ILIKE %s)"
+            params.extend([like_value, like_value])
+
+        occurrence_filter = (filters.get('filter_occurrence') or '').strip()
+        if occurrence_filter:
+            like_value = f"%{occurrence_filter}%"
+            query += """
+                AND (
+                    COALESCE(occ.occurrence_code, '') ILIKE %s
+                    OR COALESCE(occ.occurrence_description, '') ILIKE %s
+                    OR (
+                        COALESCE(occ.occurrence_code, '') <> ''
+                        AND COALESCE(occ.occurrence_description, '') <> ''
+                        AND (COALESCE(occ.occurrence_code, '') || ' - ' || COALESCE(occ.occurrence_description, '')) ILIKE %s
+                    )
+                )
+            """
+            params.extend([like_value, like_value, like_value])
+
+        production_lots_filter = (filters.get('filter_production_lots_display') or '').strip()
+        if production_lots_filter:
+            query += " AND COALESCE(prod.production_lots_display, '') ILIKE %s"
+            params.append(f"%{production_lots_filter}%")
+
         load_lot_filter = (filters.get('filter_load_lot') or '').strip()
         if load_lot_filter:
             if has_lcapecod_column:
