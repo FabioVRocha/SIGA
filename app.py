@@ -2558,6 +2558,7 @@ def fetch_sales_orders(filters):
         return orders, "N�o foi poss�vel conectar ao banco de dados do ERP."
 
     has_lcapecod_column = False
+    has_peddesval_column = False
     column_check_cursor = None
 
     try:
@@ -2577,6 +2578,29 @@ def fetch_sales_orders(filters):
             has_lcapecod_column = bool(result[0])
     except Error as e:
         print(f"Erro ao verificar a coluna 'lcapecod' na tabela 'pedido' (relat�rio de vendas): {e}")
+    finally:
+        if column_check_cursor:
+            column_check_cursor.close()
+
+    column_check_cursor = None
+
+    try:
+        column_check_cursor = conn.cursor()
+        column_check_cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'pedido'
+                  AND column_name = 'peddesval'
+            )
+            """
+        )
+        result = column_check_cursor.fetchone()
+        if result:
+            has_peddesval_column = bool(result[0])
+    except Error as e:
+        print(f"Erro ao verificar a coluna 'peddesval' na tabela 'pedido' (relatório de vendas): {e}")
     finally:
         if column_check_cursor:
             column_check_cursor.close()
@@ -2606,6 +2630,17 @@ def fetch_sales_orders(filters):
         load_lot_select = "NULL AS load_lot_code,\n                '' AS load_lot_description,\n"
         load_lot_join = ""
 
+    if has_peddesval_column:
+        discount_select = (
+            "                COALESCE(p.peddesval, 0) AS desconto_total,\n"
+            "                COALESCE(pedprod.valor_bruto_total, 0) - COALESCE(p.peddesval, 0) AS valor_total,\n"
+        )
+    else:
+        discount_select = (
+            "                0 AS desconto_total,\n"
+            "                COALESCE(pedprod.valor_bruto_total, 0) AS valor_total,\n"
+        )
+
     try:
         cur = conn.cursor()
         query = f"""
@@ -2613,8 +2648,7 @@ def fetch_sales_orders(filters):
                 SELECT
                     pedido,
                     SUM(COALESCE(pprquanti, 0)) AS quantidade_total,
-                    SUM(COALESCE(pprvlsoma, 0)) AS valor_bruto_total,
-                    SUM(COALESCE(pprdescped, 0)) AS desconto_total
+                    SUM(COALESCE(pprvlsoma, 0)) AS valor_bruto_total
                 FROM pedprodu
                 GROUP BY pedido
             ),
@@ -2702,8 +2736,7 @@ def fetch_sales_orders(filters):
                 {state_expression} AS estado,
                 COALESCE(pedprod.quantidade_total, 0) AS quantidade_total,
                 COALESCE(pedprod.valor_bruto_total, 0) AS valor_bruto_total,
-                COALESCE(pedprod.desconto_total, 0) AS desconto_total,
-                COALESCE(pedprod.valor_bruto_total, 0) - COALESCE(pedprod.desconto_total, 0) AS valor_total,
+{discount_select}
                 COALESCE(linha.linha, 'OUTROS') AS linha,
                 COALESCE(p.pedaprova, '') AS approval_status_code,
                 COALESCE(p.pedsitua, '') AS situation_code,
