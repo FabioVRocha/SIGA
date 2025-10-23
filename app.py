@@ -3345,9 +3345,9 @@ def fetch_order_details(pedido_code):
             codigo_produto_select = f"{produto_expr} AS codigo_produto"
         items_query = f"""
             SELECT
-                COALESCE(pp.pprproduto::text, '') AS codigo_produto,
                 {codigo_produto_select},
                 {sequencia_expr} AS sequencia,
+                COALESCE(prod.pronome::text, '') AS produto_nome,
                 {quantidade_total_expr},
                 {valor_tabela_expr},
                 {percentual_desconto_expr},
@@ -3357,8 +3357,8 @@ def fetch_order_details(pedido_code):
                 {desconto_pedido_expr}
             FROM pedprodu pp
             LEFT JOIN produto prod ON prod.produto = pp.pprproduto
-            WHERE CAST(pp.pedido AS TEXT) = %s
             {projmovi_join}
+            WHERE CAST(pp.pedido AS TEXT) = %s
             GROUP BY pp.pprproduto, pp.pprseq, prod.pronome
             ORDER BY pp.pprseq, pp.pprproduto
             """
