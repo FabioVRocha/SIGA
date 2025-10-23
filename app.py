@@ -143,8 +143,13 @@ def init_siga_db():
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
                     username VARCHAR(80) UNIQUE NOT NULL,
-                    password_hash VARCHAR(128) NOT NULL
+                    password_hash VARCHAR(255) NOT NULL
                 );
+            """)
+            # Garante que o campo de hash de senha suporte valores maiores gerados pelos algoritmos atuais
+            cur.execute("""
+                ALTER TABLE users
+                ALTER COLUMN password_hash TYPE VARCHAR(255)
             """)
             # Cria a tabela de parâmetros de usuário
             cur.execute(f"""
