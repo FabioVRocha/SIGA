@@ -3126,6 +3126,40 @@ def fetch_order_details(pedido_code):
         if column_check_cursor:
             column_check_cursor.close()
 
+    column_check_cursor = None
+    projmovi_columns = None
+    has_prjmproex_column = False
+    has_prjmseque_column = False
+
+    try:
+        column_check_cursor = conn.cursor()
+        column_check_cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'projmovi'
+            """
+        )
+        projmovi_columns = {
+            (row[0] or '').lower()
+            for row in column_check_cursor.fetchall()
+            if row and row[0]
+        }
+        has_prjmproex_column = 'prjmproex' in projmovi_columns if projmovi_columns is not None else False
+        has_prjmseque_column = 'prjmseque' in projmovi_columns if projmovi_columns is not None else False
+    except Error as e:
+        print(f"Erro ao verificar colunas da tabela 'projmovi': {e}")
+        projmovi_columns = None
+    finally:
+        if column_check_cursor:
+            column_check_cursor.close()
+
+    if projmovi_columns is not None and 'prjmproex' not in projmovi_columns:
+        print(
+            "Coluna opcional 'prjmproex' ausente em 'projmovi'. "
+            "Usando o código do produto da tabela 'pedprodu'."
+        )
+
     def build_items_aggregate(column_name, expression, alias):
         column_key = (column_name or '').lower()
         if pedprodu_columns is None or column_key in pedprodu_columns:
@@ -3273,11 +3307,47 @@ def fetch_order_details(pedido_code):
             'desconto_pedido_total',
         )
 
+        produto_expr = "COALESCE(pp.pprproduto::text, '')"
+        sequencia_expr = "COALESCE(pp.pprseq::text, '')"
+        if has_prjmproex_column:
+            if has_prjmseque_column:
+                projmovi_join = f"""
+            LEFT JOIN (
+                SELECT
+                    CAST(prjmpedid AS TEXT) AS pedido,
+                    COALESCE(prjmseque::text, '') AS sequencia,
+                    MAX(COALESCE(prjmproex::text, '')) AS codigo_produto_externo
+                FROM projmovi
+                WHERE prjmpedid IS NOT NULL
+                GROUP BY CAST(prjmpedid AS TEXT), COALESCE(prjmseque::text, '')
+            ) pm ON pm.pedido = CAST(pp.pedido AS TEXT) AND pm.sequencia = {sequencia_expr}
+                """
+            else:
+                projmovi_join = f"""
+            LEFT JOIN (
+                SELECT
+                    CAST(prjmpedid AS TEXT) AS pedido,
+                    COALESCE(prjmproex::text, '') AS produto_codigo,
+                    MAX(COALESCE(prjmproex::text, '')) AS codigo_produto_externo
+                FROM projmovi
+                WHERE prjmpedid IS NOT NULL
+                GROUP BY CAST(prjmpedid AS TEXT), COALESCE(prjmproex::text, '')
+            ) pm ON pm.pedido = CAST(pp.pedido AS TEXT) AND pm.produto_codigo = {produto_expr}
+                """
+            codigo_produto_select = f"""
+                COALESCE(
+                    NULLIF(MAX(pm.codigo_produto_externo), ''),
+                    {produto_expr}
+                ) AS codigo_produto
+            """
+        else:
+            projmovi_join = ""
+            codigo_produto_select = f"{produto_expr} AS codigo_produto"
         items_query = f"""
             SELECT
                 COALESCE(pp.pprproduto::text, '') AS codigo_produto,
-                COALESCE(pp.pprseq::text, '') AS sequencia,
-                COALESCE(prod.pronome, '') AS produto,
+                {codigo_produto_select},
+                {sequencia_expr} AS sequencia,
                 {quantidade_total_expr},
                 {valor_tabela_expr},
                 {percentual_desconto_expr},
@@ -3288,6 +3358,7 @@ def fetch_order_details(pedido_code):
             FROM pedprodu pp
             LEFT JOIN produto prod ON prod.produto = pp.pprproduto
             WHERE CAST(pp.pedido AS TEXT) = %s
+            {projmovi_join}
             GROUP BY pp.pprproduto, pp.pprseq, prod.pronome
             ORDER BY pp.pprseq, pp.pprproduto
             """
