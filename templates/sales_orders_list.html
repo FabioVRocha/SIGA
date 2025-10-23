@@ -90,25 +90,89 @@
         max-height: 90vh;
         overflow-y: auto;
     }
-    .order-summary-card {
-        background-color: var(--clr-card-bg);
+    .order-summary-footer {
+        margin-top: 1.5rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        justify-content: center;
+        background-color: rgba(148, 163, 184, 0.12);
         border: 1px solid var(--clr-border);
         border-radius: 0.75rem;
-        padding: 1rem;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+        padding: 1.25rem 1.5rem;
+    }
+    @media (min-width: 768px) {
+        .order-summary-footer {
+            justify-content: flex-start;
+        }
+    }
+    .order-summary-card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        min-width: 12rem;
+        padding: 1rem 1.25rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background-color: rgba(148, 163, 184, 0.12);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .order-summary-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12);
     }
     .order-summary-label {
-        font-size: 0.65rem;
+        font-size: 0.7rem;
         font-weight: 600;
         letter-spacing: 0.05em;
         text-transform: uppercase;
-        color: var(--clr-text-secondary);
+        color: rgba(15, 23, 42, 0.65);
     }
     .order-summary-value {
-        margin-top: 0.35rem;
-        font-size: 1.1rem;
-        font-weight: 600;
+        font-size: 1.2rem;
+        font-weight: 700;
         color: var(--clr-dark-blue);
+    }
+    .order-summary-card--blue {
+        background-color: rgba(59, 130, 246, 0.12);
+        border-color: rgba(59, 130, 246, 0.35);
+    }
+    .order-summary-card--blue .order-summary-label,
+    .order-summary-card--blue .order-summary-value {
+        color: #1d4ed8;
+    }
+    .order-summary-card--indigo {
+        background-color: rgba(129, 140, 248, 0.14);
+        border-color: rgba(129, 140, 248, 0.35);
+    }
+    .order-summary-card--indigo .order-summary-label,
+    .order-summary-card--indigo .order-summary-value {
+        color: #4338ca;
+    }
+    .order-summary-card--amber {
+        background-color: rgba(251, 191, 36, 0.18);
+        border-color: rgba(251, 191, 36, 0.35);
+    }
+    .order-summary-card--amber .order-summary-label,
+    .order-summary-card--amber .order-summary-value {
+        color: #b45309;
+    }
+    .order-summary-card--teal {
+        background-color: rgba(45, 212, 191, 0.16);
+        border-color: rgba(45, 212, 191, 0.35);
+    }
+    .order-summary-card--teal .order-summary-label,
+    .order-summary-card--teal .order-summary-value {
+        color: #0f766e;
+    }
+    .order-summary-card--green {
+        background-color: rgba(74, 222, 128, 0.16);
+        border-color: rgba(74, 222, 128, 0.35);
+    }
+    .order-summary-card--green .order-summary-label,
+    .order-summary-card--green .order-summary-value {
+        color: #15803d;
     }
 </style>
 
@@ -223,12 +287,14 @@
             </form>
         </div>
         {% if orders %}
-        <div class="bg-gray-100 p-4 rounded-lg mt-4 flex flex-wrap justify-center gap-4">
-            <div class="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg text-sm font-semibold">
-                Quantidade Total: <span>{{ totals.quantidade_total | format_decimal_br(0) }}</span>
+       <div class="order-summary-footer">
+            <div class="order-summary-card order-summary-card--blue">
+                <p class="order-summary-label">Quantidade Total</p>
+                <p class="order-summary-value">{{ totals.quantidade_total | format_decimal_br(0) }}</p>
             </div>
-            <div class="bg-green-100 text-green-800 px-4 py-2 rounded-lg text-sm font-semibold">
-                Valor Total: <span>{{ totals.valor_total | format_currency_brl }}</span>
+            <div class="order-summary-card order-summary-card--green">
+                <p class="order-summary-label">Valor Total</p>
+                <p class="order-summary-value">{{ totals.valor_total | format_currency_brl }}</p>
             </div>
         </div>
         {% else %}
@@ -303,23 +369,23 @@
                 </table>
             </div>
             <div id="orderDetailsSummary" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 hidden">
-                <div class="order-summary-card">
+                <div class="order-summary-card order-summary-card--blue">
                     <p class="order-summary-label">Quantidade Total</p>
                     <p id="orderSummaryQuantity" class="order-summary-value">--</p>
                 </div>
-                <div class="order-summary-card">
+                <div class="order-summary-card order-summary-card--indigo">
                     <p class="order-summary-label">Valor dos Produtos</p>
                     <p id="orderSummaryProducts" class="order-summary-value">--</p>
                 </div>
-                <div class="order-summary-card">
+                <div class="order-summary-card order-summary-card--amber">
                     <p class="order-summary-label">Valor do IPI</p>
                     <p id="orderSummaryIpi" class="order-summary-value">--</p>
                 </div>
-                <div class="order-summary-card">
+                <div class="order-summary-card order-summary-card--teal">
                     <p class="order-summary-label">Valor do Frete</p>
                     <p id="orderSummaryFrete" class="order-summary-value">--</p>
                 </div>
-                <div class="order-summary-card">
+                <div class="order-summary-card order-summary-card--green">
                     <p class="order-summary-label">Valor Total</p>
                     <p id="orderSummaryTotal" class="order-summary-value">--</p>
                 </div>
