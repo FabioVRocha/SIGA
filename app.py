@@ -3104,32 +3104,9 @@ def fetch_order_details(pedido_code):
             column_check_cursor.close()
 
     column_check_cursor = None
-
-    try:
-        column_check_cursor = conn.cursor()
-        column_check_cursor.execute(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_name = 'pedprodu'
-            """
-        )
-        pedprodu_columns = {
-            (row[0] or '').lower()
-            for row in column_check_cursor.fetchall()
-            if row and row[0]
-        }
-    except Error as e:
-        print(f"Erro ao verificar colunas da tabela 'pedprodu': {e}")
-        pedprodu_columns = None
-    finally:
-        if column_check_cursor:
-            column_check_cursor.close()
-
-    column_check_cursor = None
     projmovi_columns = None
     has_prjmproex_column = False
-    has_prjmseque_column = False
+    projmovi_sequence_column = None
 
     try:
         column_check_cursor = conn.cursor()
@@ -3145,8 +3122,12 @@ def fetch_order_details(pedido_code):
             for row in column_check_cursor.fetchall()
             if row and row[0]
         }
-        has_prjmproex_column = 'prjmproex' in projmovi_columns if projmovi_columns is not None else False
-        has_prjmseque_column = 'prjmseque' in projmovi_columns if projmovi_columns is not None else False
+        if projmovi_columns is not None:
+            has_prjmproex_column = 'prjmproex' in projmovi_columns
+            if 'prjmpedse' in projmovi_columns:
+                projmovi_sequence_column = 'prjmpedse'
+            elif 'prjmseque' in projmovi_columns:
+                projmovi_sequence_column = 'prjmseque'
     except Error as e:
         print(f"Erro ao verificar colunas da tabela 'projmovi': {e}")
         projmovi_columns = None
@@ -3160,15 +3141,11 @@ def fetch_order_details(pedido_code):
             "Usando o código do produto da tabela 'pedprodu'."
         )
 
-    def build_items_aggregate(column_name, expression, alias):
-        column_key = (column_name or '').lower()
-        if pedprodu_columns is None or column_key in pedprodu_columns:
-            return expression
+    if projmovi_sequence_column is None:
         print(
-            f"Coluna opcional '{column_name}' ausente em 'pedprodu'. "
-            f"Usando valor padrão para '{alias}'."
+            "Coluna opcional de sequência ausente em 'projmovi'. "
+            "Utilizando valores padrão ao exibir a sequência."
         )
-        return f"0 AS {alias}"
 
     try:
         cur = conn.cursor()
@@ -3270,99 +3247,53 @@ def fetch_order_details(pedido_code):
 
         details = {'header': header_data, 'items': []}
 
-        items_cur = conn.cursor()
-        quantidade_total_expr = build_items_aggregate(
-            'pprquanti',
-            "SUM(COALESCE(pp.pprquanti, 0)) AS quantidade_total",
-            'quantidade_total',
-        )
-        valor_tabela_expr = build_items_aggregate(
-            'pprlista',
-            "SUM(COALESCE(pp.pprlista, 0)) AS valor_tabela",
-            'valor_tabela',
-        )
-        percentual_desconto_expr = build_items_aggregate(
-            'pprdesc1',
-            "AVG(COALESCE(pp.pprdesc1, 0)) AS percentual_desconto",
-            'percentual_desconto',
-        )
-        valor_unitario_expr = build_items_aggregate(
-            'pprvalor',
-            "SUM(COALESCE(pp.pprvalor, 0)) AS valor_unitario_total",
-            'valor_unitario_total',
-        )
-        valor_ipi_expr = build_items_aggregate(
-            'pprvlipi',
-            "SUM(COALESCE(pp.pprvlipi, 0)) AS valor_ipi",
-            'valor_ipi',
-        )
-        valor_bruto_expr = build_items_aggregate(
-            'pprvlsoma',
-            "SUM(COALESCE(pp.pprvlsoma, 0)) AS valor_bruto_total",
-            'valor_bruto_total',
-        )
-        desconto_pedido_expr = build_items_aggregate(
-            'pprdescped',
-            "SUM(COALESCE(pp.pprdescped, 0)) AS desconto_pedido_total",
-            'desconto_pedido_total',
+        codigo_select = "COALESCE(prjmproex::text, '')" if has_prjmproex_column else "CAST('' AS TEXT)"
+        sequencia_select = (
+            f"COALESCE({projmovi_sequence_column}::text, '')" if projmovi_sequence_column else "CAST('' AS TEXT)"
         )
 
-        produto_expr = "COALESCE(pp.pprproduto::text, '')"
-        sequencia_expr = "COALESCE(pp.pprseq::text, '')"
+        lateral_conditions = []
+        if projmovi_sequence_column:
+            lateral_conditions.append("COALESCE(sub.pprseq::text, '') = COALESCE(pm.sequencia, '')")
         if has_prjmproex_column:
-            if has_prjmseque_column:
-                projmovi_join = f"""
-            LEFT JOIN (
-                SELECT
-                    CAST(prjmpedid AS TEXT) AS pedido,
-                    COALESCE(prjmseque::text, '') AS sequencia,
-                    MAX(COALESCE(prjmproex::text, '')) AS codigo_produto_externo
-                FROM projmovi
-                WHERE prjmpedid IS NOT NULL
-                GROUP BY CAST(prjmpedid AS TEXT), COALESCE(prjmseque::text, '')
-            ) pm ON pm.pedido = CAST(pp.pedido AS TEXT) AND pm.sequencia = {sequencia_expr}
-                """
-            else:
-                projmovi_join = f"""
-            LEFT JOIN (
-                SELECT
-                    CAST(prjmpedid AS TEXT) AS pedido,
-                    COALESCE(prjmproex::text, '') AS produto_codigo,
-                    MAX(COALESCE(prjmproex::text, '')) AS codigo_produto_externo
-                FROM projmovi
-                WHERE prjmpedid IS NOT NULL
-                GROUP BY CAST(prjmpedid AS TEXT), COALESCE(prjmproex::text, '')
-            ) pm ON pm.pedido = CAST(pp.pedido AS TEXT) AND pm.produto_codigo = {produto_expr}
-                """
-            codigo_produto_select = f"""
-                COALESCE(
-                    NULLIF(MAX(pm.codigo_produto_externo), ''),
-                    {produto_expr}
-                ) AS codigo_produto
-            """
-        else:
-            projmovi_join = ""
-            codigo_produto_select = f"{produto_expr} AS codigo_produto"
-        items_query = f"""
-            SELECT
-                {codigo_produto_select},
-                {sequencia_expr} AS sequencia,
-                COALESCE(prod.pronome::text, '') AS produto_nome,
-                {quantidade_total_expr},
-                {valor_tabela_expr},
-                {percentual_desconto_expr},
-                {valor_unitario_expr},
-                {valor_ipi_expr},
-                {valor_bruto_expr},
-                {desconto_pedido_expr}
-            FROM pedprodu pp
-            LEFT JOIN produto prod ON prod.produto = pp.pprproduto
-            {projmovi_join}
-            WHERE CAST(pp.pedido AS TEXT) = %s
-            GROUP BY pp.pprproduto, pp.pprseq, prod.pronome
-            ORDER BY pp.pprseq, pp.pprproduto
-            """
+            lateral_conditions.append("COALESCE(sub.pprproduto::text, '') = COALESCE(pm.codigo_produto, '')")
+        lateral_join_condition = " OR ".join(lateral_conditions) if lateral_conditions else "TRUE"
 
+        items_query = f"""
+            WITH projmovi_items AS (
+                SELECT
+                    CAST(prjmpedid AS TEXT) AS pedido,
+                    {codigo_select} AS codigo_produto,
+                    {sequencia_select} AS sequencia,
+                    SUM(CASE WHEN prjmovtip = 'R' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS reservado,
+                    SUM(CASE WHEN prjmovtip = 'P' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS separado,
+                    SUM(CASE WHEN prjmovtip = 'C' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS carregado
+                FROM projmovi
+                WHERE prjmpedid IS NOT NULL
+                GROUP BY 1, 2, 3
+            )
+            SELECT
+                COALESCE(pm.codigo_produto, '') AS codigo_produto,
+                COALESCE(pm.sequencia, '') AS sequencia,
+                COALESCE(prod.pronome::text, '') AS produto_nome,
+                COALESCE(pm.reservado, 0) AS reservado,
+                COALESCE(pm.separado, 0) AS separado,
+                COALESCE(pm.carregado, 0) AS carregado
+            FROM projmovi_items pm
+            LEFT JOIN LATERAL (
+                SELECT sub.pprproduto
+                FROM pedprodu sub
+                WHERE CAST(sub.pedido AS TEXT) = pm.pedido
+                  AND ({lateral_join_condition})
+                ORDER BY sub.pprseq
+                LIMIT 1
+            ) pp ON TRUE
+            LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+            WHERE pm.pedido = %s
+            ORDER BY pm.sequencia, pm.codigo_produto
+        """
+
+        items_cur = conn.cursor()
         items_cur.execute(items_query, (pedido_value,))
         item_rows = items_cur.fetchall()
         items_cur.close()
@@ -3372,65 +3303,37 @@ def fetch_order_details(pedido_code):
                 codigo_produto,
                 sequencia,
                 produto_nome,
-                quantidade_total_raw,
-                valor_tabela_raw,
-                percentual_desc_raw,
-                valor_unitario_raw,
-                valor_ipi_raw,
-                valor_bruto_raw,
-                desconto_pedido_raw,
+                reservado_raw,
+                separado_raw,
+                carregado_raw,
             ) = item_row
 
             try:
-                quantidade_total = float(quantidade_total_raw or 0)
+                reservado = float(reservado_raw or 0)
             except (TypeError, ValueError, InvalidOperation):
-                quantidade_total = 0.0
+                reservado = 0.0
 
             try:
-                valor_tabela = float(valor_tabela_raw or 0)
+                separado = float(separado_raw or 0)
             except (TypeError, ValueError, InvalidOperation):
-                valor_tabela = 0.0
+                separado = 0.0
 
             try:
-                percentual_desc = float(percentual_desc_raw or 0)
+                carregado = float(carregado_raw or 0)
             except (TypeError, ValueError, InvalidOperation):
-                percentual_desc = 0.0
+                carregado = 0.0
 
-            try:
-                valor_unitario_total = float(valor_unitario_raw or 0)
-            except (TypeError, ValueError, InvalidOperation):
-                valor_unitario_total = 0.0
-
-            try:
-                valor_ipi = float(valor_ipi_raw or 0)
-            except (TypeError, ValueError, InvalidOperation):
-                valor_ipi = 0.0
-
-            try:
-                valor_bruto = float(valor_bruto_raw or 0)
-            except (TypeError, ValueError, InvalidOperation):
-                valor_bruto = 0.0
-
-            try:
-                desconto_pedido = float(desconto_pedido_raw or 0)
-            except (TypeError, ValueError, InvalidOperation):
-                desconto_pedido = 0.0
-
-            valor_total = valor_bruto - desconto_pedido
+            kpi_status = calculate_order_kpi(reservado_raw, separado_raw, carregado_raw)
 
             details['items'].append(
                 {
-                    'codigo_produto': codigo_produto,
-                    'sequencia': sequencia,
-                    'produto': produto_nome,
-                    'quantidade_total': quantidade_total,
-                    'valor_tabela': valor_tabela,
-                    'percentual_desconto': percentual_desc,
-                    'valor_unitario_total': valor_unitario_total,
-                    'valor_ipi': valor_ipi,
-                    'percentual_frete': 0.0,
-                    'valor_frete': 0.0,
-                    'valor_total': valor_total,
+                    'codigo_produto': codigo_produto or '',
+                    'sequencia': sequencia or '',
+                    'produto': produto_nome or '',
+                    'reservado': reservado,
+                    'separado': separado,
+                    'carregado': carregado,
+                    'kpi_status': kpi_status,
                 }
             )
 
