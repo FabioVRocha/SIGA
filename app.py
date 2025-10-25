@@ -3201,6 +3201,7 @@ def fetch_order_details(pedido_code):
             FROM pedido p
             LEFT JOIN empresa e ON p.pedcliente = e.empresa
             LEFT JOIN cidade c ON p.pedentcid = c.cidade
+            LEFT JOIN regcar rc ON c.rgccicod = rc.rgccod
             LEFT JOIN production_lots pl ON pl.pedido = CAST(p.pedido AS TEXT)
             {load_lot_join}
             WHERE CAST(p.pedido AS TEXT) = %s
@@ -3220,6 +3221,7 @@ def fetch_order_details(pedido_code):
             cidade,
             estado,
             production_lots_display,
+            rgcdes_value,
             load_lot_code,
             load_lot_description,
         ) = header_row
@@ -3246,51 +3248,27 @@ def fetch_order_details(pedido_code):
             header_data['lote_carga'] = load_lot_str
 
         details = {'header': header_data, 'items': []}
-
-        codigo_select = "COALESCE(prjmproex::text, '')" if has_prjmproex_column else "CAST('' AS TEXT)"
-        sequencia_select = (
-            f"COALESCE({projmovi_sequence_column}::text, '')" if projmovi_sequence_column else "CAST('' AS TEXT)"
-        )
-
-        lateral_conditions = []
-        if projmovi_sequence_column:
-            lateral_conditions.append("COALESCE(sub.pprseq::text, '') = COALESCE(pm.sequencia, '')")
-        if has_prjmproex_column:
-            lateral_conditions.append("COALESCE(sub.pprproduto::text, '') = COALESCE(pm.codigo_produto, '')")
-        lateral_join_condition = " OR ".join(lateral_conditions) if lateral_conditions else "TRUE"
-
-        items_query = f"""
-            WITH projmovi_items AS (
-                SELECT
-                    CAST(prjmpedid AS TEXT) AS pedido,
-                    {codigo_select} AS codigo_produto,
-                    {sequencia_select} AS sequencia,
-                    SUM(CASE WHEN prjmovtip = 'R' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS reservado,
-                    SUM(CASE WHEN prjmovtip = 'P' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS separado,
-                    SUM(CASE WHEN prjmovtip = 'C' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS carregado
-                FROM projmovi
-                WHERE prjmpedid IS NOT NULL
-                GROUP BY 1, 2, 3
-            )
+        # Agora recupera os itens a partir de pedprodu agregando os valores necessários
+        # e trazendo também o nome do grupo/produto para calcular o % de frete.
+        items_query = """
             SELECT
-                COALESCE(pm.codigo_produto, '') AS codigo_produto,
-                COALESCE(pm.sequencia, '') AS sequencia,
+                COALESCE(pp.pprproduto::text, '') AS codigo_produto,
+                COALESCE(pp.pprseq::text, '') AS sequencia,
                 COALESCE(prod.pronome::text, '') AS produto_nome,
-                COALESCE(pm.reservado, 0) AS reservado,
-                COALESCE(pm.separado, 0) AS separado,
-                COALESCE(pm.carregado, 0) AS carregado
-            FROM projmovi_items pm
-            LEFT JOIN LATERAL (
-                SELECT sub.pprproduto
-                FROM pedprodu sub
-                WHERE CAST(sub.pedido AS TEXT) = pm.pedido
-                  AND ({lateral_join_condition})
-                ORDER BY sub.pprseq
-                LIMIT 1
-            ) pp ON TRUE
+                COALESCE(g.grunome, '') AS group_name,
+                SUM(COALESCE(pp.pprquanti, 0)) AS quantidade_total,
+                SUM(COALESCE(pp.pprlista, 0)) AS valor_tabela,
+                AVG(COALESCE(pp.pprdesc1, 0)) AS percentual_desconto_avg,
+                SUM(COALESCE(pp.pprvalor, 0)) AS valor_unitario_sum,
+                SUM(COALESCE(pp.pprvlipi, 0)) AS valor_ipi_sum,
+                SUM(COALESCE(pp.pprvlsoma, 0)) AS soma_vlsoma,
+                SUM(COALESCE(pp.pprdescped, 0)) AS soma_descped
+            FROM pedprodu pp
             LEFT JOIN produto prod ON prod.produto = pp.pprproduto
-            WHERE pm.pedido = %s
-            ORDER BY pm.sequencia, pm.codigo_produto
+            LEFT JOIN grupo g ON prod.grupo = g.grupo
+            WHERE CAST(pp.pedido AS TEXT) = %s
+            GROUP BY 1,2,3,4
+            ORDER BY 2,1
         """
 
         items_cur = conn.cursor()
@@ -3298,44 +3276,85 @@ def fetch_order_details(pedido_code):
         item_rows = items_cur.fetchall()
         items_cur.close()
 
+        # Parse regcar description present in header (rgcdes_value) to determine freight percentages
+        rgcdes = rgcdes_value if 'rgcdes_value' in locals() else ''
+        regcar_data = parse_regcar_description(rgcdes)
+
         for item_row in item_rows:
             (
                 codigo_produto,
                 sequencia,
                 produto_nome,
-                reservado_raw,
-                separado_raw,
-                carregado_raw,
+                group_name,
+                quantidade_total_raw,
+                valor_tabela_raw,
+                percentual_desconto_raw,
+                valor_unitario_raw,
+                valor_ipi_raw,
+                soma_vlsoma_raw,
+                soma_descped_raw,
             ) = item_row
 
             try:
-                reservado = float(reservado_raw or 0)
+                quantidade_total = float(quantidade_total_raw or 0)
             except (TypeError, ValueError, InvalidOperation):
-                reservado = 0.0
+                quantidade_total = 0.0
 
             try:
-                separado = float(separado_raw or 0)
+                valor_tabela = float(valor_tabela_raw or 0)
             except (TypeError, ValueError, InvalidOperation):
-                separado = 0.0
+                valor_tabela = 0.0
 
             try:
-                carregado = float(carregado_raw or 0)
+                percentual_desconto = float(percentual_desconto_raw or 0) * 100.0
             except (TypeError, ValueError, InvalidOperation):
-                carregado = 0.0
+                percentual_desconto = 0.0
 
-            kpi_status = calculate_order_kpi(reservado_raw, separado_raw, carregado_raw)
+            try:
+                valor_unitario_total = float(valor_unitario_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                valor_unitario_total = 0.0
 
-            details['items'].append(
-                {
-                    'codigo_produto': codigo_produto or '',
-                    'sequencia': sequencia or '',
-                    'produto': produto_nome or '',
-                    'reservado': reservado,
-                    'separado': separado,
-                    'carregado': carregado,
-                    'kpi_status': kpi_status,
-                }
-            )
+            try:
+                valor_ipi = float(valor_ipi_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                valor_ipi = 0.0
+
+            try:
+                soma_vlsoma = float(soma_vlsoma_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                soma_vlsoma = 0.0
+
+            try:
+                soma_descped = float(soma_descped_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                soma_descped = 0.0
+
+            valor_total = soma_vlsoma - soma_descped
+
+            # Determine product line and reference (first 2 chars of pronome)
+            product_line = get_product_line(group_name)
+            product_ref = (produto_nome or '')[:2]
+
+            freight_pct_decimal = calculate_freight_percentage(product_line, product_ref, regcar_data)
+            percentual_frete = freight_pct_decimal * 100.0
+
+            # Valor Frete calculado como percentual sobre o valor total do item
+            valor_frete = valor_total * freight_pct_decimal
+
+            details['items'].append({
+                'codigo_produto': codigo_produto or '',
+                'sequencia': sequencia or '',
+                'produto': produto_nome or '',
+                'quantidade_total': quantidade_total,
+                'valor_tabela': valor_tabela,
+                'percentual_desconto': percentual_desconto,
+                'valor_unitario_total': valor_unitario_total,
+                'valor_ipi': valor_ipi,
+                'percentual_frete': percentual_frete,
+                'valor_frete': valor_frete,
+                'valor_total': valor_total,
+            })
 
         return details, None
     except Error as e:
