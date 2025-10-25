@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Relatórios de Faturamento{% endblock %}
+
+{% block page_title %}Relatórios de Faturamento{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <a href="{{ url_for('report_revenue_comparison') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-blue mb-4"><i class="fas fa-chart-column fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Comparativo de Faturamento</h2>
+        <p class="text-medium-gray">Compare o faturamento entre períodos distintos.</p>
+    </a>
+    <a href="{{ url_for('report_revenue_by_cfop') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-green mb-4"><i class="fas fa-file-invoice-dollar fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por CFOP</h2>
+        <p class="text-medium-gray">Visualize o faturamento agrupado por CFOP.</p>
+    </a>
+    <a href="{{ url_for('report_revenue_by_line') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-orange mb-4"><i class="fas fa-layer-group fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Linha</h2>
+        <p class="text-medium-gray">Veja o faturamento agrupado por linha.</p>
+    </a>
+    <a href="{{ url_for('report_average_price') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-teal mb-4"><i class="fas fa-chart-area fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Preço Médio</h2>
+        <p class="text-medium-gray">Visualize o preço médio por linha.</p>
+    </a>
+    <a href="{{ url_for('report_revenue_by_day') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-blue mb-4"><i class="fas fa-calendar-day fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Dia</h2>
+        <p class="text-medium-gray">Veja o faturamento agrupado por dia.</p>
+    </a>
+      <a href="{{ url_for('report_revenue_by_state') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+          <div class="text-icon-red mb-4"><i class="fas fa-map-marked-alt fa-3x"></i></div>
+          <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Estado</h2>
+          <p class="text-medium-gray">Veja o faturamento agrupado por estado.</p>
+      </a>
+    <a href="{{ url_for('report_revenue_by_vendor') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-purple mb-4"><i class="fas fa-user-tie fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Faturamento por Vendedor</h2>
+        <p class="text-medium-gray">Veja o faturamento agrupado por vendedor.</p>
+    </a>
+</div>
+{% endblock %}

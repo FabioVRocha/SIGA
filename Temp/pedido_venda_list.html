@@ -1,0 +1,272 @@
+{% extends 'base.html' %}
+
+{% block title %}SIGECOM - Pedidos de Venda{% endblock %}
+{% block page_title %}Pedidos de Venda{% endblock %}
+
+{% block page_header_actions %}
+  <a href="{{ url_for('comercial.pedido_venda_form') }}" class="btn-primary gap-2">
+    <i class="fas fa-plus"></i>
+    Novo Pedido
+  </a>
+{% endblock %}
+
+{% block content %}
+<style>
+  .list-section {
+    background-color: var(--clr-card-bg);
+    border-radius: 0.75rem;
+    border: 1px solid var(--clr-border);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+    padding: 1.5rem;
+  }
+  @media (min-width: 1024px) {
+    .list-section {
+      padding: 2rem;
+    }
+  }
+  .section-heading {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--clr-dark-blue);
+  }
+  .text-dark-blue {
+    color: var(--clr-dark-blue);
+  }
+  .text-slate-muted {
+    color: var(--clr-text-secondary);
+  }
+  .hover-row:hover {
+    background-color: rgba(79, 131, 204, 0.12);
+    transition: background-color 0.2s ease-in-out;
+  }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 9999px;
+    padding: 0.2rem 0.75rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    border: 1px solid rgba(31, 58, 95, 0.18);
+    background-color: rgba(31, 58, 95, 0.08);
+    color: var(--clr-dark-blue);
+  }
+  .status-pill--liberado {
+    background-color: rgba(39, 174, 96, 0.15);
+    border-color: rgba(39, 174, 96, 0.3);
+    color: var(--clr-success);
+  }
+  .status-pill--finalizado {
+    background-color: rgba(39, 174, 96, 0.15);
+    border-color: rgba(39, 174, 96, 0.3);
+    color: var(--clr-success);
+  }
+  .status-pill--cancelado {
+    background-color: rgba(148, 163, 184, 0.25);
+    border-color: rgba(148, 163, 184, 0.4);
+    color: rgba(30, 41, 59, 0.8);
+  }
+  .status-pill--parcial {
+    background-color: rgba(249, 115, 22, 0.18);
+    border-color: rgba(249, 115, 22, 0.35);
+    color: rgba(154, 52, 18, 1);
+  }
+  .status-pill--bloqueado {
+    background-color: rgba(231, 76, 60, 0.15);
+    border-color: rgba(231, 76, 60, 0.28);
+    color: var(--clr-error);
+  }
+  .filter-row th {
+    background-color: var(--clr-light-gray);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--clr-border);
+  }
+  .filter-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--clr-border);
+    border-radius: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--clr-dark-blue);
+    background-color: var(--clr-white);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .filter-input::placeholder {
+    color: var(--clr-text-secondary);
+  }
+  .filter-input:focus {
+    border-color: var(--clr-light-blue);
+    box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.15);
+    outline: none;
+  }
+  .actions-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+  .action-icon {
+    color: var(--clr-light-blue);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    transition: color 0.2s ease-in-out;
+  }
+  .action-icon:hover {
+    color: var(--clr-dark-blue);
+  }
+  .action-icon--danger {
+    color: var(--clr-error);
+  }
+  .action-icon--danger:hover {
+    color: var(--clr-dark-blue);
+  }
+</style>
+
+<div class="space-y-6">
+  <section class="list-section">
+    <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
+      <div>
+        <h2 class="section-heading">Lista de Pedidos de Venda</h2>
+        <p class="text-xs text-slate-muted">Resultados atualizados conforme os filtros selecionados.</p>
+      </div>
+      <span class="text-sm font-medium text-dark-blue">{{ pedidos|length }} {{ 'registro' if pedidos|length == 1 else 'registros' }}</span>
+    </div>
+    <div class="overflow-x-auto">
+      {% set status_options = options.statuses if options else [] %}
+      <table id="pedidosTable" class="min-w-full bg-white rounded-xl overflow-hidden">
+        <thead>
+          <tr class="table-header-bg text-left text-xs font-semibold uppercase tracking-wide">
+            <th class="py-3 px-4">Número</th>
+            <th class="py-3 px-4">Cliente</th>
+            <th class="py-3 px-4">Vendedor</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Total</th>
+            <th class="py-3 px-4">Emissão</th>
+            <th class="py-3 px-4 text-right">Ações</th>
+          </tr>
+          <tr class="filter-row text-xs uppercase tracking-wide">
+            <th class="px-4"><input type="text" class="filter-input" placeholder="Pesquisar número..." data-column="0"></th>
+            <th class="px-4"><input type="text" class="filter-input" placeholder="Pesquisar cliente..." data-column="1"></th>
+            <th class="px-4"><input type="text" class="filter-input" placeholder="Pesquisar vendedor..." data-column="2"></th>
+            <th class="px-4">
+              <select class="filter-input" data-column="3">
+                <option value="">Todos</option>
+                {% for status in status_options %}
+                <option value="{{ status.value }}">{{ status.name.replace('_', ' ')|title }}</option>
+                {% endfor %}
+              </select>
+            </th>
+            <th class="px-4"><input type="text" class="filter-input" placeholder="Pesquisar total..." data-column="4"></th>
+            <th class="px-4"><input type="text" class="filter-input" placeholder="Pesquisar data..." data-column="5"></th>
+            <th class="px-4"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pedido in pedidos %}
+          {% set status_name = pedido.status.name if pedido.status else '' %}
+          {% set status_label = pedido.status.value.replace('_', ' ')|title if pedido.status else '---' %}
+          {% set status_key = status_name|upper %}
+          {% set status_class = {
+            'LIBERADO_FATURAMENTO': 'status-pill--liberado',
+            'NF_EMITIDA': 'status-pill--liberado',
+            'EXPEDIDO': 'status-pill--liberado',
+            'ENTREGUE': 'status-pill--liberado',
+            'FINALIZADO': 'status-pill--finalizado',
+            'PARCIALMENTE_ATENDIDO': 'status-pill--parcial',
+            'BLOQUEADO_CREDITO': 'status-pill--bloqueado',
+            'CANCELADO': 'status-pill--cancelado'
+          }.get(status_key, '') %}
+          {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
+          <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};">
+            <td class="py-4 px-4 align-top">
+              <a href="{{ url_for('comercial.pedido_venda_detail', pedido_id=pedido.id) }}" class="font-semibold" style="color: var(--clr-light-blue);">
+                {{ pedido.numero_pedido }}
+              </a>
+            </td>
+            <td class="py-4 px-4 align-top">{{ pedido.cliente.nome_fantasia or pedido.cliente.razao_social }}</td>
+            {% set vendedor_nome = '' %}
+            {% if pedido.vendedor %}
+            {% set vendedor_nome = pedido.vendedor.nome_fantasia or pedido.vendedor.razao_social or pedido.vendedor.nome_completo or ('Pessoa #' ~ pedido.vendedor.id) %}
+            {% endif %}
+            <td class="py-4 px-4 align-top">{{ vendedor_nome if vendedor_nome else '—' }}</td>
+            <td class="py-4 px-4 align-top">
+              <span class="status-pill {{ status_class }}">{{ status_label }}</span>
+            </td>
+            <td class="py-4 px-4 align-top text-right">{{ "R$ {:,.2f}".format(pedido.total_liquido) | replace(',', 'X') | replace('.', ',') | replace('X', '.') }}</td>
+            <td class="py-4 px-4 align-top">{{ pedido.created_at.strftime('%d/%m/%Y') }}</td>
+            <td class="py-4 px-4 align-top text-right">
+              <div class="actions-wrapper">
+                <a href="{{ url_for('comercial.pedido_venda_detail', pedido_id=pedido.id) }}" class="action-icon" title="Visualizar Pedido">
+                  <i class="fas fa-eye"></i>
+                </a>
+                <a href="{{ url_for('comercial.pedido_venda_edit', pedido_id=pedido.id) }}" class="action-icon" title="Editar Pedido">
+                  <i class="fas fa-edit"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="py-12 px-4 text-center text-sm text-slate-muted">
+              <div class="flex flex-col items-center gap-3">
+                <i class="fas fa-file-invoice-dollar text-2xl" style="color: var(--clr-medium-gray);"></i>
+                <p class="font-semibold text-dark-blue">Nenhum pedido de venda encontrado.</p>
+                <p>Acesse &ldquo;Novo Pedido&rdquo; para criar um.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    (function () {
+      const table = document.getElementById('pedidosTable');
+      if (!table) return;
+
+      const filterInputs = Array.from(table.querySelectorAll('.filter-input'));
+      const normalize = (value) => (value || '').toString().trim().toLowerCase();
+
+      const filterTable = () => {
+        const tbody = table.tBodies[0];
+        if (!tbody) return;
+
+        Array.from(tbody.rows).forEach((row) => {
+          let isVisible = true;
+          for (const input of filterInputs) {
+            if (!isVisible) break;
+            
+            const colIndex = Number.parseInt(input.dataset.column, 10);
+            if (Number.isNaN(colIndex)) continue;
+
+            const cell = row.cells[colIndex];
+            if (!cell) continue;
+
+            const cellText = normalize(cell.textContent || cell.innerText);
+            const value = normalize(input.value);
+
+            if (value && !cellText.includes(value)) {
+              isVisible = false;
+            }
+          }
+          row.style.display = isVisible ? '' : 'none';
+        });
+      };
+
+      filterInputs.forEach((input) => {
+        const eventType = input.tagName === 'SELECT' ? 'change' : 'input';
+        input.addEventListener(eventType, filterTable);
+      });
+    })();
+  </script>
+{% endblock %}

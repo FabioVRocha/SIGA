@@ -1,0 +1,1004 @@
+"src_schema","src_table","src_column","tgt_schema","tgt_table","tgt_pk","name_hits","name_score"
+"public","assiste1","assistec","public","assistec","assistec","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","banco","ccusto","public","ccusto","ccusto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","banco","cidade","public","cidade","cidade","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","banco","planoc","public","planoc","planoc","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","batismol","batismo","public","batismo","batismo","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","cep","cidade","public","cidade","cidade","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","chpredat","banco","public","banco","banco","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","cidade","estado","public","estado","estado","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","cmempres","modcobra","public","modcobra","modcobra","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","cmempres","tipoped","public","tipoped","tipoped","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","cmempres","vendedor","public","vendedor","vendedor","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","comiped","vendedor","public","vendedor","vendedor","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","compra","deposito","public","deposito","deposito","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","compra","empresa","public","empresa","empresa","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","compra1","compra","public","compra","compra","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","compra2","compra","public","compra","compra","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","compra3","compra","public","compra","compra","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","compra3","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","confrfsl","notparam","public","notparam","notparam","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","cotacao","empresa","public","empresa","empresa","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","cotacao1","cotacao","public","cotacao","cotacao","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","cotacao1","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","ctbdecc","ctbdemo","public","ctbdemo","ctbdemo","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","demctb1","demctb","public","demctb","demctb","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","demctb2","demctb","public","demctb","demctb","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","demctbb","demctb","public","demctb","demctb","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","depalqtr","deposito","public","deposito","deposito","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","deposit1","deposito","public","deposito","deposito","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","doctos","ccusto","public","ccusto","ccusto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","doctos","planoc","public","planoc","planoc","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","elecon","elemen","public","elemen","elemen","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","elecon1","elemen","public","elemen","elemen","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","elemen","ccusto","public","ccusto","ccusto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","elemen","grele","public","grele","grele","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","elemen","planoc","public","planoc","planoc","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","empresa1","empresa","public","empresa","empresa","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","emquali","empresa","public","empresa","empresa","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","espusule","espusu","public","espusu","espusu","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","estado","pais","public","pais","pais","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","etapv","impress","public","impress","impress","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","etiqueta","empresa","public","empresa","empresa","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","expedid1","expedido","public","expedido","expedido","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","fcmat","empresa","public","empresa","empresa","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","fcmat","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","fcmat1","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","fluxofm1","fluxofmd","public","fluxofmd","fluxofmd","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","fluxofm1","modcobra","public","modcobra","modcobra","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","fluxofp1","fluxofpr","public","fluxofpr","fluxofpr","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","fluxofp1","prtipo","public","prtipo","prtipo","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","fluxoger","modcobra","public","modcobra","modcobra","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","fluxoger","prtipo","public","prtipo","prtipo","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","formula","regiao","public","regiao","regiao","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","gastreq","ccusto","public","ccusto","ccusto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","gastreq","planoc","public","planoc","planoc","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","grupo1","grupo","public","grupo","grupo","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","grupo1","planoc","public","planoc","planoc","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","intlimit","deposito","public","deposito","deposito","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","invent1","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","inventa","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","lacon","ccusto","public","ccusto","ccusto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","lacon","planoc","public","planoc","planoc","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","lancai7","funciona","public","funciona","funciona","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","laorca","ccusto","public","ccusto","ccusto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","laorca","planoc","public","planoc","planoc","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","localiz1","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","localiza","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","maquina","ccusto","public","ccusto","ccusto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","maquinal","maquina","public","maquina","maquina","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","metas","vendedor","public","vendedor","vendedor","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","ncotaca1","ncotacao","public","ncotacao","ncotacao","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","notpar2l","notparam","public","notparam","notparam","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","notpar3l","notparam","public","notparam","notparam","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","notpara1","notparam","public","notparam","notparam","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","notprcfo","notparam","public","notparam","notparam","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","obscomp","compra","public","compra","compra","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","observa1","observa","public","observa","observa","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","ordem","tipoord","public","tipoord","tipoord","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","ordem1","ordem","public","ordem","ordem","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","ordemlev","ordem","public","ordem","ordem","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","paramgx1","paramgxr","public","paramgxr","paramgxr","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","pareqde1","notparam","public","notparam","notparam","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","pareqdev","notparam","public","notparam","notparam","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","parequsl","notparam","public","notparam","notparam","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","pasfase","ordem","public","ordem","ordem","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","pbanco","banco","public","banco","banco","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","pedhist1","pedido","public","pedido","pedido","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","pedhisto","pedido","public","pedido","pedido","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","pedido","deposito","public","deposito","deposito","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","pedido","tipoped","public","tipoped","tipoped","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","pedprodu","pedido","public","pedido","pedido","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","perfunci","funciona","public","funciona","funciona","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","plnccu","planoc","public","planoc","planoc","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","possali1","deposito","public","deposito","deposito","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","possali1","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","possalim","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","preensai","prtipo","public","prtipo","prtipo","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","previcom","compra","public","compra","compra","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","previpg","pedido","public","pedido","pedido","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","procespe","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","process1","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","processo","maquina","public","maquina","maquina","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","processo","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","produto","batismo","public","batismo","batismo","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","produto","grupo","public","grupo","grupo","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","produto1","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","produto2","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","produtol","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","proparam","planoc","public","planoc","planoc","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","prtipo1","prtipo","public","prtipo","prtipo","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","rateio1","rateio","public","rateio","rateio","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","redepore","notparam","public","notparam","notparam","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","relogio","funciona","public","funciona","funciona","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","relogio","maquina","public","maquina","maquina","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","relogio","ordem","public","ordem","ordem","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","rephrpad","maquina","public","maquina","maquina","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","rephrpad","ordem","public","ordem","ordem","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","reqcomp","funciona","public","funciona","funciona","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","reqcomp","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","script","elemen","public","elemen","elemen","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","setorcc1","setorcc","public","setorcc","setorcc","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","sugesta1","compra","public","compra","compra","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","sugesta1","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","sugesta1","sugestao","public","sugestao","sugestao","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","sugestao","deposito","public","deposito","deposito","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","tabprven","produto","public","produto","produto","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","transpor","empresa","public","empresa","empresa","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","visita","empresa","public","empresa","empresa","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","visita","pedido","public","pedido","pedido","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","visita","vendedor","public","vendedor","vendedor","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","vlrel","elemen","public","elemen","elemen","{""col == tabela"",""col == pk"",""termina com tabela"",""começa com tabela""}",4
+"public","ctbbccu1","ctbbccus","public","ctbbccus","ctbbcod","{""col == tabela"",""termina com tabela"",""começa com tabela""}",3
+"public","matepro1","mateprod","public","mateprod","prodmate","{""col == tabela"",""termina com tabela"",""começa com tabela""}",3
+"public","mdfcarga","mdfcontmdf","public","mdf","mdfcontmdf","{""col == pk"",""termina com tabela"",""começa com tabela""}",3
+"public","mdfdoc","mdfcontmdf","public","mdf","mdfcontmdf","{""col == pk"",""termina com tabela"",""começa com tabela""}",3
+"public","mdfevent","mdfcontmdf","public","mdf","mdfcontmdf","{""col == pk"",""termina com tabela"",""começa com tabela""}",3
+"public","mdfobs","mdfcontmdf","public","mdf","mdfcontmdf","{""col == pk"",""termina com tabela"",""começa com tabela""}",3
+"public","mdfpercu","mdfcontmdf","public","mdf","mdfcontmdf","{""col == pk"",""termina com tabela"",""começa com tabela""}",3
+"public","mdfrota","mdfcontmdf","public","mdf","mdfcontmdf","{""col == pk"",""termina com tabela"",""começa com tabela""}",3
+"public","bloqcond","parampacod","public","parampa","parampacod","{""col == pk"",""começa com tabela""}",2
+"public","calibra1","instrument","public","instrume","instrument","{""col == pk"",""começa com tabela""}",2
+"public","calibrac","instrument","public","instrume","instrument","{""col == pk"",""começa com tabela""}",2
+"public","cmempres","operacao","public","opera","operacao","{""col == pk"",""começa com tabela""}",2
+"public","cmppara1","pcmpparam","public","cmpparam","pcmpparam","{""col == pk"",""termina com tabela""}",2
+"public","cmppara2","pcmpparam","public","cmpparam","pcmpparam","{""col == pk"",""termina com tabela""}",2
+"public","cmppara3","pcmpparam","public","cmpparam","pcmpparam","{""col == pk"",""termina com tabela""}",2
+"public","cteantdo","ctecontrol","public","cte","ctecontrol","{""col == pk"",""começa com tabela""}",2
+"public","cteantel","ctecontrol","public","cte","ctecontrol","{""col == pk"",""começa com tabela""}",2
+"public","cteantpa","ctecontrol","public","cte","ctecontrol","{""col == pk"",""começa com tabela""}",2
+"public","ctecarga","ctecontrol","public","cte","ctecontrol","{""col == pk"",""começa com tabela""}",2
+"public","cteevent","ctecontrol","public","cte","ctecontrol","{""col == pk"",""começa com tabela""}",2
+"public","cteevins","ctecontrol","public","cte","ctecontrol","{""col == pk"",""começa com tabela""}",2
+"public","ctenfp","ctecontrol","public","cte","ctecontrol","{""col == pk"",""começa com tabela""}",2
+"public","ctenft","ctecontrol","public","cte","ctecontrol","{""col == pk"",""começa com tabela""}",2
+"public","doctos","operacao","public","opera","operacao","{""col == pk"",""começa com tabela""}",2
+"public","drelevel","dredepos","public","dre","dredepos","{""col == pk"",""começa com tabela""}",2
+"public","entpaser","pentparam","public","entparam","pentparam","{""col == pk"",""termina com tabela""}",2
+"public","etapvlev","etapvcod","public","etapv","etapvcod","{""col == pk"",""começa com tabela""}",2
+"public","evetipt1","evetiptit","public","evetipti","evetiptit","{""col == pk"",""começa com tabela""}",2
+"public","expinstr","expregist","public","expregis","expregist","{""col == pk"",""começa com tabela""}",2
+"public","expinvoi","expregist","public","expregis","expregist","{""col == pk"",""começa com tabela""}",2
+"public","fcium1","fciumtipo","public","fcium","fciumtipo","{""col == pk"",""começa com tabela""}",2
+"public","insmov","instrument","public","instrume","instrument","{""col == pk"",""começa com tabela""}",2
+"public","intmatr","operacao","public","opera","operacao","{""col == pk"",""começa com tabela""}",2
+"public","lcempre1","lcempresa","public","lcempres","lcempresa","{""col == pk"",""começa com tabela""}",2
+"public","logdirei","logsenusu","public","logsen","logsenusu","{""col == pk"",""começa com tabela""}",2
+"public","logsenle","logsenusu","public","logsen","logsenusu","{""col == pk"",""começa com tabela""}",2
+"public","logusds1","logusdsus","public","logusdsu","logusdsus","{""col == pk"",""começa com tabela""}",2
+"public","mcsroda","mcsidioma","public","mcsidiom","mcsidioma","{""col == pk"",""começa com tabela""}",2
+"public","nlogsenl","nlogsenusu","public","nlogsen","nlogsenusu","{""col == pk"",""começa com tabela""}",2
+"public","produto","unimedida","public","unimed","unimedida","{""col == pk"",""começa com tabela""}",2
+"public","rorclev1","rorcodor","public","rorc","rorcodor","{""col == pk"",""começa com tabela""}",2
+"public","rorcleve","rorcodor","public","rorc","rorcodor","{""col == pk"",""começa com tabela""}",2
+"public","rota1","rotacod","public","rota","rotacod","{""col == pk"",""começa com tabela""}",2
+"public","toqmovi","operacao","public","opera","operacao","{""col == pk"",""começa com tabela""}",2
+"public","ucusrepl","pentparam","public","entparam","pentparam","{""col == pk"",""termina com tabela""}",2
+"public","unimed1","unimedida","public","unimed","unimedida","{""col == pk"",""começa com tabela""}",2
+"public","usuliben","pentparam","public","entparam","pentparam","{""col == pk"",""termina com tabela""}",2
+"public","abrangel","abrcod","public","abrange","abrcod","{""col == pk""}",1
+"public","acabame","tpacodi","public","tipacab","tpacodi","{""col == pk""}",1
+"public","acabame1","acabcod","public","acabame","acabcod","{""col == pk""}",1
+"public","acabcon1","amctipacab","public","tipacab","tpacodi","{""termina com tabela""}",1
+"public","acabcon2","amctipacab","public","tipacab","tpacodi","{""termina com tabela""}",1
+"public","acabcon4","amctipacab","public","tipacab","tpacodi","{""termina com tabela""}",1
+"public","acabconf","amctipacab","public","tipacab","tpacodi","{""termina com tabela""}",1
+"public","acabidio","acabcod","public","acabame","acabcod","{""col == pk""}",1
+"public","acabregr","reatipacab","public","tipacab","tpacodi","{""termina com tabela""}",1
+"public","acaorde","acaoorde","public","acaorde1","acaoorde","{""col == pk""}",1
+"public","acaorde2","acaoorde","public","acaorde1","acaoorde","{""col == pk""}",1
+"public","acaorde3","acaoorde","public","acaorde1","acaoorde","{""col == pk""}",1
+"public","acaorde4","acaoorde","public","acaorde1","acaoorde","{""col == pk""}",1
+"public","acmpreq1","acmreqcod","public","acmpreqc","acmreqcod","{""col == pk""}",1
+"public","acumula1","acumucod","public","acumulad","acumucod","{""col == pk""}",1
+"public","afsplan1","afsplano","public","afspla1n","afsplano","{""col == pk""}",1
+"public","afsplan2","afsplano","public","afspla1n","afsplano","{""col == pk""}",1
+"public","alitpimt","alitppais","public","pais","pais","{""termina com tabela""}",1
+"public","apdipi","apdclassi","public","classi","clascod","{""termina com tabela""}",1
+"public","aplica","aplccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","aplica","aplplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","apprepo1","apprepcodi","public","apprepos","apprepcodi","{""col == pk""}",1
+"public","apprepo2","apprepcodi","public","apprepos","apprepcodi","{""col == pk""}",1
+"public","apraliq","pffparam","public","parfecfi","pffparam","{""col == pk""}",1
+"public","aprcfop","pffparam","public","parfecfi","pffparam","{""col == pk""}",1
+"public","apumao","apmaopera","public","opera","operacao","{""termina com tabela""}",1
+"public","apvpara1","apvpcod","public","apvparam","apvpcod","{""col == pk""}",1
+"public","arqextb1","arqbanco","public","banco","banco","{""termina com tabela""}",1
+"public","arqextbc","arqbanco","public","banco","banco","{""termina com tabela""}",1
+"public","assanexl","assanxcod","public","assanex","assanxcod","{""col == pk""}",1
+"public","assdadt","asdtcod","public","assdadt1","asdtcod","{""col == pk""}",1
+"public","assides1","assiassist","public","assidesp","assiassist","{""col == pk""}",1
+"public","assiste1","aspopera","public","opera","operacao","{""termina com tabela""}",1
+"public","assiste1","aspproduto","public","produto","produto","{""termina com tabela""}",1
+"public","asslcent","aslccidade","public","cidade","cidade","{""termina com tabela""}",1
+"public","asslcent","aslcestado","public","estado","estado","{""termina com tabela""}",1
+"public","asslcent","aslnompais","public","pais","pais","{""termina com tabela""}",1
+"public","asslcent","aslpais","public","pais","pais","{""termina com tabela""}",1
+"public","assparam","asprmopera","public","opera","operacao","{""termina com tabela""}",1
+"public","assprev1","aprassis","public","assprevi","aprassis","{""col == pk""}",1
+"public","audaces","audmaquina","public","maquina","maquina","{""termina com tabela""}",1
+"public","ausencia","tpauid","public","ausetip","tpauid","{""col == pk""}",1
+"public","baldcom","bdccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","baldcoml","bdccod","public","baldcom","bdccod","{""col == pk""}",1
+"public","baldcoml","bdfccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","baldcoml","bdfplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","banco","banccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","bbbanco","bbanco","public","banco","banco","{""termina com tabela""}",1
+"public","bcoextl1","blebanco","public","banco","banco","{""termina com tabela""}",1
+"public","bcoextly","blebanco","public","banco","banco","{""termina com tabela""}",1
+"public","bcoextly","bleirota","public","rota","rotacod","{""termina com tabela""}",1
+"public","bcoextoc","bexccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","bcoextoc","bexplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","bcoreme","bcormrota","public","rota","rotacod","{""termina com tabela""}",1
+"public","bcoreto","bcortrota","public","rota","rotacod","{""termina com tabela""}",1
+"public","benefisc","benclassi","public","classi","clascod","{""termina com tabela""}",1
+"public","benefisc","benopera","public","opera","operacao","{""termina com tabela""}",1
+"public","boleto","bolbanco","public","banco","banco","{""termina com tabela""}",1
+"public","cadcontr","cctproduto","public","produto","produto","{""termina com tabela""}",1
+"public","calchor1","calchcont","public","calchora","calchcont","{""col == pk""}",1
+"public","calchrc","calccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","camhist1","hcamcont","public","camhisto","hcamcont","{""col == pk""}",1
+"public","camonta1","camcontrol","public","camontag","camcontrol","{""col == pk""}",1
+"public","camontag","camveiculo","public","veiculo","veiplaca","{""termina com tabela""}",1
+"public","carcorr1","corcontrol","public","carcorr","corcontrol","{""col == pk""}",1
+"public","carta1","cavcodig","public","carta","cavcodig","{""col == pk""}",1
+"public","carta2","cavcodig","public","carta","cavcodig","{""col == pk""}",1
+"public","carta3","cavcodig","public","carta","cavcodig","{""col == pk""}",1
+"public","cartao","cartbanco","public","banco","banco","{""termina com tabela""}",1
+"public","cbardep1","rcbean13","public","ean13","ean13cod","{""termina com tabela""}",1
+"public","cbardep1","rcbprod","public","cbardepo","rcbprod","{""col == pk""}",1
+"public","ccmontle","ccmcod","public","ccmont","ccmcod","{""col == pk""}",1
+"public","ceeblk1","ceecod","public","ceeblk","ceecod","{""col == pk""}",1
+"public","celprod","celordem","public","ordem","ordem","{""termina com tabela""}",1
+"public","cemontle","cemnome","public","cemont","cemnome","{""col == pk""}",1
+"public","cfoprein","cfropera","public","opera","operacao","{""termina com tabela""}",1
+"public","cfopsuf","csuopera","public","opera","operacao","{""termina com tabela""}",1
+"public","cfpcara1","cfpcarcod","public","cfpcarac","cfpcarcod","{""col == pk""}",1
+"public","cfpcara2","cfpcarcod","public","cfpcarac","cfpcarcod","{""col == pk""}",1
+"public","cfpcara3","cfpcarcod","public","cfpcarac","cfpcarcod","{""col == pk""}",1
+"public","cfpconf1","cfpconfcod","public","cfpconfi","cfpconfcod","{""col == pk""}",1
+"public","cfpentr1","cfpentcod","public","cfpentra","cfpentcod","{""col == pk""}",1
+"public","cfpform1","cfpforcod","public","cfpformu","cfpforcod","{""col == pk""}",1
+"public","cfpmode1","cfpmodcod","public","cfpmodel","cfpmodcod","{""col == pk""}",1
+"public","cfpmode2","cfpmodcod","public","cfpmodel","cfpmodcod","{""col == pk""}",1
+"public","cherem","rchrota","public","rota","rotacod","{""termina com tabela""}",1
+"public","chpredat","chbanco","public","banco","banco","{""termina com tabela""}",1
+"public","chpredat","chempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","chpredat","chmotivo","public","motivo","motivo","{""termina com tabela""}",1
+"public","chqdev","chvmotivo","public","motivo","motivo","{""termina com tabela""}",1
+"public","clasarml","clarmdepc","public","clasarm","clarmdepc","{""col == pk""}",1
+"public","cliprod","clpproduto","public","produto","produto","{""termina com tabela""}",1
+"public","cliprod1","clpempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","cliprod1","clpproduto","public","cliprod","clpproduto","{""col == pk""}",1
+"public","cliprod1","clpproduto","public","produto","produto","{""termina com tabela""}",1
+"public","clirem1","clirmse","public","clirem","clirmse","{""col == pk""}",1
+"public","cmempres","cmebanco","public","banco","banco","{""termina com tabela""}",1
+"public","cmempres","cmempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","cmempres","ttpvcod","public","tptabprv","ttpvcod","{""col == pk""}",1
+"public","cmpparam","pcmpcompra","public","compra","compra","{""termina com tabela""}",1
+"public","comiped","coppedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","comiprod","cmigrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","comiprod","cmiproduto","public","produto","produto","{""termina com tabela""}",1
+"public","compcart","compcartao","public","cartao","cartcodi","{""termina com tabela""}",1
+"public","compcmaq","ccpopera","public","opera","operacao","{""termina com tabela""}",1
+"public","compdocl","doccompra","public","compdoc","doccompra","{""col == pk""}",1
+"public","complia1","cmplseque","public","complian","cmplseque","{""col == pk""}",1
+"public","complia2","cmplseque","public","complian","cmplseque","{""col == pk""}",1
+"public","compra","condicao","public","condpag","condicao","{""col == pk""}",1
+"public","compra3","cmpunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","condpa2","con2faixa","public","condpa","con2faixa","{""col == pk""}",1
+"public","confexce","cfegrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","configm1","cmtipacab","public","tipacab","tpacodi","{""termina com tabela""}",1
+"public","confpar1","confpcod","public","confpara","confpcod","{""col == pk""}",1
+"public","contrat1","contrseq","public","contrato","contrseq","{""col == pk""}",1
+"public","contrat2","contrseq","public","contrato","contrseq","{""col == pk""}",1
+"public","contrat3","contrseq","public","contrato","contrseq","{""col == pk""}",1
+"public","contrat4","contrseq","public","contrato","contrseq","{""col == pk""}",1
+"public","contrat5","contrseq","public","contrato","contrseq","{""col == pk""}",1
+"public","contrat6","contrseq","public","contrato","contrseq","{""col == pk""}",1
+"public","contrat7","contrseq","public","contrato","contrseq","{""col == pk""}",1
+"public","convers1","convprod","public","conversa","convprod","{""col == pk""}",1
+"public","convers1","cvuopera","public","opera","operacao","{""termina com tabela""}",1
+"public","cpprojl1","cppped","public","cpproj","cppped","{""col == pk""}",1
+"public","cpprojl3","cppped","public","cpproj","cppped","{""col == pk""}",1
+"public","cpprojl4","cppped","public","cpproj","cppped","{""col == pk""}",1
+"public","ctbalan1","balccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","ctbatua1","catccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","ctbatual","catccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","ctbatual","catdccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","ctbbccu1","ctbbcod","public","ctbbccus","ctbbcod","{""col == pk""}",1
+"public","ctbctr1","usuctb","public","ctbusu","usuctb","{""col == pk""}",1
+"public","ctbimp1","ctbiccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","ctbimp1","ctbiplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","ctbregr1","crgdepopri","public","ctbregra","crgdepopri","{""col == pk""}",1
+"public","cte","cteproduto","public","produto","produto","{""termina com tabela""}",1
+"public","cteantdo","cteantseq","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteantel","cteaneseq","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteantel","cteantseq","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteantpa","cteanpseq","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteantpa","cteantseq","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctecarga","ctecarseq","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctedadre","ctedacont","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctedadre","ctedanum","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevent","ctecideve","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevent","cteprotoco","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevent","cteseqeve","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevins","cteinscodc","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevins","cteinsdoc","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevins","cteinsmot","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevins","cteinsnute","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevins","cteinspro","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevins","cteinsseq","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevins","cteinstpev","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevma","cteevnsu","public","nsu","nsucontrol","{""termina com tabela""}",1
+"public","cteevma","cteevnsu","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevma","cteevseq","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevma","cteevstae","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteevma","cteevtp","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctemani","ctemdepos","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctemani","ctemdocto","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctemani","ctemnsu","public","nsu","nsucontrol","{""termina com tabela""}",1
+"public","ctemani","ctemnsu","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctenfp","ctenfpcont","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctenfp","ctenfpseq","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctenft","ctenftseq","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cteref","ctecontr","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cterefle","ctecontr","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cterefle","ctecontr","public","cteref","ctecontr","{""col == pk""}",1
+"public","cterefle","cterefcont","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cterefle","cterefcont","public","cteref","ctecontr","{""começa com tabela""}",1
+"public","ctesubst","ctesu2cont","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctesubst","ctesucont","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","ctesubst","ctesunum","public","cte","ctecontrol","{""começa com tabela""}",1
+"public","cusrem","curopera","public","opera","operacao","{""termina com tabela""}",1
+"public","dadosem1","dadempresa","public","dadosemp","dadempresa","{""col == pk""}",1
+"public","ddatit","ddabanco","public","banco","banco","{""termina com tabela""}",1
+"public","depbanle","dbbanco","public","banco","banco","{""termina com tabela""}",1
+"public","depbanle","dbdeposito","public","depban","dbdeposito","{""col == pk""}",1
+"public","deposit1","dep1estado","public","estado","estado","{""termina com tabela""}",1
+"public","deposito","depccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","deposito","depcidade","public","cidade","cidade","{""termina com tabela""}",1
+"public","deposito","depnromdf","public","mdf","mdfcontmdf","{""termina com tabela""}",1
+"public","deposito","depprxnsu","public","nsu","nsucontrol","{""termina com tabela""}",1
+"public","desenh1","ddeslocal","public","deslocal","deslocal","{""termina com tabela""}",1
+"public","desenho1","desenho","public","desenh1","desenho","{""col == pk""}",1
+"public","desparam","desprota","public","rota","rotacod","{""termina com tabela""}",1
+"public","despat1","dspcontrol","public","despat","dspcontrol","{""col == pk""}",1
+"public","devantig","dvacontrol","public","devanti1","dvacontrol","{""col == pk""}",1
+"public","devcompr","dcoproduto","public","produto","produto","{""termina com tabela""}",1
+"public","devipi","dvimotivo","public","motivo","motivo","{""termina com tabela""}",1
+"public","devoluca","devproduto","public","produto","produto","{""termina com tabela""}",1
+"public","devvenda","dvvproduto","public","produto","produto","{""termina com tabela""}",1
+"public","dimorest","orecod","public","orcaesp","orecod","{""col == pk""}",1
+"public","doccteau","docctecont","public","doccte","dctcontr","{""começa com tabela""}",1
+"public","docctele","dctcontr","public","doccte","dctcontr","{""col == pk""}",1
+"public","docdcall","ddcinst","public","docdcal","ddcinst","{""col == pk""}",1
+"public","docnumct","docnumcte","public","cte","ctecontrol","{""termina com tabela""}",1
+"public","docref","drefcontro","public","dre","dredepos","{""começa com tabela""}",1
+"public","docstlev","dstcontr","public","docst","dstcontr","{""col == pk""}",1
+"public","docsubs1","substcon","public","docsubst","substcon","{""col == pk""}",1
+"public","doctos","noscidade","public","cidade","cidade","{""termina com tabela""}",1
+"public","doctos","notespecie","public","especie","esdcodigo","{""termina com tabela""}",1
+"public","doctos","notpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","drelevel","drenivel","public","dre","dredepos","{""começa com tabela""}",1
+"public","drelevel","dreordem","public","dre","dredepos","{""começa com tabela""}",1
+"public","dsmont2","dsmcodi","public","dsmonta","dsmcodi","{""col == pk""}",1
+"public","dupdes","dudbanco","public","banco","banco","{""termina com tabela""}",1
+"public","dupdes","dudccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","dupdes","dudplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","ecdarqui","ecdarqrota","public","rota","rotacod","{""termina com tabela""}",1
+"public","ediembal","edibunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","ediprev2","edivsequen","public","ediprev1","edivsequen","{""col == pk""}",1
+"public","ediprevi","edivpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","ediprevi","edivsequen","public","ediprev1","edivsequen","{""col == pk""}",1
+"public","ediprve1","edipsequen","public","ediprven","edipsequen","{""col == pk""}",1
+"public","efdspedp","efdsopera","public","opera","operacao","{""termina com tabela""}",1
+"public","efpspedp","efpsopera","public","opera","operacao","{""termina com tabela""}",1
+"public","elyatec1","elyatcod","public","elyatec","elyatcod","{""col == pk""}",1
+"public","elyatec2","elyatcod","public","elyatec","elyatcod","{""col == pk""}",1
+"public","elycort1","elyccod","public","elycorte","elyccod","{""col == pk""}",1
+"public","elycort2","elyccod","public","elycorte","elyccod","{""col == pk""}",1
+"public","elyexpe1","elyxcodi","public","elyexpe","elyxcodi","{""col == pk""}",1
+"public","elyexpe2","elyxcodi","public","elyexpe","elyxcodi","{""col == pk""}",1
+"public","elylote1","elylcod","public","elylote","elylcod","{""col == pk""}",1
+"public","elylote2","elylcod","public","elylote","elylcod","{""col == pk""}",1
+"public","elynota1","elycod","public","elynota","elycod","{""col == pk""}",1
+"public","elypack1","elypacod","public","elypacki","elypacod","{""col == pk""}",1
+"public","elypack2","elypacod","public","elypacki","elypacod","{""col == pk""}",1
+"public","elyprod","epyimpress","public","impress","impress","{""termina com tabela""}",1
+"public","elyprod1","epycodi","public","elyprod","epycodi","{""col == pk""}",1
+"public","elyprod2","epycodi","public","elyprod","epycodi","{""col == pk""}",1
+"public","elyprod3","epycodi","public","elyprod","epycodi","{""col == pk""}",1
+"public","elyreqd1","elyrdcod","public","elyreqd","elyrdcod","{""col == pk""}",1
+"public","elyreqdl","elyrdcod","public","elyreqd","elyrdcod","{""col == pk""}",1
+"public","embpro","embcodi","public","embalage","embcodi","{""col == pk""}",1
+"public","empanexl","empanemp","public","empanex","empanemp","{""col == pk""}",1
+"public","emphist","empempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","emphist1","empempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","emphist1","empempresa","public","emphist","empempresa","{""col == pk""}",1
+"public","empnao","empndep","public","regdpara","empndep","{""col == pk""}",1
+"public","empresa","empcidade","public","cidade","cidade","{""termina com tabela""}",1
+"public","emquali","qualif","public","qualific","qualif","{""col == pk""}",1
+"public","engpara1","engparcod","public","engparam","engparcod","{""col == pk""}",1
+"public","engpara2","engparcod","public","engparam","engparcod","{""col == pk""}",1
+"public","engparam","engbusrota","public","rota","rotacod","{""termina com tabela""}",1
+"public","epailon1","epaicod","public","epailon","epaicod","{""col == pk""}",1
+"public","epailon2","epaicod","public","epailon","epaicod","{""col == pk""}",1
+"public","epailon3","epaicod","public","epailon","epaicod","{""col == pk""}",1
+"public","epailonl","epaicod","public","epailon","epaicod","{""col == pk""}",1
+"public","es050791","esvecod","public","es05079","esvecod","{""col == pk""}",1
+"public","es050792","esvecod","public","es05079","esvecod","{""col == pk""}",1
+"public","es050793","esvecod","public","es05079","esvecod","{""col == pk""}",1
+"public","es050801","esipcod","public","es05080","esipcod","{""col == pk""}",1
+"public","espedid1","esempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","espedid1","espedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","espedid1","esproduto","public","produto","produto","{""termina com tabela""}",1
+"public","espedido","espedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","estnotif","esnproduto","public","produto","produto","{""termina com tabela""}",1
+"public","estrutur","estproduto","public","produto","produto","{""termina com tabela""}",1
+"public","estrutur","fase","public","fases","fase","{""col == pk""}",1
+"public","etimanu1","etmsequen","public","etimanua","etmsequen","{""col == pk""}",1
+"public","etimanua","etmimpress","public","impress","impress","{""termina com tabela""}",1
+"public","etimanua","etmpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","etimanua","etmproduto","public","produto","produto","{""termina com tabela""}",1
+"public","etrepor1","erycod","public","etreport","erycod","{""col == pk""}",1
+"public","excecoe1","excodigo","public","excecoes","excodigo","{""col == pk""}",1
+"public","excecoe2","excodigo","public","excecoes","excodigo","{""col == pk""}",1
+"public","expedid1","expedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","expedido","expclpais","public","pais","pais","{""termina com tabela""}",1
+"public","expedido","expedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","expparam","mcspcodi","public","mcsparam","mcspcodi","{""col == pk""}",1
+"public","expregis","expbbanco","public","banco","banco","{""termina com tabela""}",1
+"public","fciprod","fcipdata","public","ipdata","iidata","{""termina com tabela""}",1
+"public","fciprod","fciprodep","public","prodep","proddep","{""termina com tabela""}",1
+"public","fcium1","fciumcod","public","fcium","fciumtipo","{""começa com tabela""}",1
+"public","fcium1","fciumdesc","public","fcium","fciumtipo","{""começa com tabela""}",1
+"public","fisformu","fisgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","fluxdin1","fluxseq","public","fluxdina","fluxseq","{""col == pk""}",1
+"public","fluxdina","fluxbanco","public","banco","banco","{""termina com tabela""}",1
+"public","formfisc","fssgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","formula","cuscod","public","custos","cuscod","{""col == pk""}",1
+"public","fregtrel","fregseq","public","fregtre","fregseq","{""col == pk""}",1
+"public","funciona","fuccodi","public","funcoes","fuccodi","{""col == pk""}",1
+"public","funciona","funbanco","public","banco","banco","{""termina com tabela""}",1
+"public","funcoesl","fuccodi","public","funcoes","fuccodi","{""col == pk""}",1
+"public","garitem","mgcodi","public","garmovi","mgcodi","{""col == pk""}",1
+"public","garmov1l","mgcodi","public","garmovi","mgcodi","{""col == pk""}",1
+"public","garmovh1","mgcodi","public","garmovi","mgcodi","{""col == pk""}",1
+"public","garmovhi","mgcodi","public","garmovi","mgcodi","{""col == pk""}",1
+"public","germag","gmopera","public","opera","operacao","{""termina com tabela""}",1
+"public","germag1","gmopera","public","opera","operacao","{""termina com tabela""}",1
+"public","germag1","gmopera","public","germag","gmopera","{""col == pk""}",1
+"public","grucomt1","grctgrup","public","grucomtp","grctgrup","{""col == pk""}",1
+"public","grucomt2","grctgrup","public","grucomtp","grctgrup","{""col == pk""}",1
+"public","grupeco1","grecodigo","public","grupeco","grecodigo","{""col == pk""}",1
+"public","grupeco1","grempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","grupo","tgrucod","public","tipgrupo","tgrucod","{""col == pk""}",1
+"public","grupo1","subgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","gruproc1","grdmaquina","public","maquina","maquina","{""termina com tabela""}",1
+"public","gruproc1","grdopera","public","opera","operacao","{""termina com tabela""}",1
+"public","gruproc1","grupcodpr","public","gruproc","grupcodpr","{""col == pk""}",1
+"public","hicufopr","hicfregiao","public","regiao","regiao","{""termina com tabela""}",1
+"public","histlot1","histlcod","public","histlote","histlcod","{""col == pk""}",1
+"public","hisven","eqcempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","hisven","eqcproduto","public","produto","produto","{""termina com tabela""}",1
+"public","hisven1","eqcempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","hisven1","eqcproduto","public","produto","produto","{""termina com tabela""}",1
+"public","imag2nf","imagcont","public","imagnfen","imagcont","{""col == pk""}",1
+"public","imagnfs1","imagscont","public","imagnfsa","imagscont","{""col == pk""}",1
+"public","imposto","clascod","public","classi","clascod","{""col == pk""}",1
+"public","imposto","impestado","public","estado","estado","{""termina com tabela""}",1
+"public","imposto","impgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","imposto","tricod","public","tribu","tricod","{""col == pk""}",1
+"public","indcotac","moeda","public","indicati","moeda","{""col == pk""}",1
+"public","instpa1l","itpcodparm","public","instpara","itpcodparm","{""col == pk""}",1
+"public","intmatr","historico","public","hisctb","historico","{""col == pk""}",1
+"public","intmatr","intdcod","public","intdesc","intdcod","{""col == pk""}",1
+"public","intmatr","intgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","inventa","invunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","ipconta","iidata","public","ipdata","iidata","{""col == pk""}",1
+"public","iplanca","iidata","public","ipdata","iidata","{""col == pk""}",1
+"public","lacaaux","laaccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","lacaaux","laaplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","lacon","latccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","lacon","lcorateio","public","rateio","rateio","{""termina com tabela""}",1
+"public","lacon","usuctb","public","ctbusu","usuctb","{""col == pk""}",1
+"public","lactb","historico","public","hisctb","historico","{""col == pk""}",1
+"public","lajuracr","lajdccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","lajuracr","lajdplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","lajuracr","lajjccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","lajuracr","lajjplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","lajuracr","lajmccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","lajuracr","lajmplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","lajuracr","lajtccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","lajuracr","lajtplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","lancai","historico","public","hisctb","historico","{""col == pk""}",1
+"public","lancai","lacbanco","public","banco","banco","{""termina com tabela""}",1
+"public","lancai","lacccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","lancai","lacplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","lancai","pescod","public","preensai","pescod","{""col == pk""}",1
+"public","lancai","precompra","public","compra","compra","{""termina com tabela""}",1
+"public","lancai","prepedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","lancai7","evento","public","eventos","evento","{""col == pk""}",1
+"public","laorca","historico","public","hisctb","historico","{""col == pk""}",1
+"public","laycpf","lcbanco","public","banco","banco","{""termina com tabela""}",1
+"public","layexp1","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexp2","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexp3","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexp4","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexp5","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexp6","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexp7","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexp8","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexpl1","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexpl2","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexpl3","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layexple","lyxcodi","public","layexp","lyxcodi","{""col == pk""}",1
+"public","layimpo1","laymcod","public","layimpor","laymcod","{""col == pk""}",1
+"public","lcempre1","lcecidade","public","cidade","cidade","{""termina com tabela""}",1
+"public","lcempre1","lcempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","lcempre1","lcepais","public","pais","pais","{""termina com tabela""}",1
+"public","lcempre1","lcregiao","public","regiao","regiao","{""termina com tabela""}",1
+"public","lcempres","lcempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","lcnota","lcncidade","public","cidade","cidade","{""termina com tabela""}",1
+"public","lcnota","lcncodpais","public","pais","pais","{""termina com tabela""}",1
+"public","lcnota","lcnestado","public","estado","estado","{""termina com tabela""}",1
+"public","lcpedid","lcpcidade","public","cidade","cidade","{""termina com tabela""}",1
+"public","lcpedid","lcpestado","public","estado","estado","{""termina com tabela""}",1
+"public","lcpedid","lcpnompais","public","pais","pais","{""termina com tabela""}",1
+"public","lcpedid","lcppais","public","pais","pais","{""termina com tabela""}",1
+"public","lemmanu1","lemcod","public","lemmanu","lemcod","{""col == pk""}",1
+"public","lemmanu2","lemcod","public","lemmanu","lemcod","{""col == pk""}",1
+"public","lgpdlogs","lgpdlogusu","public","logusu","logusuario","{""termina com tabela""}",1
+"public","libcomp1","lapccom","public","libcomp","lapccom","{""col == pk""}",1
+"public","librequi","libproduto","public","produto","produto","{""termina com tabela""}",1
+"public","linconff","lincod","public","linconf","lincod","{""col == pk""}",1
+"public","linconfp","lincod","public","linconf","lincod","{""col == pk""}",1
+"public","logusdep","logusdusu","public","logusde1","logusdusu","{""col == pk""}",1
+"public","lotecar1","lcacod","public","lotecar","lcacod","{""col == pk""}",1
+"public","lotpblo1","ltpblemp","public","lotpbloq","ltpblemp","{""col == pk""}",1
+"public","lotrast1","ltracodig","public","lotrast","ltracodig","{""col == pk""}",1
+"public","lybloque","lybbbanco","public","banco","banco","{""termina com tabela""}",1
+"public","lyexptx1","lytxtcodig","public","lyexptxt","lytxtcodig","{""col == pk""}",1
+"public","lyimptx1","lyimpcod","public","lyimptxt","lyimpcod","{""col == pk""}",1
+"public","lynfadi1","lyadcod","public","lynfadi","lyadcod","{""col == pk""}",1
+"public","lynfdup1","lyducod","public","lynfdup","lyducod","{""col == pk""}",1
+"public","lyocom1","lyoccod","public","lyocomp","lyoccod","{""col == pk""}",1
+"public","lypcort","leprota","public","rota","rotacod","{""termina com tabela""}",1
+"public","lypcortl","lepcod","public","lypcort","lepcod","{""col == pk""}",1
+"public","madmade","mdtid","public","madtipo","mdtid","{""col == pk""}",1
+"public","madpaco","mdmid","public","madmade","mdmid","{""col == pk""}",1
+"public","manpadl1","mancod","public","manpad","mancod","{""col == pk""}",1
+"public","manpadle","mancod","public","manpad","mancod","{""col == pk""}",1
+"public","manpdrl1","mpacod","public","manpdr","mpacod","{""col == pk""}",1
+"public","manpdrle","mpacod","public","manpdr","mpacod","{""col == pk""}",1
+"public","maqhisva","hvmaquina","public","maquina","maquina","{""termina com tabela""}",1
+"public","maquina","grmcodi","public","grmaqui","grmcodi","{""col == pk""}",1
+"public","margrup1","mgrscod","public","margrup","mgrscod","{""col == pk""}",1
+"public","matepro1","prodmate","public","mateprod","prodmate","{""col == pk""}",1
+"public","mcsparam","mcsbanco","public","banco","banco","{""termina com tabela""}",1
+"public","mcsparam","mcspais","public","pais","pais","{""termina com tabela""}",1
+"public","mdfdoc","mddcte","public","cte","ctecontrol","{""termina com tabela""}",1
+"public","mdfepgt1","mdfepgcont","public","mdfepgto","mdfepgcont","{""col == pk""}",1
+"public","mdfepgt1","mdfepgcont","public","mdf","mdfcontmdf","{""começa com tabela""}",1
+"public","mdfepgt1","mdfepgseq","public","mdf","mdfcontmdf","{""começa com tabela""}",1
+"public","mdfepgto","mdfepgcont","public","mdf","mdfcontmdf","{""começa com tabela""}",1
+"public","metas","percod","public","periodo","percod","{""col == pk""}",1
+"public","mmorden1","mmorderid","public","mmordens","mmorderid","{""col == pk""}",1
+"public","mmorden1","mmproduto","public","produto","produto","{""termina com tabela""}",1
+"public","mmorden1","mmunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","mmorden2","mmorderid","public","mmordens","mmorderid","{""col == pk""}",1
+"public","mndpcqua","mndcada","public","mndcadas","mndcada","{""col == pk""}",1
+"public","modcobra","modcartao","public","cartao","cartcodi","{""termina com tabela""}",1
+"public","movireme","mvrproduto","public","produto","produto","{""termina com tabela""}",1
+"public","mrkp01","mrkestado","public","estado","estado","{""termina com tabela""}",1
+"public","natsped","nsproduto","public","produto","produto","{""termina com tabela""}",1
+"public","ncotaca1","ncotacao","public","cotacao","cotacao","{""termina com tabela""}",1
+"public","ncotacao","ncotacao","public","cotacao","cotacao","{""termina com tabela""}",1
+"public","nfcepgt1","nfcecontro","public","nfcepgto","nfcecontro","{""col == pk""}",1
+"public","nfei015","nmdnsu","public","nsu","nsucontrol","{""termina com tabela""}",1
+"public","nfei015e","nmdnsu","public","nsu","nsucontrol","{""termina com tabela""}",1
+"public","nfei015m","nmdnsu","public","nsu","nsucontrol","{""termina com tabela""}",1
+"public","nfei015n","nmdnsu","public","nsu","nsucontrol","{""termina com tabela""}",1
+"public","nfeitem","nfeiutrib","public","utrib","utribcod","{""termina com tabela""}",1
+"public","nfeservi","nfesmotivo","public","motivo","motivo","{""termina com tabela""}",1
+"public","nfnarra","nfproduto","public","produto","produto","{""termina com tabela""}",1
+"public","nfnarra1","nfnarrativ","public","narrativ","naprcod","{""termina com tabela""}",1
+"public","nfpedcmp","nfpempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","nfpedcmp","nfppedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","nfrefer1","nfrecontr","public","nfrefere","nfrecontr","{""col == pk""}",1
+"public","nfrem1","nfrmseq","public","nfrem","nfrmseq","{""col == pk""}",1
+"public","nfscte","nconcfop","public","concfop","conccfop","{""termina com tabela""}",1
+"public","nlogsenl","nlogsenant","public","nlogsen","nlogsenusu","{""começa com tabela""}",1
+"public","notcte","ncttpcte","public","cte","ctecontrol","{""termina com tabela""}",1
+"public","notctele","nctcontrol","public","notcte","nctcontrol","{""col == pk""}",1
+"public","notfrete","controle","public","doctos","controle","{""col == pk""}",1
+"public","notparam","notcontmdf","public","mdf","mdfcontmdf","{""termina com tabela""}",1
+"public","notparam","noterota","public","rota","rotacod","{""termina com tabela""}",1
+"public","notparam","notpprxnsu","public","nsu","nsucontrol","{""termina com tabela""}",1
+"public","notparam","rdccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","notparam","rdplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","notparam","rdtpplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","notrete1","ntrcontrol","public","notreten","ntrcontrol","{""col == pk""}",1
+"public","notreten","ntrempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","nsassist","cnscodi","public","numserie","cnscodi","{""col == pk""}",1
+"public","nsinvent","cnscodi","public","numserie","cnscodi","{""col == pk""}",1
+"public","nsnotas","cnscodi","public","numserie","cnscodi","{""col == pk""}",1
+"public","nsordem","cnscodi","public","numserie","cnscodi","{""col == pk""}",1
+"public","nspedido","cnscodi","public","numserie","cnscodi","{""col == pk""}",1
+"public","numserec","cnscodi","public","numserie","cnscodi","{""col == pk""}",1
+"public","obsnota","controle","public","doctos","controle","{""col == pk""}",1
+"public","obsoper1","oboopera","public","opera","operacao","{""termina com tabela""}",1
+"public","obsoper1","oboopera","public","obsopera","oboopera","{""col == pk""}",1
+"public","obsopera","oboopera","public","opera","operacao","{""termina com tabela""}",1
+"public","obspedm1","pcmpdep","public","obspedmu","pcmpdep","{""col == pk""}",1
+"public","ocmento","ocmpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","ocmento1","ocmid","public","ocmento","ocmid","{""col == pk""}",1
+"public","ocmento2","ocmid","public","ocmento","ocmid","{""col == pk""}",1
+"public","ocmento3","ocmid","public","ocmento","ocmid","{""col == pk""}",1
+"public","operofi1","operofi","public","operofic","operofi","{""col == pk""}",1
+"public","orcaesp","oreopera","public","opera","operacao","{""termina com tabela""}",1
+"public","orcaesp","oreregiao","public","regiao","regiao","{""termina com tabela""}",1
+"public","orcaesp1","orecod","public","orcaesp","orecod","{""col == pk""}",1
+"public","orcaesp2","orecod","public","orcaesp","orecod","{""col == pk""}",1
+"public","orcaesp3","orecod","public","orcaesp","orecod","{""col == pk""}",1
+"public","orcaesp6","orecod","public","orcaesp","orecod","{""col == pk""}",1
+"public","orcaesp6","orepregiao","public","regiao","regiao","{""termina com tabela""}",1
+"public","orcaespl","orecod","public","orcaesp","orecod","{""col == pk""}",1
+"public","orcamen1","orcacod","public","orcament","orcacod","{""col == pk""}",1
+"public","orcesef","orecod","public","orcaesp","orecod","{""col == pk""}",1
+"public","orceset","orecod","public","orcaesp","orecod","{""col == pk""}",1
+"public","orconpa1","orcopar","public","orconpa","orcopar","{""col == pk""}",1
+"public","orconpa2","orcopar","public","orconpa","orcopar","{""col == pk""}",1
+"public","orconpal","orcopar","public","orconpa","orcopar","{""col == pk""}",1
+"public","ordanex1","ordanord","public","ordanex","ordanord","{""col == pk""}",1
+"public","ordem","lotcod","public","loteprod","lotcod","{""col == pk""}",1
+"public","ordem","ordccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","ordem","ordplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","ordem","ordproduto","public","produto","produto","{""termina com tabela""}",1
+"public","ordespe1","dosordem","public","ordespes","dosordem","{""col == pk""}",1
+"public","orecrep","orecrorc","public","rorc","rorcodor","{""termina com tabela""}",1
+"public","orecust","orecod","public","orcaesp","orecod","{""col == pk""}",1
+"public","oresonal","orenanum","public","oresona","orenanum","{""col == pk""}",1
+"public","oresorcl","oreonum","public","oresorc","oreonum","{""col == pk""}",1
+"public","orestrut","orecod","public","orcaesp","orecod","{""col == pk""}",1
+"public","orestrut","oreppopera","public","opera","operacao","{""termina com tabela""}",1
+"public","orimerp1","orimpro","public","orimerpr","orimpro","{""col == pk""}",1
+"public","outcfopl","outcodi","public","outcfop","outcodi","{""col == pk""}",1
+"public","outcfopl","outopera","public","opera","operacao","{""termina com tabela""}",1
+"public","packing","pacentpais","public","pais","pais","{""termina com tabela""}",1
+"public","packing","pacimppais","public","pais","pais","{""termina com tabela""}",1
+"public","packing1","paccod","public","packing","paccod","{""col == pk""}",1
+"public","paramaux","paraean13","public","ean13","ean13cod","{""termina com tabela""}",1
+"public","parammm1","pmmseque","public","parammm","pmmseque","{""col == pk""}",1
+"public","parammm2","pmmseque","public","parammm","pmmseque","{""col == pk""}",1
+"public","parammm3","pmmseque","public","parammm","pmmseque","{""col == pk""}",1
+"public","parammml","pmmseque","public","parammm","pmmseque","{""col == pk""}",1
+"public","parampe1","pedparam","public","paramped","pedparam","{""col == pk""}",1
+"public","parampe2","pedparam","public","paramped","pedparam","{""col == pk""}",1
+"public","parampe3","pedparam","public","paramped","pedparam","{""col == pk""}",1
+"public","paramprx","prxcontmdf","public","mdf","mdfcontmdf","{""termina com tabela""}",1
+"public","paramrn1","prnccodig","public","paramrnc","prnccodig","{""col == pk""}",1
+"public","paramsp1","pmspcopar","public","paramspe","pmspcopar","{""col == pk""}",1
+"public","paramspe","pmsplvdre","public","dre","dredepos","{""termina com tabela""}",1
+"public","paraore1","paoecod","public","paraores","paoecod","{""col == pk""}",1
+"public","pararep1","parrcod","public","pararep","parrcod","{""col == pk""}",1
+"public","parbolet","bbanco","public","banco","banco","{""termina com tabela""}",1
+"public","parcart1","parccartao","public","cartao","cartcodi","{""termina com tabela""}",1
+"public","parconre","pciseque","public","parconin","pciseque","{""col == pk""}",1
+"public","pareqd2","rdmotivo","public","motivo","motivo","{""termina com tabela""}",1
+"public","parlogi1","plocodigo","public","parlogin","plocodigo","{""col == pk""}",1
+"public","parpispl","ppisplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","pasfase","fase","public","fases","fase","{""col == pk""}",1
+"public","patconta","ptccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","patparam","moeda","public","indicati","moeda","{""col == pk""}",1
+"public","patparam","patccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","pbancon","pscbanco","public","banco","banco","{""termina com tabela""}",1
+"public","pedcomi","pcppedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","peddesco","pddpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","pedido","moeda","public","indicati","moeda","{""col == pk""}",1
+"public","pedinftl","peinftcod","public","pedinft","peinftcod","{""col == pk""}",1
+"public","pedordc","ocpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","pedprodu","pprproduto","public","produto","produto","{""termina com tabela""}",1
+"public","pefp01","pefpopera","public","opera","operacao","{""termina com tabela""}",1
+"public","perdcom1","pctcontrol","public","perdcomp","pctcontrol","{""col == pk""}",1
+"public","perfolha","pfperiodo","public","periodo","percod","{""termina com tabela""}",1
+"public","perfunci","pfperiodo","public","perfolha","pfperiodo","{""col == pk""}",1
+"public","perfunci","pfperiodo","public","periodo","percod","{""termina com tabela""}",1
+"public","pesrlog","prlopera","public","opera","operacao","{""termina com tabela""}",1
+"public","pgefinal","pgefbanco","public","banco","banco","{""termina com tabela""}",1
+"public","pgelrem","plrbanco","public","banco","banco","{""termina com tabela""}",1
+"public","pgelret","pltbanco","public","banco","banco","{""termina com tabela""}",1
+"public","pgelret","pltccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","pgelret","pltplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","pgeoret","pltbanco","public","banco","banco","{""termina com tabela""}",1
+"public","pgeprem","plrbanco","public","banco","banco","{""termina com tabela""}",1
+"public","pgepret","pltbanco","public","banco","banco","{""termina com tabela""}",1
+"public","pgetitul","tpgbanco","public","banco","banco","{""termina com tabela""}",1
+"public","pinspmat","pinspprod","public","pinspma1","pinspprod","{""col == pk""}",1
+"public","plamest1","plamcodig","public","plamestr","plamcodig","{""col == pk""}",1
+"public","planece","plnpgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","planece","plnunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","planecii","pln2grupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","planilfu","plamaquina","public","maquina","maquina","{""termina com tabela""}",1
+"public","planilha","plamaquina","public","maquina","maquina","{""termina com tabela""}",1
+"public","planilha","plaopera","public","opera","operacao","{""termina com tabela""}",1
+"public","planilha","plaordem","public","ordem","ordem","{""termina com tabela""}",1
+"public","planins1","plinscod","public","planins","plinscod","{""col == pk""}",1
+"public","planoc","plcccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","planoc","plcccusto","public","plcccu","plplanoc","{""começa com tabela""}",1
+"public","planoc","plcrateio","public","rateio","rateio","{""termina com tabela""}",1
+"public","plcccu","plccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","plcccu","plplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","plnccu","pnccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","pmetas","pmeproduto","public","produto","produto","{""termina com tabela""}",1
+"public","pontopro","ptpmaquina","public","maquina","maquina","{""termina com tabela""}",1
+"public","pontopro","ptpordem","public","ordem","ordem","{""termina com tabela""}",1
+"public","posaemp","pseproduto","public","produto","produto","{""termina com tabela""}",1
+"public","posaemp1","pseproduto","public","produto","produto","{""termina com tabela""}",1
+"public","possalim","psiplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","praltesp","praproduto","public","produto","produto","{""termina com tabela""}",1
+"public","preensai","pescartao","public","cartao","cartcodi","{""termina com tabela""}",1
+"public","preorca1","preoorca","public","preorca","preoorca","{""col == pk""}",1
+"public","preorce1","preores","public","preorces","preores","{""col == pk""}",1
+"public","priprog1","pripeped","public","priprog","pripeped","{""col == pk""}",1
+"public","prjexs10","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsi1","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsi2","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsi3","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsi4","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsi5","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsi6","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsi7","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsi8","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsi9","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsr1","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjexsra","prjescodi","public","prjexsim","prjescodi","{""col == pk""}",1
+"public","prjrelp1","prjrppro","public","prjrelpr","prjrppro","{""col == pk""}",1
+"public","prjvfor1","prjvfcoob","public","prjvform","prjvfcoob","{""col == pk""}",1
+"public","procalt","praproduto","public","produto","produto","{""termina com tabela""}",1
+"public","procalt1","pramaquina","public","maquina","maquina","{""termina com tabela""}",1
+"public","procalt1","praproduto","public","produto","produto","{""termina com tabela""}",1
+"public","procalt2","praproduto","public","produto","produto","{""termina com tabela""}",1
+"public","procaltl","praproduto","public","produto","produto","{""termina com tabela""}",1
+"public","processo","fase","public","fases","fase","{""col == pk""}",1
+"public","prodcmel","crmeprod","public","prodcme","crmeprod","{""col == pk""}",1
+"public","prodmaxl","slmaxprod","public","prodmax","slmaxprod","{""col == pk""}",1
+"public","prodminl","slminprod","public","prodmin","slminprod","{""col == pk""}",1
+"public","prodpla1","ppcodpl","public","prodplan","ppcodpl","{""col == pk""}",1
+"public","prodrem1","prodrseq","public","prodrem","prodrseq","{""col == pk""}",1
+"public","prodtac1","ptaprco","public","prodtaca","ptaprco","{""col == pk""}",1
+"public","produto","clascod","public","classi","clascod","{""col == pk""}",1
+"public","produto","proean13","public","ean13","ean13cod","{""termina com tabela""}",1
+"public","produto","proenqipi","public","enqipi","enqcodigo","{""termina com tabela""}",1
+"public","produto","proplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","produto","proutrib","public","utrib","utribcod","{""termina com tabela""}",1
+"public","produto","subgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","produto","tricod","public","tribu","tricod","{""col == pk""}",1
+"public","proemble","pemprod","public","proemb","pemprod","{""col == pk""}",1
+"public","proforma","profdpais","public","pais","pais","{""termina com tabela""}",1
+"public","proforma","profidpais","public","pais","pais","{""termina com tabela""}",1
+"public","proforma","profpais","public","pais","pais","{""termina com tabela""}",1
+"public","proforpr","propclassi","public","classi","clascod","{""termina com tabela""}",1
+"public","proimag1","proimgcod","public","proimage","proimgcod","{""col == pk""}",1
+"public","projped1","prjpcodig","public","projpedi","prjpcodig","{""col == pk""}",1
+"public","projped1","prjpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","proparam","propordem","public","ordem","ordem","{""termina com tabela""}",1
+"public","proparam","propproc","public","opproc","oppcodi","{""termina com tabela""}",1
+"public","qlgrupol","qlggrupo","public","qlgrupo","qlggrupo","{""col == pk""}",1
+"public","qlregna1","qlrecod","public","qlregnao","qlrecod","{""col == pk""}",1
+"public","qlregna2","qlrecod","public","qlregnao","qlrecod","{""col == pk""}",1
+"public","qreldes1","qlredcod","public","qreldese","qlredcod","{""col == pk""}",1
+"public","rastrans","rtrproduto","public","produto","produto","{""termina com tabela""}",1
+"public","rateio1","ratccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","reclassi","rprodep","public","prodep","proddep","{""termina com tabela""}",1
+"public","redeprep","pareqcod","public","pareqd2","pareqcod","{""col == pk""}",1
+"public","redtpimt","redtppais","public","pais","pais","{""termina com tabela""}",1
+"public","regdmod","empndep","public","regdpara","empndep","{""col == pk""}",1
+"public","reginsp1","regiseq","public","reginsp","regiseq","{""col == pk""}",1
+"public","reginsp1","regiunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","regnoin1","rnocod","public","regnoin","rnocod","{""col == pk""}",1
+"public","regnoin2","rnocod","public","regnoin","rnocod","{""col == pk""}",1
+"public","regnoin3","rnocod","public","regnoin","rnocod","{""col == pk""}",1
+"public","regnoin4","rnocod","public","regnoin","rnocod","{""col == pk""}",1
+"public","regnoinl","rnocod","public","regnoin","rnocod","{""col == pk""}",1
+"public","relaite1","relpprod","public","relaitem","relpprod","{""col == pk""}",1
+"public","relbalan","ccustocde","public","ccusto","ccusto","{""começa com tabela""}",1
+"public","relbalan","ccustocor","public","ccusto","ccusto","{""começa com tabela""}",1
+"public","relbalan","planoccde","public","planoc","planoc","{""começa com tabela""}",1
+"public","relbalan","planoccor","public","planoc","planoc","{""começa com tabela""}",1
+"public","relemp1","relemcod","public","relemp","relemcod","{""col == pk""}",1
+"public","relemp2","relemcod","public","relemp","relemcod","{""col == pk""}",1
+"public","relemp3","relemcod","public","relemp","relemcod","{""col == pk""}",1
+"public","relitem1","relitcod","public","relitem","relitcod","{""col == pk""}",1
+"public","relitem2","relitcod","public","relitem","relitcod","{""col == pk""}",1
+"public","relitem3","relitcod","public","relitem","relitcod","{""col == pk""}",1
+"public","reltabre","relregiao","public","regiao","regiao","{""termina com tabela""}",1
+"public","rephrpad","fase","public","fases","fase","{""col == pk""}",1
+"public","reqcomp","rqcccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","reqcomp","rqctipoped","public","tipoped","tipoped","{""termina com tabela""}",1
+"public","reqcomp","rqcunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","reqordem","reqproduto","public","produto","produto","{""termina com tabela""}",1
+"public","reqordf1","ocofcompra","public","reqordfa","ocofcompra","{""col == pk""}",1
+"public","rgdopera","rgdopera","public","opera","operacao","{""termina com tabela""}",1
+"public","rorclev1","rorconped","public","rorc","rorcodor","{""começa com tabela""}",1
+"public","rotajust","rotadjust","public","rota","rotacod","{""começa com tabela""}",1
+"public","rotajust","rotajust","public","rota","rotacod","{""começa com tabela""}",1
+"public","scieqf1","eqfdtini","public","scieqf","eqfdtini","{""col == pk""}",1
+"public","serasa1","serdtini","public","serasa","serdtini","{""col == pk""}",1
+"public","serasa2","serdtini","public","serasa","serdtini","{""col == pk""}",1
+"public","serasa3","serdtini","public","serasa","serdtini","{""col == pk""}",1
+"public","serasa4","serdtini","public","serasa","serdtini","{""col == pk""}",1
+"public","serasa5","serdtini","public","serasa","serdtini","{""col == pk""}",1
+"public","serexp1","ssseque","public","serexp","ssseque","{""col == pk""}",1
+"public","serexp2","ssseque","public","serexp","ssseque","{""col == pk""}",1
+"public","serexp3","ssseque","public","serexp","ssseque","{""col == pk""}",1
+"public","serexp4","ssseque","public","serexp","ssseque","{""col == pk""}",1
+"public","seroper1","sertpreg","public","seropera","sertpreg","{""col == pk""}",1
+"public","sobm2pa1","sobm2codi","public","sobm2pad","sobm2codi","{""col == pk""}",1
+"public","sobm2pa2","sobm2codi","public","sobm2pad","sobm2codi","{""col == pk""}",1
+"public","soborc2","sobornume","public","soborca","sobornume","{""col == pk""}",1
+"public","soborc21","sobornume","public","soborca","sobornume","{""col == pk""}",1
+"public","soborc22","sobornume","public","soborca","sobornume","{""col == pk""}",1
+"public","sobprod1","sobprprco","public","sobprod","sobprprco","{""col == pk""}",1
+"public","softdes","stfrota","public","rota","rotacod","{""termina com tabela""}",1
+"public","subgmkpl","sgmkgrupo","public","subgmkp","sgmkgrupo","{""col == pk""}",1
+"public","subite2","subitant","public","subitem","subitant","{""col == pk""}",1
+"public","suclass","suclopera","public","opera","operacao","{""termina com tabela""}",1
+"public","sugcfop","sugestado","public","estado","estado","{""termina com tabela""}",1
+"public","sugcfop","sugproduto","public","produto","produto","{""termina com tabela""}",1
+"public","sugcfop","sugtipoorc","public","tipoorc","tpocodi","{""termina com tabela""}",1
+"public","sugcfop","sugtipoped","public","tipoped","tipoped","{""termina com tabela""}",1
+"public","sugimpo","simestado","public","estado","estado","{""termina com tabela""}",1
+"public","sugimpo","simgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","sugimpo","simopera","public","opera","operacao","{""termina com tabela""}",1
+"public","suimpos","suienqipi","public","enqipi","enqcodigo","{""termina com tabela""}",1
+"public","suimpos","suiestado","public","estado","estado","{""termina com tabela""}",1
+"public","suimpos","suigrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","suimpos","suiobserva","public","observa","observa","{""termina com tabela""}",1
+"public","tabprven","ttpvcod","public","tptabprv","ttpvcod","{""col == pk""}",1
+"public","tabvclil","tvcempc","public","tabvcli","tvcempc","{""col == pk""}",1
+"public","tagscon1","tcvpdnfse","public","tagsconv","tcvpdnfse","{""col == pk""}",1
+"public","tagsxmll","txmpdnfse","public","tagsxml","txmpdnfse","{""col == pk""}",1
+"public","tbcoforl","tbcoffor","public","tbcofor","tbcoffor","{""col == pk""}",1
+"public","tbcolayl","tbclycod","public","tbcolay","tbclycod","{""col == pk""}",1
+"public","tbcompro","tbcpcod","public","tbcompr1","tbcpcod","{""col == pk""}",1
+"public","teftra","tefcartao","public","cartao","cartcodi","{""termina com tabela""}",1
+"public","tiasscf1","tiasscod","public","tiasscfo","tiasscod","{""col == pk""}",1
+"public","tinspte1","tinscod","public","tinsptec","tinscod","{""col == pk""}",1
+"public","tipcfop1","tipccodigo","public","tipcfop","tipccodigo","{""col == pk""}",1
+"public","tipocfo1","tipoccod","public","tipocfop","tipoccod","{""col == pk""}",1
+"public","titbanco","intbanco","public","banco","banco","{""termina com tabela""}",1
+"public","titctbde","tctbccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","titctbde","tctbplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","titmult","controle","public","doctos","controle","{""col == pk""}",1
+"public","titulos","controle","public","doctos","controle","{""col == pk""}",1
+"public","titulos","titbanco","public","banco","banco","{""termina com tabela""}",1
+"public","tmptpins","tmpinsttip","public","insttip","insttip","{""termina com tabela""}",1
+"public","toqcompr","tcpcompra","public","compra","compra","{""termina com tabela""}",1
+"public","toqcompr","tcpproduto","public","produto","produto","{""termina com tabela""}",1
+"public","toqmovi","pricompra","public","compra","compra","{""termina com tabela""}",1
+"public","toqmovi","prienqipi","public","enqipi","enqcodigo","{""termina com tabela""}",1
+"public","toqmovi","priordem","public","ordem","ordem","{""termina com tabela""}",1
+"public","toqmovi","priproduto","public","produto","produto","{""termina com tabela""}",1
+"public","toqmovi","priunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","tpcfop1","tpcfcod","public","tpcfop","tpcfcod","{""col == pk""}",1
+"public","tptabpr1","ttpvcod","public","tptabprv","ttpvcod","{""col == pk""}",1
+"public","tptrel","tptorigem","public","tptori","ttocodigo","{""começa com tabela""}",1
+"public","trmater1","trmcodigo","public","trmateri","trmcodigo","{""col == pk""}",1
+"public","trmater1","trmproduto","public","produto","produto","{""termina com tabela""}",1
+"public","umaltti1","umtabanco","public","banco","banco","{""termina com tabela""}",1
+"public","umaltti1","umtausuari","public","umalttit","umtausuari","{""col == pk""}",1
+"public","umanage1","umanusuari","public","umanager","umanusuari","{""col == pk""}",1
+"public","umanage2","umanusuari","public","umanager","umanusuari","{""col == pk""}",1
+"public","umapphor","umpoopera","public","opera","operacao","{""termina com tabela""}",1
+"public","umasste1","umastec","public","umasstec","umastec","{""col == pk""}",1
+"public","umbalan","umblccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","umbalan","umblplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umcbdiau","umdxopera","public","opera","operacao","{""termina com tabela""}",1
+"public","umccusto","umccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","umcheque","umchbanco","public","banco","banco","{""termina com tabela""}",1
+"public","umcheque","umchmotivo","public","motivo","motivo","{""termina com tabela""}",1
+"public","umcidre1","umcidrusu","public","umcidreg","umcidrusu","{""col == pk""}",1
+"public","umcomven","umcopedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","umcota","umcorgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","umcota","umcotopera","public","opera","operacao","{""termina com tabela""}",1
+"public","umctabc","ucaclassi","public","classi","clascod","{""termina com tabela""}",1
+"public","umctearq","umctrota","public","rota","rotacod","{""termina com tabela""}",1
+"public","umctere1","umcterusu","public","umcteref","umcterusu","{""col == pk""}",1
+"public","umdeposi","umdeposito","public","deposito","deposito","{""termina com tabela""}",1
+"public","umdespa1","umusudespa","public","umdespat","umusudespa","{""col == pk""}",1
+"public","umdevol2","umdeusuari","public","umdevolu","umdeusuari","{""col == pk""}",1
+"public","umdevol3","umdeusuari","public","umdevolu","umdeusuari","{""col == pk""}",1
+"public","umdiapc","umdpccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","umdiapc","umdpplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umdipi1","umdiusua","public","umdipi","umdiusua","{""col == pk""}",1
+"public","umdivlot","umdlbanco","public","banco","banco","{""termina com tabela""}",1
+"public","umdivlot","umdlopera","public","opera","operacao","{""termina com tabela""}",1
+"public","umdupde1","umddccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","umdupde1","umddplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umdupde1","umddusuari","public","umdupdes","umddusuari","{""col == pk""}",1
+"public","umdupdes","umddbanco","public","banco","banco","{""termina com tabela""}",1
+"public","umes0200","umespedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","umexbco","umexbanco","public","banco","banco","{""termina com tabela""}",1
+"public","umfatur","umfaopera","public","opera","operacao","{""termina com tabela""}",1
+"public","umfientr","umfeiopera","public","opera","operacao","{""termina com tabela""}",1
+"public","umfluxo","umbanco","public","banco","banco","{""termina com tabela""}",1
+"public","umhisvnd","umhipedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","umitcot1","umitest","public","umitcot","umitest","{""col == pk""}",1
+"public","umiteco1","umcjusua","public","umitecon","umcjusua","{""col == pk""}",1
+"public","umlacmu1","umlmccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","umlacmu1","umlmusuari","public","umlacmul","umlmusuari","{""col == pk""}",1
+"public","umlacmu2","umlmbanco","public","banco","banco","{""termina com tabela""}",1
+"public","umlacmu2","umlmusuari","public","umlacmul","umlmusuari","{""col == pk""}",1
+"public","umlacmu3","umlmusuari","public","umlacmul","umlmusuari","{""col == pk""}",1
+"public","umlacmu4","umlmusuari","public","umlacmul","umlmusuari","{""col == pk""}",1
+"public","umlacmul","umlmobanco","public","banco","banco","{""termina com tabela""}",1
+"public","umlanca","umlplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umlypro","umlygrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","umlypro","umlyordem","public","ordem","ordem","{""termina com tabela""}",1
+"public","ummargem","ummgunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","ummps","ummpgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","ummvorco","ummopera","public","opera","operacao","{""termina com tabela""}",1
+"public","umnfco3l","umncusuari","public","umnfcom1","umncusuari","{""col == pk""}",1
+"public","umnfcom1","umncestado","public","estado","estado","{""termina com tabela""}",1
+"public","umnfcom2","umncbanco","public","banco","banco","{""termina com tabela""}",1
+"public","umnfcom2","umncusuari","public","umnfcom1","umncusuari","{""col == pk""}",1
+"public","umnfcomp","umncccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","umnfcomp","umncordem","public","ordem","ordem","{""termina com tabela""}",1
+"public","umnfcomp","umncpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","umnfcomp","umncplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umnfcomp","umnctransa","public","transa","transacao","{""termina com tabela""}",1
+"public","umnfcomp","umncusuari","public","umnfcom1","umncusuari","{""col == pk""}",1
+"public","umnfoti","umotgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","umnfoti","umotpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","umpatinv","umpiccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","umpatinv","umpielemen","public","elemen","elemen","{""termina com tabela""}",1
+"public","umpatinv","umpigrele","public","grele","grele","{""termina com tabela""}",1
+"public","umpatinv","umpiplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umpatsug","umpsgrele","public","grele","grele","{""termina com tabela""}",1
+"public","umpatsug","umpsplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umpedfat","umpeccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","umpedfat","umpeplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umpedfat","umpeunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","umpedfut","umpfuopera","public","opera","operacao","{""termina com tabela""}",1
+"public","umplanoc","umplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umpprod1","umpppedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","umpprodu","umppgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","umpprodu","umpppedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","umpretab","umpregrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","umproca1","umpaopera","public","opera","operacao","{""termina com tabela""}",1
+"public","umprtipo","umprtipo","public","prtipo","prtipo","{""termina com tabela""}",1
+"public","umpsimu1","umpsusu","public","umpsimu","umpsusu","{""col == pk""}",1
+"public","umrazpc","umrcplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umrazpc","umrpccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","umrazufi","umruccusto","public","ccusto","ccusto","{""termina com tabela""}",1
+"public","umrazufi","umruplanoc","public","planoc","planoc","{""termina com tabela""}",1
+"public","umrecban","umrbbanco","public","banco","banco","{""termina com tabela""}",1
+"public","umrecmul","umlmusuari","public","umlacmul","umlmusuari","{""col == pk""}",1
+"public","umrelve1","umrvpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","umrelven","umrvpedido","public","pedido","pedido","{""termina com tabela""}",1
+"public","umrequis","umreqgrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","umsaldo","umsempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","umsaldo","umsproduto","public","produto","produto","{""termina com tabela""}",1
+"public","umsipdvo","umsigrupo","public","grupo","grupo","{""termina com tabela""}",1
+"public","umteflev","umtebanco","public","banco","banco","{""termina com tabela""}",1
+"public","umtitul1","umttbanco","public","banco","banco","{""termina com tabela""}",1
+"public","umtitul1","umttusuari","public","umtitulo","umttusuari","{""col == pk""}",1
+"public","umtotuf","umufestado","public","estado","estado","{""termina com tabela""}",1
+"public","umufins1","umufiusuar","public","umufinse","umufiusuar","{""col == pk""}",1
+"public","umultcmp","umulunimed","public","unimed","unimedida","{""termina com tabela""}",1
+"public","usucadp1","pcadppar","public","usucadpa","pcadppar","{""col == pk""}",1
+"public","usucril1","usucriseq","public","usucrili","usucriseq","{""col == pk""}",1
+"public","usulibre","pareqcod","public","pareqd2","pareqcod","{""col == pk""}",1
+"public","vendedo1","vnbbanco","public","banco","banco","{""termina com tabela""}",1
+"public","vendedor","abrcod","public","abrange","abrcod","{""col == pk""}",1
+"public","vendedor","vendbanco","public","banco","banco","{""termina com tabela""}",1
+"public","viagem","viaveiculo","public","veiculo","veiplaca","{""termina com tabela""}",1
+"public","viagem1","vianro","public","viagem","vianro","{""col == pk""}",1
+"public","visita","viscidade","public","cidade","cidade","{""termina com tabela""}",1
+"public","visita","visestado","public","estado","estado","{""termina com tabela""}",1
+"public","visita1","visnumero","public","visita","visnumero","{""col == pk""}",1
+"public","vlrante","vlacompra","public","compra","compra","{""termina com tabela""}",1
+"public","vlrante","vlaempresa","public","empresa","empresa","{""termina com tabela""}",1
+"public","vlrante","vlapedido","public","pedido","pedido","{""termina com tabela""}",1
