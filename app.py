@@ -3220,10 +3220,12 @@ def fetch_order_details(pedido_code):
                     ELSE ''
                 END AS estado,
                 COALESCE(pl.production_lots_display, '') AS production_lots_display,
-                {load_lot_select}
+                {load_lot_select},
+                COALESCE(rc.rgcdes, '') AS rgcdes
             FROM pedido p
             LEFT JOIN empresa e ON p.pedcliente = e.empresa
             LEFT JOIN cidade c ON p.pedentcid = c.cidade
+            LEFT JOIN regcar rc ON c.rgccicod = rc.rgccod
             LEFT JOIN production_lots pl ON pl.pedido = CAST(p.pedido AS TEXT)
             {load_lot_join}
             WHERE CAST(p.pedido AS TEXT) = %s
@@ -3245,6 +3247,7 @@ def fetch_order_details(pedido_code):
             production_lots_display,
             load_lot_code,
             load_lot_description,
+            rgcdes,
         ) = header_row
 
         header_data = {
@@ -3267,6 +3270,8 @@ def fetch_order_details(pedido_code):
             if load_lot_description:
                 load_lot_str = f"{load_lot_str} - {load_lot_description}"
             header_data['lote_carga'] = load_lot_str
+
+        regcar_data = parse_regcar_description(rgcdes)
 
         details = {'header': header_data, 'items': []}
 
@@ -3348,6 +3353,7 @@ def fetch_order_details(pedido_code):
                 {codigo_produto_select},
                 {sequencia_expr} AS sequencia,
                 COALESCE(prod.pronome::text, '') AS produto_nome,
+                COALESCE(g.grunome::text, '') AS grupo_nome,
                 {quantidade_total_expr},
                 {valor_tabela_expr},
                 {percentual_desconto_expr},
@@ -3357,9 +3363,10 @@ def fetch_order_details(pedido_code):
                 {desconto_pedido_expr}
             FROM pedprodu pp
             LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+            LEFT JOIN grupo g ON g.grupo = prod.grupo
             {projmovi_join}
             WHERE CAST(pp.pedido AS TEXT) = %s
-            GROUP BY pp.pprproduto, pp.pprseq, prod.pronome
+            GROUP BY pp.pprproduto, pp.pprseq, prod.pronome, g.grunome
             ORDER BY pp.pprseq, pp.pprproduto
             """
 
@@ -3372,6 +3379,7 @@ def fetch_order_details(pedido_code):
                 codigo_produto,
                 sequencia,
                 produto_nome,
+                grupo_nome,
                 quantidade_total_raw,
                 valor_tabela_raw,
                 percentual_desc_raw,
@@ -3418,6 +3426,17 @@ def fetch_order_details(pedido_code):
 
             valor_total = valor_bruto - desconto_pedido
 
+            product_line = get_product_line(grupo_nome)
+            product_ref = (produto_nome or '')[:2].upper()
+            freight_fraction = calculate_freight_percentage(
+                product_line, product_ref, regcar_data
+            )
+            if not isinstance(freight_fraction, (int, float)):
+                freight_fraction = 0.0
+
+            percentual_frete = freight_fraction * 100.0
+            valor_frete = valor_total * freight_fraction
+
             details['items'].append(
                 {
                     'codigo_produto': codigo_produto,
@@ -3428,8 +3447,8 @@ def fetch_order_details(pedido_code):
                     'percentual_desconto': percentual_desc,
                     'valor_unitario_total': valor_unitario_total,
                     'valor_ipi': valor_ipi,
-                    'percentual_frete': 0.0,
-                    'valor_frete': 0.0,
+                    'percentual_frete': percentual_frete,
+                    'valor_frete': valor_frete,
                     'valor_total': valor_total,
                 }
             )
@@ -3443,6 +3462,287 @@ def fetch_order_details(pedido_code):
             conn.close()
 
 
+def fetch_order_logistics_details(pedido_code):
+    """
+    Recupera os detalhes logísticos (reservado, separado e carregado) de um pedido específico.
+    Retorna uma tupla (dados, erro), em que erro é um dicionário com 'message' e 'status'.
+    """
+    pedido_value = (pedido_code or '').strip()
+    if not pedido_value:
+        return None, {'message': 'Pedido inválido.', 'status': 400}
+
+    conn = get_erp_db_connection()
+    if not conn:
+        return None, {'message': 'Não foi possível conectar ao banco de dados do ERP.', 'status': 500}
+
+    has_lcapecod_column = False
+    column_check_cursor = None
+
+    try:
+        column_check_cursor = conn.cursor()
+        column_check_cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'pedido'
+                  AND column_name = 'lcapecod'
+            )
+            """
+        )
+        result = column_check_cursor.fetchone()
+        if result:
+            has_lcapecod_column = bool(result[0])
+    except Error as e:
+        print(f"Erro ao verificar a coluna 'lcapecod' na tabela 'pedido' (detalhes logísticos): {e}")
+    finally:
+        if column_check_cursor:
+            column_check_cursor.close()
+
+    column_check_cursor = None
+    sequence_column_name = None
+    has_prjmproex_column = False
+
+    try:
+        column_check_cursor = conn.cursor()
+        column_check_cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'projmovi'
+            """
+        )
+        projmovi_columns = {
+            (row[0] or '').lower()
+            for row in column_check_cursor.fetchall()
+            if row and row[0]
+        }
+        has_prjmproex_column = 'prjmproex' in projmovi_columns if projmovi_columns is not None else False
+        if projmovi_columns:
+            if 'prjmpedse' in projmovi_columns:
+                sequence_column_name = 'prjmpedse'
+            elif 'prjmseque' in projmovi_columns:
+                sequence_column_name = 'prjmseque'
+    except Error as e:
+        print(f"Erro ao verificar colunas da tabela 'projmovi' (detalhes logísticos): {e}")
+    finally:
+        if column_check_cursor:
+            column_check_cursor.close()
+
+    try:
+        cur = conn.cursor()
+
+        load_lot_select = (
+            "CAST(p.lcapecod AS TEXT) AS load_lot_code,\n                COALESCE(lc.lcades, '') AS load_lot_description"
+            if has_lcapecod_column
+            else "NULL AS load_lot_code,\n                '' AS load_lot_description"
+        )
+        load_lot_join = "LEFT JOIN lotecar lc ON p.lcapecod = lc.lcacod" if has_lcapecod_column else ""
+
+        header_query = f"""
+            WITH production_lots AS (
+                SELECT
+                    CAST(lots.pedido AS TEXT) AS pedido,
+                    STRING_AGG(lots.lot_display, '; ' ORDER BY lots.lot_display) AS production_lots_display
+                FROM (
+                    SELECT DISTINCT
+                        ao.acaopedi AS pedido,
+                        CASE
+                            WHEN COALESCE(lp.lotcod::text, '') <> '' THEN
+                                lp.lotcod::text ||
+                                CASE
+                                    WHEN COALESCE(lp.lotdes, '') <> '' THEN ' - ' || lp.lotdes
+                                    ELSE ''
+                                END
+                            ELSE ''
+                        END AS lot_display
+                    FROM acaorde2 ao
+                    JOIN ordem o ON o.ordem = ao.acaoorde
+                    LEFT JOIN loteprod lp ON lp.lotcod = o.lotcod
+                    WHERE CAST(ao.acaopedi AS TEXT) = %s
+                ) lots
+                WHERE lots.lot_display <> ''
+                GROUP BY lots.pedido
+            )
+            SELECT
+                CAST(p.pedido AS TEXT) AS pedido,
+                p.peddata,
+                COALESCE(e.empnome, '') AS cliente,
+                CASE
+                    WHEN COALESCE(c.cidnome, '') <> '' THEN c.cidnome
+                    WHEN COALESCE(p.pedentcid::text, '') <> '' THEN p.pedentcid::text
+                    ELSE ''
+                END AS cidade,
+                CASE
+                    WHEN COALESCE(c.estado, '') <> '' THEN c.estado
+                    WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text
+                    ELSE ''
+                END AS estado,
+                COALESCE(pl.production_lots_display, '') AS production_lots_display,
+                {load_lot_select},
+                COALESCE(rc.rgcdes, '') AS rgcdes
+            FROM pedido p
+            LEFT JOIN empresa e ON p.pedcliente = e.empresa
+            LEFT JOIN cidade c ON p.pedentcid = c.cidade
+            LEFT JOIN regcar rc ON c.rgccicod = rc.rgccod
+            LEFT JOIN production_lots pl ON pl.pedido = CAST(p.pedido AS TEXT)
+            {load_lot_join}
+            WHERE CAST(p.pedido AS TEXT) = %s
+        """
+
+        cur.execute(header_query, (pedido_value, pedido_value))
+        header_row = cur.fetchone()
+        cur.close()
+
+        if not header_row:
+            return None, {'message': 'Pedido não encontrado.', 'status': 404}
+
+        (
+            pedido,
+            peddata,
+            cliente,
+            cidade,
+            estado,
+            production_lots_display,
+            load_lot_code,
+            load_lot_description,
+            rgcdes,
+        ) = header_row
+
+        header_data = {
+            'pedido': pedido or '',
+            'cliente': cliente or '',
+            'cidade': cidade or '',
+            'uf': estado or '',
+            'data_pedido': '',
+            'lote_producao': production_lots_display or '',
+            'lote_carga': '',
+        }
+
+        if isinstance(peddata, (datetime.date, datetime.datetime)):
+            header_data['data_pedido'] = peddata.strftime('%d/%m/%Y')
+        elif peddata:
+            header_data['data_pedido'] = str(peddata)
+
+        if load_lot_code:
+            load_lot_str = str(load_lot_code)
+            if load_lot_description:
+                load_lot_str = f"{load_lot_str} - {load_lot_description}"
+            header_data['lote_carga'] = load_lot_str
+
+        details = {'header': header_data, 'items': []}
+
+        sequence_select = "'' AS sequencia,"
+        sequence_group_clause = ''
+        sequence_join_condition = ''
+
+        if sequence_column_name:
+            sequence_select = f"COALESCE(pm.{sequence_column_name}::text, '') AS sequencia,"
+            sequence_group_clause = f", COALESCE(pm.{sequence_column_name}::text, '')"
+            sequence_join_condition = "AND log.sequencia = ped.sequencia"
+
+        codigo_produto_expr = (
+            "MAX(COALESCE(pm.prjmproex::text, '')) AS codigo_produto_externo,"
+            if has_prjmproex_column
+            else "'' AS codigo_produto_externo,"
+        )
+
+        items_query = f"""
+            WITH ped_items AS (
+                SELECT
+                    CAST(pp.pedido AS TEXT) AS pedido,
+                    COALESCE(pp.pprseq::text, '') AS sequencia,
+                    COALESCE(pp.pprproduto::text, '') AS codigo_produto,
+                    COALESCE(prod.pronome::text, '') AS produto_nome
+                FROM pedprodu pp
+                LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+                WHERE CAST(pp.pedido AS TEXT) = %s
+            ),
+            logistics AS (
+                SELECT
+                    CAST(pm.prjmpedid AS TEXT) AS pedido,
+                    {sequence_select}
+                    {codigo_produto_expr}
+                    SUM(CASE WHEN pm.prjmovtip = 'R' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS reservado,
+                    SUM(CASE WHEN pm.prjmovtip = 'P' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS separado,
+                    SUM(CASE WHEN pm.prjmovtip = 'C' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS carregado
+                FROM projmovi pm
+                WHERE CAST(pm.prjmpedid AS TEXT) = %s
+                GROUP BY CAST(pm.prjmpedid AS TEXT){sequence_group_clause}
+            )
+            SELECT
+                COALESCE(NULLIF(log.codigo_produto_externo, ''), ped.codigo_produto) AS codigo_produto,
+                COALESCE(log.sequencia, ped.sequencia, '') AS sequencia,
+                COALESCE(ped.produto_nome, '') AS produto_nome,
+                COALESCE(log.reservado, 0) AS reservado,
+                COALESCE(log.separado, 0) AS separado,
+                COALESCE(log.carregado, 0) AS carregado
+            FROM ped_items ped
+            FULL OUTER JOIN logistics log
+                ON log.pedido = ped.pedido
+                {sequence_join_condition}
+            WHERE COALESCE(log.pedido, ped.pedido) = %s
+            ORDER BY
+                CASE
+                    WHEN COALESCE(log.sequencia, ped.sequencia, '') ~ '^[0-9]+$' THEN
+                        LPAD(COALESCE(log.sequencia, ped.sequencia, ''), 10, '0')
+                    ELSE
+                        COALESCE(log.sequencia, ped.sequencia, '')
+                END,
+                COALESCE(NULLIF(log.codigo_produto_externo, ''), ped.codigo_produto)
+        """
+
+        items_cur = conn.cursor()
+        items_cur.execute(items_query, (pedido_value, pedido_value, pedido_value))
+        item_rows = items_cur.fetchall()
+        items_cur.close()
+
+        for item_row in item_rows:
+            (
+                codigo_produto,
+                sequencia,
+                produto_nome,
+                reservado_raw,
+                separado_raw,
+                carregado_raw,
+            ) = item_row
+
+            try:
+                reservado = float(reservado_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                reservado = 0.0
+
+            try:
+                separado = float(separado_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                separado = 0.0
+
+            try:
+                carregado = float(carregado_raw or 0)
+            except (TypeError, ValueError, InvalidOperation):
+                carregado = 0.0
+
+            details['items'].append(
+                {
+                    'codigo_produto': codigo_produto or '',
+                    'sequencia': sequencia or '',
+                    'produto': produto_nome or '',
+                    'reservado': reservado,
+                    'separado': separado,
+                    'carregado': carregado,
+                    'kpi_status': calculate_order_kpi(reservado, separado, carregado),
+                }
+            )
+
+        return details, None
+    except Error as e:
+        print(f"Erro ao carregar detalhes logísticos do pedido {pedido_value}: {e}")
+        return None, {'message': 'Erro ao carregar detalhes logísticos do pedido.', 'status': 500}
+    finally:
+        if conn:
+            conn.close()
+
+
 @app.route('/orders/<path:pedido>/details')
 @login_required
 def order_details(pedido):
@@ -3450,6 +3750,16 @@ def order_details(pedido):
     if error:
         status_code = error.get('status', 500)
         return jsonify({'error': error.get('message', 'Erro ao carregar detalhes do pedido.')}), status_code
+    return jsonify(details)
+
+
+@app.route('/orders/<path:pedido>/logistics-details')
+@login_required
+def order_logistics_details(pedido):
+    details, error = fetch_order_logistics_details(pedido)
+    if error:
+        status_code = error.get('status', 500)
+        return jsonify({'error': error.get('message', 'Erro ao carregar detalhes logísticos do pedido.')}), status_code
     return jsonify(details)
 
 
