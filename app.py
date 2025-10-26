@@ -496,6 +496,33 @@ def get_distinct_load_lots():
                 conn.close()
     return load_lots
 
+def get_table_columns(conn, table_name):
+    """Retorna o conjunto de colunas disponíveis para a tabela informada."""
+    columns = set()
+    if not conn:
+        return columns
+
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = %s
+            """,
+            (table_name,)
+        )
+        columns = {
+            (row[0] or '').lower()
+            for row in cur.fetchall()
+            if row and row[0]
+        }
+        cur.close()
+    except Error as e:
+        print(f"Erro ao buscar colunas da tabela '{table_name}': {e}")
+
+    return columns
+
 def get_distinct_vendors():
     """Busca todos os vendedores distintos e seus status presentes no ERP."""
     conn = get_erp_db_connection()
@@ -550,6 +577,218 @@ def get_sales_order_vendors():
         finally:
             conn.close()
     return vendor_options
+
+def fetch_load_lots_summary(start_date=None, end_date=None):
+    """Busca as informacoes agregadas dos lotes de carga, aplicando filtros opcionais de data."""
+    load_lots = []
+    error_message = None
+    conn = get_erp_db_connection()
+
+    if not conn:
+        return load_lots, "Nao foi possivel conectar ao banco de dados do ERP."
+
+    try:
+        pedprodu_columns = get_table_columns(conn, 'pedprodu')
+        has_pprdescped = 'pprdescped' in pedprodu_columns if pedprodu_columns is not None else False
+        desconto_expr = (
+            "SUM(COALESCE(pp.pprdescped, 0)) AS desconto_total"
+            if has_pprdescped else
+            "0 AS desconto_total"
+        )
+
+        date_filters = []
+        params = []
+        if start_date:
+            date_filters.append("lc.lcaprev >= %s")
+            params.append(start_date)
+        if end_date:
+            date_filters.append("lc.lcaprev <= %s")
+            params.append(end_date)
+
+        where_clause = f"WHERE {' AND '.join(date_filters)}" if date_filters else ''
+
+        cur = conn.cursor()
+        query = f"""
+            WITH lot_items AS (
+                SELECT
+                    CAST(p.lcapecod AS TEXT) AS lot_code,
+                    SUM(COALESCE(pp.pprquanti, 0)) AS quantidade_total,
+                    SUM(COALESCE(pp.pprvlsoma, 0)) AS valor_bruto_total,
+                    {desconto_expr}
+                FROM pedido p
+                JOIN pedprodu pp ON pp.pedido = p.pedido
+                WHERE p.lcapecod IS NOT NULL
+                GROUP BY CAST(p.lcapecod AS TEXT)
+            )
+            SELECT
+                CAST(lc.lcacod AS TEXT) AS lot_code,
+                COALESCE(lc.lcades, '') AS description,
+                lc.lcaprev,
+                COALESCE(lc.lcam3, 0) AS total_m3,
+                COALESCE(li.quantidade_total, 0) AS quantidade_total,
+                COALESCE(li.valor_bruto_total, 0) - COALESCE(li.desconto_total, 0) AS valor_total
+            FROM lotecar lc
+            LEFT JOIN lot_items li ON li.lot_code = CAST(lc.lcacod AS TEXT)
+            {where_clause}
+            ORDER BY COALESCE(lc.lcaprev, '1900-01-01') DESC, CAST(lc.lcacod AS TEXT) DESC
+        """
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+        cur.close()
+
+        for row in rows:
+            load_lots.append(
+                {
+                    'codigo': row[0] or '',
+                    'descricao': (row[1] or '').strip(),
+                    'previsao': row[2],
+                    'total_m3': float(row[3] or 0),
+                    'quantidade_total': float(row[4] or 0),
+                    'valor_total': float(row[5] or 0),
+                }
+            )
+    except Error as e:
+        error_message = f"Erro ao buscar lotes de carga: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+    return load_lots, error_message
+
+def fetch_load_lot_orders(load_lot_code):
+    """Lista os pedidos associados a um lote de carga."""
+    orders = []
+    lot_info = None
+    error_message = None
+
+    if not load_lot_code:
+        return orders, lot_info, error_message
+
+    conn = get_erp_db_connection()
+    if not conn:
+        return orders, lot_info, "Nao foi possivel conectar ao banco de dados do ERP."
+
+    try:
+        pedprodu_columns = get_table_columns(conn, 'pedprodu')
+        cidade_columns = get_table_columns(conn, 'cidade')
+        has_pprdescped = 'pprdescped' in pedprodu_columns if pedprodu_columns is not None else False
+        desconto_expr = (
+            "SUM(COALESCE(pp.pprdescped, 0)) AS desconto_total"
+            if has_pprdescped else
+            "0 AS desconto_total"
+        )
+        latitude_column = None
+        longitude_column = None
+        if cidade_columns:
+            for candidate in ('cidlatitude', 'latitude', 'cidlat', 'latitude_gps'):
+                if candidate in cidade_columns:
+                    latitude_column = candidate
+                    break
+            for candidate in ('cidlongitude', 'longitude', 'cidlong', 'longitude_gps'):
+                if candidate in cidade_columns:
+                    longitude_column = candidate
+                    break
+
+        latitude_select = f"COALESCE(c.{latitude_column}, 0) AS cidade_latitude," if latitude_column else "NULL AS cidade_latitude,"
+        longitude_select = f"COALESCE(c.{longitude_column}, 0) AS cidade_longitude," if longitude_column else "NULL AS cidade_longitude,"
+
+        cur = conn.cursor()
+        query = f"""
+            WITH order_items AS (
+                SELECT
+                    pedido,
+                    SUM(COALESCE(pprquanti, 0)) AS quantidade_total,
+                    SUM(COALESCE(pprvlsoma, 0)) AS valor_bruto_total,
+                    {desconto_expr}
+                FROM pedprodu
+                GROUP BY pedido
+            ),
+            lot_totals AS (
+                SELECT
+                    CAST(p.lcapecod AS TEXT) AS lot_code,
+                    SUM(COALESCE(pp.pprquanti, 0)) AS quantidade_total
+                FROM pedido p
+                JOIN pedprodu pp ON pp.pedido = p.pedido
+                WHERE p.lcapecod IS NOT NULL
+                GROUP BY CAST(p.lcapecod AS TEXT)
+            )
+            SELECT
+                CAST(p.pedido AS TEXT) AS pedido,
+                COALESCE(p.lcaseque::text, '') AS sequencia,
+                COALESCE(e.empnome, '') AS cliente,
+                COALESCE(c.cidnome, '') AS cidade,
+                COALESCE(
+                    NULLIF(TRIM(c.estado), ''),
+                    NULLIF(TRIM(p.pedentuf::text), '')
+                ) AS estado,
+                {latitude_select}
+                {longitude_select}
+                COALESCE(oi.quantidade_total, 0) AS quantidade_total,
+                CASE
+                    WHEN COALESCE(lt.quantidade_total, 0) > 0 THEN
+                        (COALESCE(oi.quantidade_total, 0) / lt.quantidade_total) * COALESCE(lc.lcam3, 0)
+                    ELSE 0
+                END AS total_m3,
+                COALESCE(oi.valor_bruto_total, 0) - COALESCE(oi.desconto_total, 0) AS valor_total
+            FROM pedido p
+            LEFT JOIN order_items oi ON oi.pedido = p.pedido
+            LEFT JOIN empresa e ON e.empresa = p.pedcliente
+            LEFT JOIN cidade c ON c.cidade = p.pedentcid
+            LEFT JOIN lotecar lc ON lc.lcacod = p.lcapecod
+            LEFT JOIN lot_totals lt ON lt.lot_code = CAST(p.lcapecod AS TEXT)
+            WHERE CAST(p.lcapecod AS TEXT) = %s
+            ORDER BY p.pedido DESC
+        """
+        cur.execute(query, (load_lot_code,))
+        rows = cur.fetchall()
+        cur.close()
+
+        for row in rows:
+            orders.append(
+                {
+                    'pedido': row[0],
+                    'sequencia': row[1],
+                    'cliente': row[2],
+                    'quantidade_total': float(row[7] or 0),
+                    'total_m3': float(row[8] or 0),
+                    'valor_total': float(row[9] or 0),
+                    'cidade': (row[3] or '').strip(),
+                    'estado': (row[4] or '').strip(),
+                    'latitude': float(row[5]) if row[5] not in (None, '') else None,
+                    'longitude': float(row[6]) if row[6] not in (None, '') else None,
+                }
+            )
+
+        info_cur = conn.cursor()
+        info_cur.execute(
+            """
+            SELECT
+                CAST(lcacod AS TEXT) AS codigo,
+                COALESCE(lcades, '') AS descricao,
+                lcaprev,
+                COALESCE(lcam3, 0) AS total_m3
+            FROM lotecar
+            WHERE CAST(lcacod AS TEXT) = %s
+            """,
+            (load_lot_code,)
+        )
+        info_row = info_cur.fetchone()
+        info_cur.close()
+
+        if info_row:
+            lot_info = {
+                'codigo': info_row[0],
+                'descricao': (info_row[1] or '').strip(),
+                'previsao': info_row[2],
+                'total_m3': float(info_row[3] or 0),
+            }
+    except Error as e:
+        error_message = f"Erro ao buscar pedidos do lote {load_lot_code}: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+    return orders, lot_info, error_message
 
 def get_distinct_occurrences():
     """
@@ -1657,8 +1896,6 @@ def calculate_freight_percentage(product_line, product_ref, regcar_parsed_data):
 
     product_ref_upper = product_ref.upper() if product_ref else ""
 
-    print(f"Calculating freight: Line='{product_line}', Ref='{product_ref_upper}', RegcarData={regcar_parsed_data}") # DEBUG
-
     if product_line == "MADRESILVA":
         return regcar_parsed_data.get('M', 0.0)
     elif product_line == "PETRA":
@@ -1672,7 +1909,6 @@ def calculate_freight_percentage(product_line, product_ref, regcar_parsed_data):
             return regcar_parsed_data.get('G', 0.0)
         elif product_ref_upper in ["PF", "PT", "AL", "MA", "MC"]:
             return regcar_parsed_data.get('#', 0.0)
-    print(f"No matching freight rule, returning 0.0") # DEBUG
     return 0.0 # Default if no condition matches
 
 def calculate_invoice_freight(controle):
@@ -3066,19 +3302,11 @@ def fetch_sales_orders(filters):
     return orders, error_message
 
 
-def fetch_order_details(pedido_code):
+def get_order_header_data(conn, pedido_value):
     """
-    Recupera os detalhes de um pedido específico (cabeçalho e itens) a partir do ERP.
-    Retorna uma tupla (dados, erro), em que erro é um dicionário com 'message' e 'status'.
+    Shared helper that retrieves the header information for order detail pop-ups.
+    Returns (header_dict, error_dict).
     """
-    pedido_value = (pedido_code or '').strip()
-    if not pedido_value:
-        return None, {'message': 'Pedido inválido.', 'status': 400}
-
-    conn = get_erp_db_connection()
-    if not conn:
-        return None, {'message': 'Não foi possível conectar ao banco de dados do ERP.', 'status': 500}
-
     has_lcapecod_column = False
     column_check_cursor = None
 
@@ -3103,7 +3331,140 @@ def fetch_order_details(pedido_code):
         if column_check_cursor:
             column_check_cursor.close()
 
+    cur = None
+    load_lot_select = (
+        "CAST(p.lcapecod AS TEXT) AS load_lot_code,\n                COALESCE(lc.lcades, '') AS load_lot_description"
+        if has_lcapecod_column
+        else "NULL AS load_lot_code,\n                '' AS load_lot_description"
+    )
+    load_lot_join = "LEFT JOIN lotecar lc ON p.lcapecod = lc.lcacod" if has_lcapecod_column else ""
+    header_query = f"""
+        WITH production_lots AS (
+            SELECT
+                CAST(lots.pedido AS TEXT) AS pedido,
+                STRING_AGG(lots.lot_display, '; ' ORDER BY lots.lot_display) AS production_lots_display
+            FROM (
+                SELECT DISTINCT
+                    ao.acaopedi AS pedido,
+                    CASE
+                        WHEN COALESCE(lp.lotcod::text, '') <> '' THEN
+                            lp.lotcod::text ||
+                            CASE
+                                WHEN COALESCE(lp.lotdes, '') <> '' THEN ' - ' || lp.lotdes
+                                ELSE ''
+                            END
+                        ELSE ''
+                    END AS lot_display
+                FROM acaorde2 ao
+                JOIN ordem o ON o.ordem = ao.acaoorde
+                LEFT JOIN loteprod lp ON lp.lotcod = o.lotcod
+                WHERE CAST(ao.acaopedi AS TEXT) = %s
+            ) lots
+            WHERE lots.lot_display <> ''
+            GROUP BY lots.pedido
+        )
+        SELECT
+            CAST(p.pedido AS TEXT) AS pedido,
+            p.peddata,
+            COALESCE(e.empnome, '') AS cliente,
+            CASE
+                WHEN COALESCE(c.cidnome, '') <> '' THEN c.cidnome
+                WHEN COALESCE(p.pedentcid::text, '') <> '' THEN p.pedentcid::text
+                ELSE ''
+            END AS cidade,
+            CASE
+                WHEN COALESCE(c.estado, '') <> '' THEN c.estado
+                WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text
+                ELSE ''
+            END AS estado,
+            COALESCE(pl.production_lots_display, '') AS production_lots_display,
+            {load_lot_select},
+            COALESCE(rc.rgcdes, '') AS regcar_description
+        FROM pedido p
+        LEFT JOIN empresa e ON p.pedcliente = e.empresa
+        LEFT JOIN cidade c ON p.pedentcid = c.cidade
+        LEFT JOIN regcar rc ON c.rgccicod = rc.rgccod
+        LEFT JOIN production_lots pl ON pl.pedido = CAST(p.pedido AS TEXT)
+        {load_lot_join}
+        WHERE CAST(p.pedido AS TEXT) = %s
+    """
+
+    try:
+        cur = conn.cursor()
+        cur.execute(header_query, (pedido_value, pedido_value))
+        header_row = cur.fetchone()
+    except Error as e:
+        print(f"Erro ao carregar cabeçalho do pedido {pedido_value}: {e}")
+        return None, {'message': 'Erro ao carregar detalhes do pedido.', 'status': 500}
+    finally:
+        if cur:
+            cur.close()
+
+    if not header_row:
+        return None, {'message': 'Pedido não encontrado.', 'status': 404}
+
+    (
+        pedido,
+        peddata,
+        cliente,
+        cidade,
+        estado,
+        production_lots_display,
+        load_lot_code,
+        load_lot_description,
+        regcar_description,
+    ) = header_row
+
+    header_data = {
+        'pedido': pedido or '',
+        'cliente': cliente or '',
+        'cidade': cidade or '',
+        'uf': estado or '',
+        'data_pedido': '',
+        'lote_producao': production_lots_display or '',
+        'lote_carga': '',
+        'regcar_description': regcar_description or '',
+    }
+
+    if isinstance(peddata, (datetime.date, datetime.datetime)):
+        header_data['data_pedido'] = peddata.strftime('%d/%m/%Y')
+    elif peddata:
+        header_data['data_pedido'] = str(peddata)
+
+    if load_lot_code:
+        load_lot_str = str(load_lot_code)
+        if load_lot_description:
+            load_lot_str = f"{load_lot_str} - {load_lot_description}"
+        header_data['lote_carga'] = load_lot_str
+
+    return header_data, None
+
+
+def fetch_order_details(pedido_code):
+    """
+    Recupera os detalhes de um pedido específico (cabeçalho e itens) a partir do ERP.
+    Retorna uma tupla (dados, erro), em que erro é um dicionário com 'message' e 'status'.
+    """
+    pedido_value = (pedido_code or '').strip()
+    if not pedido_value:
+        return None, {'message': 'Pedido inválido.', 'status': 400}
+
+    conn = get_erp_db_connection()
+    if not conn:
+        return None, {'message': 'Não foi possível conectar ao banco de dados do ERP.', 'status': 500}
+
     column_check_cursor = None
+
+    header_data, header_error = get_order_header_data(conn, pedido_value)
+    if header_error:
+        if conn:
+            conn.close()
+        return None, header_error
+
+    regcar_data = parse_regcar_description(header_data.get('regcar_description', ''))
+    header_data.pop('regcar_description', None)
+
+    details = {'header': header_data, 'items': []}
 
     try:
         column_check_cursor = conn.cursor()
@@ -3171,105 +3532,6 @@ def fetch_order_details(pedido_code):
         return f"0 AS {alias}"
 
     try:
-        cur = conn.cursor()
-
-        load_lot_select = (
-            "CAST(p.lcapecod AS TEXT) AS load_lot_code,\n                COALESCE(lc.lcades, '') AS load_lot_description"
-            if has_lcapecod_column
-            else "NULL AS load_lot_code,\n                '' AS load_lot_description"
-        )
-        load_lot_join = "LEFT JOIN lotecar lc ON p.lcapecod = lc.lcacod" if has_lcapecod_column else ""
-
-        header_query = f"""
-            WITH production_lots AS (
-                SELECT
-                    CAST(lots.pedido AS TEXT) AS pedido,
-                    STRING_AGG(lots.lot_display, '; ' ORDER BY lots.lot_display) AS production_lots_display
-                FROM (
-                    SELECT DISTINCT
-                        ao.acaopedi AS pedido,
-                        CASE
-                            WHEN COALESCE(lp.lotcod::text, '') <> '' THEN
-                                lp.lotcod::text ||
-                                CASE
-                                    WHEN COALESCE(lp.lotdes, '') <> '' THEN ' - ' || lp.lotdes
-                                    ELSE ''
-                                END
-                            ELSE ''
-                        END AS lot_display
-                    FROM acaorde2 ao
-                    JOIN ordem o ON o.ordem = ao.acaoorde
-                    LEFT JOIN loteprod lp ON lp.lotcod = o.lotcod
-                    WHERE CAST(ao.acaopedi AS TEXT) = %s
-                ) lots
-                WHERE lots.lot_display <> ''
-                GROUP BY lots.pedido
-            )
-            SELECT
-                CAST(p.pedido AS TEXT) AS pedido,
-                p.peddata,
-                COALESCE(e.empnome, '') AS cliente,
-                CASE
-                    WHEN COALESCE(c.cidnome, '') <> '' THEN c.cidnome
-                    WHEN COALESCE(p.pedentcid::text, '') <> '' THEN p.pedentcid::text
-                    ELSE ''
-                END AS cidade,
-                CASE
-                    WHEN COALESCE(c.estado, '') <> '' THEN c.estado
-                    WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text
-                    ELSE ''
-                END AS estado,
-                COALESCE(pl.production_lots_display, '') AS production_lots_display,
-                {load_lot_select}
-            FROM pedido p
-            LEFT JOIN empresa e ON p.pedcliente = e.empresa
-            LEFT JOIN cidade c ON p.pedentcid = c.cidade
-            LEFT JOIN production_lots pl ON pl.pedido = CAST(p.pedido AS TEXT)
-            {load_lot_join}
-            WHERE CAST(p.pedido AS TEXT) = %s
-        """
-
-        cur.execute(header_query, (pedido_value, pedido_value))
-        header_row = cur.fetchone()
-        cur.close()
-
-        if not header_row:
-            return None, {'message': 'Pedido não encontrado.', 'status': 404}
-
-        (
-            pedido,
-            peddata,
-            cliente,
-            cidade,
-            estado,
-            production_lots_display,
-            load_lot_code,
-            load_lot_description,
-        ) = header_row
-
-        header_data = {
-            'pedido': pedido or '',
-            'cliente': cliente or '',
-            'cidade': cidade or '',
-            'uf': estado or '',
-            'data_pedido': '',
-            'lote_producao': production_lots_display or '',
-            'lote_carga': '',
-        }
-
-        if isinstance(peddata, (datetime.date, datetime.datetime)):
-            header_data['data_pedido'] = peddata.strftime('%d/%m/%Y')
-        elif peddata:
-            header_data['data_pedido'] = str(peddata)
-
-        if load_lot_code:
-            load_lot_str = str(load_lot_code)
-            if load_lot_description:
-                load_lot_str = f"{load_lot_str} - {load_lot_description}"
-            header_data['lote_carga'] = load_lot_str
-
-        details = {'header': header_data, 'items': []}
-
         items_cur = conn.cursor()
         quantidade_total_expr = build_items_aggregate(
             'pprquanti',
@@ -3348,6 +3610,7 @@ def fetch_order_details(pedido_code):
                 {codigo_produto_select},
                 {sequencia_expr} AS sequencia,
                 COALESCE(prod.pronome::text, '') AS produto_nome,
+                COALESCE(g.grunome::text, '') AS grupo_nome,
                 {quantidade_total_expr},
                 {valor_tabela_expr},
                 {percentual_desconto_expr},
@@ -3357,9 +3620,10 @@ def fetch_order_details(pedido_code):
                 {desconto_pedido_expr}
             FROM pedprodu pp
             LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+            LEFT JOIN grupo g ON g.grupo = prod.grupo
             {projmovi_join}
             WHERE CAST(pp.pedido AS TEXT) = %s
-            GROUP BY pp.pprproduto, pp.pprseq, prod.pronome
+            GROUP BY pp.pprproduto, pp.pprseq, prod.pronome, g.grunome
             ORDER BY pp.pprseq, pp.pprproduto
             """
 
@@ -3372,6 +3636,7 @@ def fetch_order_details(pedido_code):
                 codigo_produto,
                 sequencia,
                 produto_nome,
+                grupo_nome,
                 quantidade_total_raw,
                 valor_tabela_raw,
                 percentual_desc_raw,
@@ -3418,6 +3683,14 @@ def fetch_order_details(pedido_code):
 
             valor_total = valor_bruto - desconto_pedido
 
+            product_line = get_product_line(grupo_nome)
+            product_ref = (produto_nome or '').strip()[:2]
+            freight_pct_fraction = calculate_freight_percentage(
+                product_line, product_ref, regcar_data
+            )
+            freight_pct_display = freight_pct_fraction * 100.0
+            valor_frete = valor_total * freight_pct_fraction
+
             details['items'].append(
                 {
                     'codigo_produto': codigo_produto,
@@ -3428,8 +3701,8 @@ def fetch_order_details(pedido_code):
                     'percentual_desconto': percentual_desc,
                     'valor_unitario_total': valor_unitario_total,
                     'valor_ipi': valor_ipi,
-                    'percentual_frete': 0.0,
-                    'valor_frete': 0.0,
+                    'percentual_frete': freight_pct_display,
+                    'valor_frete': valor_frete,
                     'valor_total': valor_total,
                 }
             )
@@ -3443,10 +3716,179 @@ def fetch_order_details(pedido_code):
             conn.close()
 
 
+def fetch_logistics_order_details(pedido_code):
+    """
+    Recupera os detalhes logísticos (movimentação de reserva/separação/carga) de um pedido.
+    """
+    pedido_value = (pedido_code or '').strip()
+    if not pedido_value:
+        return None, {'message': 'Pedido inválido.', 'status': 400}
+
+    conn = get_erp_db_connection()
+    if not conn:
+        return None, {'message': 'Não foi possível conectar ao banco de dados do ERP.', 'status': 500}
+
+    header_data, header_error = get_order_header_data(conn, pedido_value)
+    if header_error:
+        if conn:
+            conn.close()
+        return None, header_error
+
+    details = {'header': header_data, 'items': []}
+    header_data.pop('regcar_description', None)
+
+    column_check_cursor = None
+    projmovi_columns = None
+    has_prjmproex_column = False
+    has_prjmpedse_column = False
+    has_prjmseque_column = False
+    has_prjmprodu_column = False
+
+    try:
+        column_check_cursor = conn.cursor()
+        column_check_cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'projmovi'
+            """
+        )
+        projmovi_columns = {
+            (row[0] or '').lower()
+            for row in column_check_cursor.fetchall()
+            if row and row[0]
+        }
+        if projmovi_columns is not None:
+            has_prjmproex_column = 'prjmproex' in projmovi_columns
+            has_prjmpedse_column = 'prjmpedse' in projmovi_columns
+            has_prjmseque_column = 'prjmseque' in projmovi_columns
+            has_prjmprodu_column = 'prjmprodu' in projmovi_columns
+    except Error as e:
+        print(f"Erro ao verificar colunas da tabela 'projmovi' (detalhes logísticos): {e}")
+        projmovi_columns = None
+    finally:
+        if column_check_cursor:
+            column_check_cursor.close()
+
+    codigo_produto_expr = (
+        "COALESCE(pm.prjmproex::text, '')"
+        if has_prjmproex_column
+        else "COALESCE(pp.pprproduto::text, '')"
+    )
+    if has_prjmpedse_column:
+        sequencia_expr = "COALESCE(pm.prjmpedse::text, '')"
+    elif has_prjmseque_column:
+        sequencia_expr = "COALESCE(pm.prjmseque::text, '')"
+    else:
+        sequencia_expr = "COALESCE(pp.pprseq::text, '')"
+
+    pedprodu_join_conditions = ["CAST(pp.pedido AS TEXT) = CAST(pm.prjmpedid AS TEXT)"]
+    if has_prjmpedse_column:
+        pedprodu_join_conditions.append("COALESCE(pp.pprseq::text, '') = COALESCE(pm.prjmpedse::text, '')")
+    elif has_prjmseque_column:
+        pedprodu_join_conditions.append("COALESCE(pp.pprseq::text, '') = COALESCE(pm.prjmseque::text, '')")
+    if has_prjmprodu_column:
+        pedprodu_join_conditions.append("COALESCE(pp.pprproduto::text, '') = COALESCE(pm.prjmprodu::text, '')")
+
+    pedprodu_join = f"""
+        LEFT JOIN pedprodu pp ON {' AND '.join(pedprodu_join_conditions)}
+    """
+
+    sequence_sort_expr = (
+        f"CASE WHEN NULLIF({sequencia_expr}, '') ~ '^[0-9]+$' THEN "
+        f"LPAD({sequencia_expr}, 10, '0') ELSE {sequencia_expr} END"
+    )
+
+    try:
+        items_cur = conn.cursor()
+        items_query = f"""
+            SELECT
+                {codigo_produto_expr} AS codigo_produto,
+                {sequencia_expr} AS sequencia,
+                COALESCE(prod.pronome::text, '') AS produto_nome,
+                SUM(
+                    CASE WHEN UPPER(COALESCE(pm.prjmovtip, '')) = 'R'
+                        THEN COALESCE(pm.prjmquant, 0) ELSE 0 END
+                ) AS reservado,
+                SUM(
+                    CASE WHEN UPPER(COALESCE(pm.prjmovtip, '')) = 'P'
+                        THEN COALESCE(pm.prjmquant, 0) ELSE 0 END
+                ) AS separado,
+                SUM(
+                    CASE WHEN UPPER(COALESCE(pm.prjmovtip, '')) = 'C'
+                        THEN COALESCE(pm.prjmquant, 0) ELSE 0 END
+                ) AS carregado
+            FROM projmovi pm
+            {pedprodu_join}
+            LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+            WHERE CAST(pm.prjmpedid AS TEXT) = %s
+            GROUP BY codigo_produto, sequencia, produto_nome
+            ORDER BY {sequence_sort_expr}, codigo_produto
+        """
+        items_cur.execute(items_query, (pedido_value,))
+        item_rows = items_cur.fetchall()
+        items_cur.close()
+
+        for row in item_rows:
+            (
+                codigo_produto,
+                sequencia,
+                produto_nome,
+                reservado_raw,
+                separado_raw,
+                carregado_raw,
+            ) = row
+
+            try:
+                reservado = float(reservado_raw or 0)
+            except (TypeError, ValueError):
+                reservado = 0.0
+
+            try:
+                separado = float(separado_raw or 0)
+            except (TypeError, ValueError):
+                separado = 0.0
+
+            try:
+                carregado = float(carregado_raw or 0)
+            except (TypeError, ValueError):
+                carregado = 0.0
+
+            details['items'].append(
+                {
+                    'codigo_produto': codigo_produto or '',
+                    'sequencia': sequencia or '',
+                    'produto': produto_nome or '',
+                    'reservado': reservado,
+                    'separado': separado,
+                    'carregado': carregado,
+                    'kpi_status': calculate_order_kpi(reservado, separado, carregado),
+                }
+            )
+
+        return details, None
+    except Error as e:
+        print(f"Erro ao carregar detalhes logísticos do pedido {pedido_value}: {e}")
+        return None, {'message': 'Erro ao carregar detalhes do pedido.', 'status': 500}
+    finally:
+        if conn:
+            conn.close()
+
+
 @app.route('/orders/<path:pedido>/details')
 @login_required
 def order_details(pedido):
     details, error = fetch_order_details(pedido)
+    if error:
+        status_code = error.get('status', 500)
+        return jsonify({'error': error.get('message', 'Erro ao carregar detalhes do pedido.')}), status_code
+    return jsonify(details)
+
+
+@app.route('/orders/<path:pedido>/logistics_details')
+@login_required
+def order_logistics_details(pedido):
+    details, error = fetch_logistics_order_details(pedido)
     if error:
         status_code = error.get('status', 500)
         return jsonify({'error': error.get('message', 'Erro ao carregar detalhes do pedido.')}), status_code
@@ -3570,6 +4012,301 @@ def orders_list():
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
+
+@app.route('/load_lots')
+@login_required
+def load_lots_view():
+    start_date_param = (request.args.get('start_date') or '').strip()
+    end_date_param = (request.args.get('end_date') or '').strip()
+
+    today = datetime.date.today()
+    first_day_of_month = today.replace(day=1)
+    last_day_of_month = first_day_of_month.replace(
+        day=calendar.monthrange(today.year, today.month)[1]
+    )
+
+    def parse_date(value):
+        if not value:
+            return None
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    start_date = parse_date(start_date_param)
+    end_date = parse_date(end_date_param)
+
+    if start_date_param and start_date is None:
+        flash('Data inicial inválida. Ajuste o filtro e tente novamente.', 'warning')
+        start_date_param = ''
+    if end_date_param and end_date is None:
+        flash('Data final inválida. Ajuste o filtro e tente novamente.', 'warning')
+        end_date_param = ''
+
+    if not start_date and not end_date:
+        start_date = first_day_of_month
+        end_date = last_day_of_month
+        start_date_param = start_date.strftime('%Y-%m-%d')
+        end_date_param = end_date.strftime('%Y-%m-%d')
+
+    summary_data, summary_error = fetch_load_lots_summary(start_date, end_date)
+    if summary_error:
+        flash(summary_error, 'danger')
+
+    filters = {
+        'start_date': start_date_param,
+        'end_date': end_date_param,
+    }
+
+    period_display = {
+        'start': start_date.strftime('%d/%m/%Y') if start_date else '',
+        'end': end_date.strftime('%d/%m/%Y') if end_date else '',
+    }
+
+    return render_template(
+        'load_lots.html',
+        page_title="Lotes de Carga",
+        summary=summary_data,
+        filters=filters,
+        period_display=period_display,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+@app.route('/load_lots/<path:load_lot_code>')
+@login_required
+def load_lot_detail(load_lot_code):
+    lot_code = (load_lot_code or '').strip()
+    if not lot_code:
+        flash('Lote inválido.', 'warning')
+        return redirect(url_for('load_lots_view'))
+
+    detail_orders, lot_info, detail_error = fetch_load_lot_orders(lot_code)
+    if detail_error:
+        flash(detail_error, 'danger')
+
+    if not lot_info:
+        flash('Lote não encontrado para consulta.', 'warning')
+        return redirect(url_for('load_lots_view'))
+
+    detail_totals = {
+        'quantidade_total': sum(order['quantidade_total'] for order in detail_orders),
+        'valor_total': sum(order['valor_total'] for order in detail_orders),
+        'total_m3': lot_info.get('total_m3', 0.0),
+    }
+
+    start_date_param = (request.args.get('start_date') or '').strip()
+    end_date_param = (request.args.get('end_date') or '').strip()
+    back_params = {
+        key: value
+        for key, value in {
+            'start_date': start_date_param,
+            'end_date': end_date_param,
+        }.items()
+        if value
+    }
+    back_url = url_for('load_lots_view', **back_params)
+    map_url = url_for('load_lot_map', load_lot_code=lot_code, **back_params)
+
+    period_display = {
+        'start': '',
+        'end': '',
+    }
+    try:
+        if start_date_param:
+            period_display['start'] = datetime.datetime.strptime(start_date_param, '%Y-%m-%d').strftime('%d/%m/%Y')
+        if end_date_param:
+            period_display['end'] = datetime.datetime.strptime(end_date_param, '%Y-%m-%d').strftime('%d/%m/%Y')
+    except ValueError:
+        period_display = {'start': '', 'end': ''}
+
+    return render_template(
+        'load_lot_detail.html',
+        page_title=f"Lote {lot_info['codigo']}",
+        lot_info=lot_info,
+        detail_orders=detail_orders,
+        detail_totals=detail_totals,
+        period_display=period_display,
+        back_url=back_url,
+        map_url=map_url,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+@app.route('/load_lots/<path:load_lot_code>/map')
+@login_required
+def load_lot_map(load_lot_code):
+    lot_code = (load_lot_code or '').strip()
+    if not lot_code:
+        flash('Lote inválido.', 'warning')
+        return redirect(url_for('load_lots_view'))
+
+    detail_orders, lot_info, detail_error = fetch_load_lot_orders(lot_code)
+    if detail_error:
+        flash(detail_error, 'danger')
+
+    if not lot_info:
+        flash('Lote não encontrado para consulta.', 'warning')
+        return redirect(url_for('load_lots_view'))
+
+    def sequence_sort_value(raw_value):
+        if raw_value is None:
+            return (float('inf'), '')
+        seq_str = str(raw_value).strip()
+        if not seq_str:
+            return (float('inf'), '')
+        digits_only = ''.join(ch for ch in seq_str if ch.isdigit())
+        if digits_only:
+            try:
+                return (int(digits_only), seq_str)
+            except ValueError:
+                pass
+        try:
+            normalized = seq_str.replace(',', '.')
+            return (float(normalized), seq_str)
+        except ValueError:
+            return (float('inf'), seq_str)
+
+    ordered_stops = sorted(
+        detail_orders,
+        key=lambda order: sequence_sort_value(order.get('sequencia'))
+    )
+
+    route_payload = []
+    for index, order in enumerate(ordered_stops):
+        route_payload.append(
+            {
+                'pedido': order.get('pedido', ''),
+                'sequencia': order.get('sequencia', ''),
+                'cliente': order.get('cliente', ''),
+                'cidade': order.get('cidade', ''),
+                'estado': order.get('estado', ''),
+                'latitude': order.get('latitude'),
+                'longitude': order.get('longitude'),
+                'sequence_display': order.get('sequencia') or str(index + 1),
+                'marker_type': 'order',
+                'order_index': index,
+            }
+        )
+
+    start_date_param = (request.args.get('start_date') or '').strip()
+    end_date_param = (request.args.get('end_date') or '').strip()
+    nav_params = {
+        key: value
+        for key, value in {
+            'start_date': start_date_param,
+            'end_date': end_date_param,
+        }.items()
+        if value
+    }
+
+    detail_url = url_for('load_lot_detail', load_lot_code=lot_code, **nav_params)
+    lots_url = url_for('load_lots_view', **nav_params)
+
+    user_id = session.get('user_id')
+    route_preferences = {
+        'start': {'enabled': False, 'cidade': '', 'estado': ''},
+        'end': {'enabled': False, 'cidade': '', 'estado': ''},
+    }
+    param_name = f'load_lot_route_{lot_code}_prefs'
+    if user_id:
+        stored_prefs = get_user_parameters(user_id, param_name)
+        if stored_prefs:
+            try:
+                parsed = json.loads(stored_prefs)
+                for key in ('start', 'end'):
+                    if key in parsed and isinstance(parsed[key], dict):
+                        route_preferences[key]['enabled'] = bool(parsed[key].get('enabled'))
+                        route_preferences[key]['cidade'] = (parsed[key].get('cidade') or '').strip()
+                        route_preferences[key]['estado'] = (parsed[key].get('estado') or '').strip()
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    def build_custom_point(pref_key, label, marker_type):
+        config = route_preferences.get(pref_key, {})
+        enabled = config.get('enabled')
+        city = (config.get('cidade') or '').strip()
+        state = (config.get('estado') or '').strip()
+        if not enabled or not (city or state):
+            return None
+        return {
+            'pedido': '',
+            'sequencia': '',
+            'sequence_display': label,
+            'cliente': 'Ponto ' + ('Inicial' if pref_key == 'start' else 'Final'),
+            'cidade': city,
+            'estado': state,
+            'latitude': None,
+            'longitude': None,
+            'marker_type': marker_type,
+            'order_index': None,
+        }
+
+    custom_start = build_custom_point('start', 'I', 'custom-start')
+    custom_end = build_custom_point('end', 'F', 'custom-end')
+
+    map_waypoints = []
+    if custom_start:
+        map_waypoints.append(custom_start)
+    map_waypoints.extend(route_payload)
+    if custom_end:
+        map_waypoints.append(custom_end)
+
+    return render_template(
+        'load_lot_map.html',
+        page_title=f"Mapa do Lote {lot_info['codigo']}",
+        lot_info=lot_info,
+        route_orders=ordered_stops,
+        route_payload=route_payload,
+        map_waypoints=map_waypoints,
+        route_preferences=route_preferences,
+        parameters_url=url_for('save_load_lot_map_parameters', load_lot_code=lot_code),
+        detail_url=detail_url,
+        lots_url=lots_url,
+        nav_params=nav_params,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+@app.route('/load_lots/<path:load_lot_code>/map/parameters', methods=['POST'])
+@login_required
+def save_load_lot_map_parameters(load_lot_code):
+    lot_code = (load_lot_code or '').strip()
+    if not lot_code:
+        flash('Lote inválido.', 'warning')
+        return redirect(url_for('load_lots_view'))
+
+    user_id = session.get('user_id')
+    if not user_id:
+        flash('Usuário não identificado para salvar parâmetros.', 'danger')
+        return redirect(url_for('load_lot_map', load_lot_code=lot_code))
+
+    def extract_pref(prefix):
+        return {
+            'enabled': request.form.get(f'{prefix}_enabled') == 'on',
+            'cidade': (request.form.get(f'{prefix}_cidade') or '').strip(),
+            'estado': (request.form.get(f'{prefix}_estado') or '').strip(),
+        }
+
+    preferences = {
+        'start': extract_pref('start'),
+        'end': extract_pref('end'),
+    }
+
+    param_name = f'load_lot_route_{lot_code}_prefs'
+    saved = save_user_parameters(user_id, param_name, json.dumps(preferences))
+    if saved:
+        flash('Preferências de rota salvas com sucesso.', 'success')
+    else:
+        flash('Não foi possível salvar as preferências de rota.', 'danger')
+
+    redirect_params = {}
+    for key in ('start_date', 'end_date'):
+        value = (request.form.get(key) or '').strip()
+        if value:
+            redirect_params[key] = value
+
+    return redirect(url_for('load_lot_map', load_lot_code=lot_code, **redirect_params))
 
 @app.route('/sales_orders_list')
 @login_required

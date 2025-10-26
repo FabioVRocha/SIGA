@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Lotes de Carga{% endblock %}
+
+{% block page_title %}Lotes de Carga{% endblock %}
+
+{% block content %}
+<style>
+    /* Estilos unificados a partir de orders_list.html */
+    .list-section {
+        background-color: var(--clr-card-bg);
+        border-radius: 0.75rem;
+        border: 1px solid var(--clr-border);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+        padding: 1.5rem;
+    }
+    @media (min-width: 1024px) {
+        .list-section {
+            padding: 2rem;
+        }
+    }
+    .section-heading {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+    }
+    .text-dark-blue {
+        color: var(--clr-dark-blue);
+    }
+    .text-slate-muted {
+        color: var(--clr-text-secondary);
+    }
+    .hover-row:hover {
+        background-color: rgba(79, 131, 204, 0.12);
+        transition: background-color 0.2s ease-in-out;
+    }
+    .modal {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(15, 23, 42, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        z-index: 50;
+    }
+    .modal.show {
+        display: flex;
+    }
+    .modal-content {
+        background-color: var(--clr-card-bg);
+        border: 1px solid var(--clr-border);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .form-input, .filter-input {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--clr-dark-blue);
+        background-color: var(--clr-white);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .form-input::placeholder, .filter-input::placeholder {
+        color: var(--clr-text-secondary);
+    }
+    .form-input:focus, .filter-input:focus {
+        border-color: var(--clr-light-blue);
+        box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.15);
+        outline: none;
+    }
+</style>
+
+<div class="space-y-6">
+    <section class="list-section">
+        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-5">
+            <div>
+                <h2 class="section-heading">Lotes de Carga</h2>
+                <p class="text-xs text-slate-muted">Total de {{ summary|length if summary else 0 }} registros encontrados.</p>
+            </div>
+            <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg" type="button">
+                <i class="fas fa-filter mr-2"></i>
+                Filtrar
+            </button>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <form id="columnFilterForm" action="{{ url_for('load_lots_view') }}" method="GET" class="space-y-3">
+                {% if filters.start_date %}<input type="hidden" name="start_date" value="{{ filters.start_date }}">{% endif %}
+                {% if filters.end_date %}<input type="hidden" name="end_date" value="{{ filters.end_date }}">{% endif %}
+                <input type="hidden" name="sort_by" id="columnSortByInput" value="{{ sort_by }}">
+                <input type="hidden" name="sort_order" id="columnSortOrderInput" value="{{ sort_order }}">
+
+                <table class="min-w-full bg-white rounded-xl overflow-hidden">
+                    <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                        <tr class="text-xs font-medium uppercase tracking-wider">
+                            <th scope="col" class="px-4 py-3 text-left rounded-tl-lg">Lote</th>
+                            <th scope="col" class="px-4 py-3 text-left">Descrição</th>
+                            <th scope="col" class="px-4 py-3 text-left">Previsão</th>
+                            <th scope="col" class="px-4 py-3 text-right">Qtd. Peças</th>
+                            <th scope="col" class="px-4 py-3 text-right">Total M³</th>
+                            <th scope="col" class="px-4 py-3 text-right">Valor Total</th>
+                            <th scope="col" class="px-4 py-3 text-center rounded-tr-lg">Ação</th>
+                        </tr>
+                        <tr class="bg-slate-100 text-xs text-dark-blue">
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_codigo" value="{{ filters.filter_codigo or '' }}" class="filter-input column-filter-input" placeholder="Lote"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_descricao" value="{{ filters.filter_descricao or '' }}" class="filter-input column-filter-input" placeholder="Descrição"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_previsao" value="{{ filters.filter_previsao or '' }}" class="filter-input column-filter-input" placeholder="Previsão (DD/MM/AAAA)"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_quantidade" value="{{ filters.filter_quantidade or '' }}" class="filter-input column-filter-input text-right" placeholder="Qtd."></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_m3" value="{{ filters.filter_m3 or '' }}" class="filter-input column-filter-input text-right" placeholder="M³"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_valor" value="{{ filters.filter_valor or '' }}" class="filter-input column-filter-input text-right" placeholder="Valor"></th>
+                            <th scope="col" class="px-4 py-2 text-center">
+                                <div class="flex items-center justify-center gap-3">
+                                    <button type="submit" class="text-xs font-semibold text-blue-700 hover:underline">Aplicar</button>
+                                    <button type="button" id="clearColumnFiltersBtn" class="text-xs text-red-600 hover:underline">Limpar</button>
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if summary %}
+                            {% for lot in summary %}
+                            {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
+                            <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};">
+                                <td class="py-2 px-4 whitespace-nowrap font-semibold">{{ lot.codigo }}</td>
+                                <td class="py-2 px-4 whitespace-nowrap">{{ lot.descricao }}</td>
+                                <td class="py-2 px-4 whitespace-nowrap">
+                                    {% if lot.previsao %}
+                                        {{ lot.previsao.strftime('%d/%m/%Y') }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td class="py-2 px-4 whitespace-nowrap text-right">{{ lot.quantidade_total|format_decimal_br }}</td>
+                                <td class="py-2 px-4 whitespace-nowrap text-right">{{ lot.total_m3|format_decimal_br(3) }}</td>
+                                <td class="py-2 px-4 whitespace-nowrap text-right font-semibold">{{ lot.valor_total|format_currency_brl }}</td>
+                                <td class="py-2 px-4 whitespace-nowrap text-center">
+                                    <a href="{{ url_for('load_lot_detail', load_lot_code=lot.codigo, start_date=filters.start_date, end_date=filters.end_date) }}" class="icon-button" title="Visualizar detalhes do lote {{ lot.codigo }}">
+                                        <i class="fas fa-eye text-blue-600 hover:text-blue-800"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="7" class="py-6 px-4 text-center text-sm text-slate-muted">Nenhum lote encontrado para o período e filtros informados.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </form>
+        </div>
+    </section>
+</div>
+
+<div id="filterModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="filterModalTitle">
+    <div class="modal-content">
+        <div class="flex justify-between items-center mb-4">
+            <h2 id="filterModalTitle" class="section-heading">Filtrar Lotes</h2>
+            <button id="closeFilterModalBtn" class="close-button" type="button" aria-label="Fechar">&times;</button>
+        </div>
+        <form action="{{ url_for('load_lots_view') }}" method="GET" class="space-y-4">
+            <div class="form-group">
+                <label for="start_date" class="form-label">Previsão inicial:</label>
+                <input type="date" id="start_date" name="start_date" class="form-input" value="{{ filters.start_date }}">
+            </div>
+            <div class="form-group">
+                <label for="end_date" class="form-label">Previsão final</label>
+                <input type="date" id="end_date" name="end_date" class="form-input" value="{{ filters.end_date }}">
+            </div>
+            <div class="flex flex-col gap-2 pt-2">
+                <button type="submit" class="btn btn-primary">Aplicar Filtros</button>
+                <button type="button" id="clearFiltersBtn" class="btn btn-secondary">Limpar Filtros</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const modal = document.getElementById('filterModal');
+        const openBtn = document.getElementById('openFilterModalBtn');
+        const closeBtn = document.getElementById('closeFilterModalBtn');
+        const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+        const columnFilterForm = document.getElementById('columnFilterForm');
+        const columnFilterInputs = columnFilterForm ? columnFilterForm.querySelectorAll('.column-filter-input') : [];
+        const clearColumnFiltersBtn = document.getElementById('clearColumnFiltersBtn');
+
+        const openModal = () => {
+            if (!modal) return;
+            modal.classList.add('show');
+            modal.style.display = 'flex';
+        };
+        const closeModal = () => {
+            if (!modal) return;
+            modal.classList.remove('show');
+            modal.style.display = 'none';
+        };
+
+        if (openBtn) openBtn.addEventListener('click', openModal);
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+        if (modal) {
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) closeModal();
+            });
+        }
+
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', () => {
+                window.location.href = "{{ url_for('load_lots_view') }}";
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && modal && modal.classList.contains('show')) {
+                closeModal();
+            }
+        });
+
+        // Column filtering logic
+        const debounce = (callback, delay = 300) => {
+            let timeoutId;
+            return (...args) => {
+                if (timeoutId) clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => {
+                    callback.apply(null, args);
+                }, delay);
+            };
+        };
+
+        if (columnFilterForm && columnFilterInputs.length > 0) {
+            const submitColumnFilters = () => {
+                if (typeof columnFilterForm.requestSubmit === 'function') {
+                    columnFilterForm.requestSubmit();
+                } else {
+                    columnFilterForm.submit();
+                }
+            };
+            const debouncedColumnSubmit = debounce(submitColumnFilters, 500);
+
+            columnFilterInputs.forEach((input) => {
+                input.addEventListener('input', debouncedColumnSubmit);
+            });
+        }
+
+        if (clearColumnFiltersBtn) {
+            clearColumnFiltersBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                columnFilterInputs.forEach((input) => {
+                    input.value = '';
+                });
+                if (columnFilterForm) {
+                    columnFilterForm.submit();
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

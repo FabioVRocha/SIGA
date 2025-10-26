@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Lote {{ lot_info.codigo }}{% endblock %}
+
+{% block page_title %}Lote de Carga{% endblock %}
+
+{% block content %}
+<section class="list-section">
+    <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
+        <div>
+            <h2 class="section-heading">Lote {{ lot_info.codigo }}</h2>
+            <p class="text-sm text-slate-muted">{{ lot_info.descricao }}</p>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <a href="{{ back_url }}" class="sidebar-btn text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center justify-center gap-3">
+                <i class="fas fa-arrow-left"></i>
+                <span class="menu-text">Voltar para Lotes</span>
+            </a>
+            <a href="{{ map_url }}" class="sidebar-btn map-btn text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center justify-center gap-3">
+                <i class="fas fa-map-marked-alt"></i>
+                <span class="menu-text">Mapa</span>
+            </a>
+        </div>
+    </div>
+
+    {% if period_display.start or period_display.end %}
+    <p class="text-xs text-slate-muted mb-4">
+        Período aplicado: 
+        {% if period_display.start and period_display.end %}
+            {{ period_display.start }} — {{ period_display.end }}
+        {% elif period_display.start %}
+            a partir de {{ period_display.start }}
+        {% else %}
+            até {{ period_display.end }}
+        {% endif %}
+    </p>
+    {% endif %}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="order-summary-card">
+            <p class="order-summary-label">Previsão</p>
+            <p class="order-summary-value">
+                {% if lot_info.previsao %}
+                    {{ lot_info.previsao.strftime('%d/%m/%Y') }}
+                {% else %}
+                    —
+                {% endif %}
+            </p>
+        </div>
+        <div class="order-summary-card order-summary-card--teal">
+            <p class="order-summary-label">Total M³ (Lote)</p>
+            <p class="order-summary-value">{{ lot_info.total_m3|format_decimal_br(3) }}</p>
+        </div>
+        <div class="order-summary-card order-summary-card--blue">
+            <p class="order-summary-label">Quantidade Total</p>
+            <p class="order-summary-value">{{ detail_totals.quantidade_total|format_decimal_br }}</p>
+        </div>
+        <div class="order-summary-card order-summary-card--green">
+            <p class="order-summary-label">Valor Total</p>
+            <p class="order-summary-value">{{ detail_totals.valor_total|format_currency_brl }}</p>
+        </div>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white rounded-xl overflow-hidden">
+            <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                <tr class="text-xs font-medium uppercase tracking-wider">
+                    <th scope="col" class="px-4 py-3 text-left rounded-tl-lg">Pedido</th>
+                    <th scope="col" class="px-4 py-3 text-left">Seq.</th>
+                    <th scope="col" class="px-4 py-3 text-left">Cliente</th>
+                    <th scope="col" class="px-4 py-3 text-right">Quantidade</th>
+                    <th scope="col" class="px-4 py-3 text-right">Total M³</th>
+                    <th scope="col" class="px-4 py-3 text-right rounded-tr-lg">Valor Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if detail_orders %}
+                    {% for order in detail_orders %}
+                    {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
+                    <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};">
+                        <td class="py-2 px-4 whitespace-nowrap font-semibold">{{ order.pedido }}</td>
+                        <td class="py-2 px-4 whitespace-nowrap">{{ order.sequencia or '—' }}</td>
+                        <td class="py-2 px-4 whitespace-nowrap">{{ order.cliente }}</td>
+                        <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.quantidade_total|format_decimal_br }}</td>
+                        <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.total_m3|format_decimal_br(3) }}</td>
+                        <td class="py-2 px-4 whitespace-nowrap text-right font-semibold">{{ order.valor_total|format_currency_brl }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" class="px-4 py-6 text-center text-slate-500">Nenhum pedido vinculado ao lote.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{# Adicionando estilos genéricos que estavam em sales_orders_list.html para que possam ser usados aqui #}
+<style>
+    .list-section {
+        background-color: var(--clr-card-bg);
+        border-radius: 0.75rem;
+        border: 1px solid var(--clr-border);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+        padding: 1.5rem;
+    }
+    @media (min-width: 1024px) {
+        .list-section {
+            padding: 2rem;
+        }
+    }
+    .section-heading {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+    }
+    .text-dark-blue { color: var(--clr-dark-blue); }
+    .text-slate-muted { color: var(--clr-text-secondary); }
+    .hover-row:hover {
+        background-color: rgba(79, 131, 204, 0.12);
+        transition: background-color 0.2s ease-in-out;
+    }
+    .order-summary-card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        padding: 1rem 1.25rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background-color: rgba(148, 163, 184, 0.12);
+    }
+    .order-summary-label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: rgba(15, 23, 42, 0.65);
+    }
+    .order-summary-value {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: var(--clr-dark-blue);
+    }
+    .order-summary-card--blue { background-color: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.35); }
+    .order-summary-card--blue .order-summary-label, .order-summary-card--blue .order-summary-value { color: #1d4ed8; }
+    .order-summary-card--green { background-color: rgba(74, 222, 128, 0.16); border-color: rgba(74, 222, 128, 0.35); }
+    .order-summary-card--green .order-summary-label, .order-summary-card--green .order-summary-value { color: #15803d; }
+    .order-summary-card--teal { background-color: rgba(45, 212, 191, 0.16); border-color: rgba(45, 212, 191, 0.35); }
+    .order-summary-card--teal .order-summary-label, .order-summary-card--teal .order-summary-value { color: #0f766e; }
+    .map-btn {
+        background-image: linear-gradient(120deg, #16a34a, #0f766e);
+    }
+</style>
+{% endblock %}

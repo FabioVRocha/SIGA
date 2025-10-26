@@ -1,0 +1,540 @@
+{% extends "base.html" %}
+
+{% block title %}Mapa Lote {{ lot_info.codigo }}{% endblock %}
+{% block page_title %}Mapa do Lote {{ lot_info.codigo }}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+    .route-wrapper {
+        background-color: var(--clr-card-bg);
+        border-radius: 0.75rem;
+        border: 1px solid var(--clr-border);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    .route-layout {
+        display: grid;
+        grid-template-columns: minmax(280px, 360px) 1fr;
+        gap: 1.5rem;
+    }
+    @media (max-width: 1024px) {
+        .route-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+    .route-sidebar {
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        background-color: var(--clr-light-gray);
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .route-sidebar h3 {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+    }
+    .route-side-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-size: 0.9rem;
+    }
+    .route-side-table th,
+    .route-side-table td {
+        padding: 0.65rem 0.5rem;
+    }
+    .route-side-table th {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--clr-medium-gray);
+    }
+    .route-side-table tbody tr {
+        background-color: var(--clr-white);
+        border-radius: 0.5rem;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .route-side-table tbody tr + tr {
+        margin-top: 0.5rem;
+    }
+    .route-side-table tbody tr:hover,
+    .route-side-table tbody tr.is-active {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
+        border-color: var(--clr-light-blue);
+    }
+    .map-panel {
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        overflow: hidden;
+        background-color: var(--clr-white);
+        display: flex;
+        flex-direction: column;
+        min-height: 420px;
+    }
+    #lotRouteMap {
+        width: 100%;
+        min-height: 420px;
+        flex: 1;
+    }
+    .map-status {
+        padding: 0.75rem 1rem;
+        background-color: var(--clr-light-gray);
+        border-bottom: 1px solid var(--clr-border);
+        font-size: 0.9rem;
+        color: var(--clr-dark-blue);
+    }
+    .route-meta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+    }
+    .route-meta-card {
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        background-color: rgba(148, 163, 184, 0.12);
+    }
+    .route-meta-card span {
+        display: block;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: rgba(15, 23, 42, 0.65);
+    }
+    .route-meta-card strong {
+        font-size: 1.2rem;
+        color: var(--clr-dark-blue);
+    }
+    .route-marker {
+        background: #1f3a5f;
+        color: #fff;
+        border-radius: 9999px;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 3px solid #fff;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+    .route-marker.route-marker--missing {
+        background: var(--clr-attention);
+        color: var(--clr-dark-blue);
+    }
+    .route-marker--custom-start {
+        background: #15803d;
+    }
+    .route-marker--custom-end {
+        background: #c2410c;
+    }
+</style>
+{% endblock %}
+
+{% block header_action %}
+<div class="flex flex-col sm:flex-row gap-3">
+    <button type="button" id="openRouteParams" class="sidebar-btn text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center justify-center gap-2">
+        <i class="fas fa-sliders-h"></i>
+        <span>Parâmetros</span>
+    </button>
+    <a href="{{ detail_url }}" class="sidebar-btn text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center justify-center gap-2">
+        <i class="fas fa-list-ul"></i>
+        <span>Detalhes do Lote</span>
+    </a>
+    <a href="{{ lots_url }}" class="sidebar-btn text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center justify-center gap-2">
+        <i class="fas fa-arrow-left"></i>
+        <span>Voltar para Lotes</span>
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="route-wrapper">
+    <div class="route-meta-grid">
+        <div class="route-meta-card">
+            <span>Lote</span>
+            <strong>{{ lot_info.codigo }}</strong>
+            <p class="text-sm text-slate-muted mt-1">{{ lot_info.descricao }}</p>
+        </div>
+        <div class="route-meta-card">
+            <span>Previsão</span>
+            <strong>
+                {% if lot_info.previsao %}
+                    {{ lot_info.previsao.strftime('%d/%m/%Y') }}
+                {% else %}
+                    —
+                {% endif %}
+            </strong>
+        </div>
+        <div class="route-meta-card">
+            <span>Volumes (M³)</span>
+            <strong>{{ lot_info.total_m3|format_decimal_br(3) }}</strong>
+        </div>
+        <div class="route-meta-card">
+            <span>Paradas</span>
+            <strong>{{ route_orders|length }}</strong>
+        </div>
+    </div>
+
+    <div class="route-layout">
+        <aside class="route-sidebar">
+            <div>
+                <h3>Sequência de Entregas</h3>
+                <p class="text-sm text-slate-muted">Clique em uma linha para focar o ponto correspondente no mapa.</p>
+            </div>
+            {% if route_orders %}
+            <div class="space-y-2">
+                <table class="route-side-table">
+                    <thead>
+                        <tr>
+                            <th>Seq.</th>
+                            <th>Pedido</th>
+                            <th>Cidade / UF</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in route_orders %}
+                        <tr class="route-table-row" data-stop-index="{{ loop.index0 }}">
+                            <td class="font-semibold text-dark-blue">{{ order.sequencia or loop.index }}</td>
+                            <td>
+                                <div class="font-semibold text-dark-blue">{{ order.pedido }}</div>
+                                <div class="text-xs text-slate-muted">{{ order.cliente }}</div>
+                            </td>
+                            <td>
+                                {% if order.cidade or order.estado %}
+                                {{ order.cidade }}{% if order.estado %} / {{ order.estado }}{% endif %}
+                                {% else %}
+                                <span class="text-slate-muted text-xs">Sem endereço</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-sm text-slate-muted">Nenhum pedido vinculado ao lote.</p>
+            {% endif %}
+        </aside>
+        <div class="map-panel">
+            <div class="map-status" id="mapStatus">Preparando mapa da rota…</div>
+            <div id="lotRouteMap"></div>
+        </div>
+    </div>
+</section>
+
+<div id="routeParamsModal" class="modal">
+    <div class="modal-content max-w-2xl w-full">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-dark-blue">Parâmetros do Mapa</h3>
+            <button type="button" class="icon-button text-slate-muted" data-close-route-modal aria-label="Fechar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form method="POST" action="{{ parameters_url }}" class="space-y-6">
+            {% for key, value in nav_params.items() %}
+            <input type="hidden" name="{{ key }}" value="{{ value }}">
+            {% endfor %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="border border-slate-200 rounded-lg p-4 bg-white">
+                    <label class="flex items-center gap-2 font-semibold text-sm text-dark-blue mb-3">
+                        <input type="checkbox" name="start_enabled" {% if route_preferences.start.enabled %}checked{% endif %} class="form-checkbox h-4 w-4 text-blue-600">
+                        Incluir cidade de início
+                    </label>
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-xs uppercase tracking-wide text-slate-muted mb-1">Cidade</p>
+                            <input type="text" name="start_cidade" value="{{ route_preferences.start.cidade }}" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm" placeholder="Ex.: São Paulo">
+                        </div>
+                        <div>
+                            <p class="text-xs uppercase tracking-wide text-slate-muted mb-1">UF</p>
+                            <input type="text" name="start_estado" value="{{ route_preferences.start.estado }}" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm" placeholder="Ex.: SP" maxlength="2">
+                        </div>
+                    </div>
+                </div>
+                <div class="border border-slate-200 rounded-lg p-4 bg-white">
+                    <label class="flex items-center gap-2 font-semibold text-sm text-dark-blue mb-3">
+                        <input type="checkbox" name="end_enabled" {% if route_preferences.end.enabled %}checked{% endif %} class="form-checkbox h-4 w-4 text-blue-600">
+                        Incluir cidade de término
+                    </label>
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-xs uppercase tracking-wide text-slate-muted mb-1">Cidade</p>
+                            <input type="text" name="end_cidade" value="{{ route_preferences.end.cidade }}" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm" placeholder="Ex.: Rio de Janeiro">
+                        </div>
+                        <div>
+                            <p class="text-xs uppercase tracking-wide text-slate-muted mb-1">UF</p>
+                            <input type="text" name="end_estado" value="{{ route_preferences.end.estado }}" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm" placeholder="Ex.: RJ" maxlength="2">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button type="button" class="btn-secondary px-4 py-2 rounded-lg" data-close-route-modal>Cancelar</button>
+                <button type="submit" class="sidebar-btn px-6 py-2 rounded-lg font-semibold">Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const stops = {{ route_payload | tojson }};
+    const mapWaypoints = {{ map_waypoints | tojson }};
+    const statusEl = document.getElementById('mapStatus');
+    const mapEl = document.getElementById('lotRouteMap');
+
+    if (!mapEl) {
+        return;
+    }
+
+    const map = L.map(mapEl).setView([-14.235, -51.9253], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    if (!mapWaypoints.length) {
+        statusEl.textContent = 'Não há pontos suficientes para montar a rota deste lote.';
+        return;
+    }
+
+    const cacheKey = 'sigaRouteGeoCache';
+    let geoCache = {};
+    try {
+        geoCache = JSON.parse(localStorage.getItem(cacheKey)) || {};
+    } catch (error) {
+        geoCache = {};
+    }
+
+    const orderMarkerRefs = {};
+
+    const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function resolveCoordinates(stop) {
+        if (stop.latitude && stop.longitude) {
+            return { lat: stop.latitude, lon: stop.longitude, fromCache: true };
+        }
+        const cacheId = `${(stop.cidade || '').toLowerCase()}|${(stop.estado || '').toLowerCase()}`;
+        if (cacheId && geoCache[cacheId]) {
+            return { ...geoCache[cacheId], fromCache: true };
+        }
+        if (!stop.cidade && !stop.estado) {
+            return null;
+        }
+        const parts = [];
+        if (stop.cidade) parts.push(stop.cidade);
+        if (stop.estado) parts.push(stop.estado);
+        parts.push('Brasil');
+        const query = encodeURIComponent(parts.join(', '));
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${query}&email=contato%40siga.app`;
+        statusEl.textContent = `Localizando ${parts.slice(0, 2).join(' / ')}…`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            return null;
+        }
+        const data = await response.json();
+        if (!data.length) {
+            return null;
+        }
+        const coordinates = {
+            lat: parseFloat(data[0].lat),
+            lon: parseFloat(data[0].lon),
+        };
+        if (cacheId) {
+            geoCache[cacheId] = coordinates;
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify(geoCache));
+            } catch (error) {
+                /* armazenamento indisponível, seguir sem cache */
+            }
+        }
+        return { ...coordinates, fromCache: false };
+    }
+
+    function activateRow(index) {
+        document.querySelectorAll('.route-table-row').forEach(row => {
+            row.classList.toggle('is-active', Number(row.dataset.stopIndex) === index);
+        });
+    }
+
+    const segmentCache = {};
+
+    function cacheKeyForSegment(start, end) {
+        return `${start[0].toFixed(4)},${start[1].toFixed(4)}|${end[0].toFixed(4)},${end[1].toFixed(4)}`;
+    }
+
+    async function fetchRoadSegment(start, end) {
+        const key = cacheKeyForSegment(start, end);
+        if (segmentCache[key]) {
+            return segmentCache[key];
+        }
+        const url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson&annotations=distance`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            return null;
+        }
+        const payload = await response.json();
+        if (!payload.routes || !payload.routes.length) {
+            return null;
+        }
+        const coords = payload.routes[0].geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+        segmentCache[key] = coords;
+        return coords;
+    }
+
+    async function buildRoadPolyline(points) {
+        if (points.length < 2) {
+            return null;
+        }
+        const combined = [points[0]];
+        for (let i = 0; i < points.length - 1; i++) {
+            statusEl.textContent = `Calculando rota entre a parada ${i + 1} e ${i + 2}…`;
+            try {
+                const segment = await fetchRoadSegment(points[i], points[i + 1]);
+                if (segment && segment.length) {
+                    segment.slice(1).forEach(coord => combined.push(coord));
+                } else {
+                    combined.push(points[i + 1]);
+                }
+                await delay(650);
+            } catch (error) {
+                combined.push(points[i + 1]);
+            }
+        }
+        return L.polyline(combined, {
+            color: '#1f3a5f',
+            weight: 4,
+            opacity: 0.9
+        }).addTo(map);
+    }
+
+    async function plotRoute() {
+        const routePoints = [];
+        for (let i = 0; i < mapWaypoints.length; i++) {
+            const stop = mapWaypoints[i];
+            try {
+                const coordinates = await resolveCoordinates(stop);
+                if (!coordinates) {
+                    continue;
+                }
+                const markerClasses = ['route-marker'];
+                if (stop.marker_type && stop.marker_type !== 'order') {
+                    markerClasses.push(`route-marker--${stop.marker_type}`);
+                }
+                let markerLabel = stop.sequence_display || (i + 1);
+                if (stop.marker_type === 'custom-start') {
+                    markerLabel = 'I';
+                } else if (stop.marker_type === 'custom-end') {
+                    markerLabel = 'F';
+                }
+                const marker = L.marker([coordinates.lat, coordinates.lon], {
+                    icon: L.divIcon({
+                        className: markerClasses.join(' '),
+                        html: `<span>${markerLabel}</span>`,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 32]
+                    })
+                }).addTo(map);
+                marker.bindPopup(`
+                    <div style="min-width: 180px;">
+                        <strong>${stop.marker_type === 'order' ? 'Seq.' : 'Ponto'}:</strong> ${stop.sequence_display || markerLabel}<br>
+                        ${stop.pedido ? `<strong>Pedido:</strong> ${stop.pedido}<br>` : ''}
+                        ${stop.cliente ? `<strong>Cliente:</strong> ${stop.cliente}<br>` : ''}
+                        <strong>Cidade/UF:</strong> ${stop.cidade || ''}${stop.estado ? ' / ' + stop.estado : ''}
+                    </div>
+                `);
+                if (stop.marker_type === 'order' && typeof stop.order_index === 'number') {
+                    orderMarkerRefs[stop.order_index] = marker;
+                    marker.on('click', () => activateRow(stop.order_index));
+                }
+                routePoints.push([coordinates.lat, coordinates.lon]);
+                if (!coordinates.fromCache) {
+                    await delay(1100);
+                }
+            } catch (error) {
+                console.error('Erro ao geocodificar parada:', error);
+            }
+        }
+
+        if (routePoints.length) {
+            if (routePoints.length > 1) {
+                const roadPolyline = await buildRoadPolyline(routePoints);
+                if (roadPolyline) {
+                    map.fitBounds(roadPolyline.getBounds(), { padding: [30, 30] });
+                } else {
+                    map.fitBounds(L.polyline(routePoints).getBounds(), { padding: [30, 30] });
+                }
+            } else {
+                map.setView(routePoints[0], 10);
+            }
+            statusEl.textContent = 'Mapa carregado com rota otimizada. Utilize o painel ao lado para focar cada parada.';
+        } else {
+            statusEl.textContent = 'Não foi possível localizar nenhuma parada. Verifique se as cidades/UF estão preenchidas.';
+        }
+    }
+
+    document.querySelectorAll('.route-table-row').forEach(row => {
+        const index = Number(row.dataset.stopIndex);
+        row.addEventListener('mouseenter', () => {
+            const marker = orderMarkerRefs[index];
+            if (marker) {
+                activateRow(index);
+                marker.openPopup();
+                map.panTo(marker.getLatLng());
+            }
+        });
+        row.addEventListener('click', () => {
+            const marker = orderMarkerRefs[index];
+            if (marker) {
+                activateRow(index);
+                marker.openPopup();
+                map.flyTo(marker.getLatLng(), 11, { duration: 0.5 });
+            }
+        });
+    });
+
+    plotRoute();
+
+    const modal = document.getElementById('routeParamsModal');
+    const openBtn = document.getElementById('openRouteParams');
+    const closeButtons = document.querySelectorAll('[data-close-route-modal]');
+
+    function toggleModal(show) {
+        if (!modal) return;
+        modal.style.display = show ? 'flex' : 'none';
+    }
+
+    if (openBtn) {
+        openBtn.addEventListener('click', () => toggleModal(true));
+    }
+
+    closeButtons.forEach(btn => {
+        btn.addEventListener('click', () => toggleModal(false));
+    });
+
+    if (modal) {
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                toggleModal(false);
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
