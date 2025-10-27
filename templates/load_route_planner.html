@@ -1,0 +1,726 @@
+{% extends "base.html" %}
+
+{% block title %}Criar Rota{% endblock %}
+{% block page_title %}Criar Rota{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+    .planner-wrapper {
+        background-color: var(--clr-card-bg);
+        border-radius: 0.75rem;
+        border: 1px solid var(--clr-border);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+    .planner-heading h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--clr-dark-blue);
+    }
+    .planner-heading p {
+        font-size: 0.9rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-layout {
+        display: grid;
+        grid-template-columns: minmax(280px, 360px) 1fr;
+        gap: 1.5rem;
+    }
+    @media (max-width: 1024px) {
+        .planner-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+    .planner-sidebar {
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        background-color: var(--clr-light-gray);
+        display: flex;
+        flex-direction: column;
+        max-height: 640px;
+    }
+    .planner-sidebar header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    }
+    .planner-sidebar header h3 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+    }
+    .planner-sidebar header span {
+        font-size: 0.8rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-list {
+        overflow-y: auto;
+        padding: 0.5rem 0;
+    }
+    .planner-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .planner-table th {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 0.35rem 1.25rem;
+        color: var(--clr-medium-gray);
+    }
+    .planner-table td {
+        padding: 0.6rem 1.25rem;
+        font-size: 0.85rem;
+        color: var(--clr-dark-blue);
+        border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    .planner-order-row {
+        cursor: pointer;
+        transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .planner-order-row:hover {
+        background-color: rgba(79, 131, 204, 0.1);
+    }
+    .planner-order-row.is-selected {
+        background-color: rgba(79, 131, 204, 0.18);
+        box-shadow: inset 0 0 0 1px rgba(79, 131, 204, 0.35);
+    }
+    .planner-map-panel {
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        background-color: var(--clr-white);
+        display: flex;
+        flex-direction: column;
+        min-height: 640px;
+    }
+    .planner-map-toolbar {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: center;
+    }
+    .planner-map-toolbar .metric {
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-map-toolbar .metric strong {
+        display: block;
+        font-size: 1.05rem;
+        color: var(--clr-dark-blue);
+    }
+    .planner-map-toolbar button {
+        margin-left: auto;
+    }
+    #routePlannerMap {
+        flex: 1;
+        min-height: 420px;
+    }
+    .planner-legends {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem;
+        border-top: 1px solid rgba(148, 163, 184, 0.35);
+        background-color: var(--clr-light-gray);
+    }
+    .legend-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        font-size: 0.8rem;
+        color: var(--clr-dark-blue);
+    }
+    .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        background-color: var(--clr-white);
+        border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+    .legend-dot {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 50%;
+        border: 2px solid transparent;
+    }
+    .legend-dot.border-only {
+        background: transparent;
+    }
+    .legend-dot.fill-only {
+        border-color: transparent;
+    }
+    .planner-status-pill {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+    .route-modal {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(15, 23, 42, 0.55);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        z-index: 90;
+    }
+    .route-modal.is-visible {
+        display: flex;
+    }
+    .route-modal .modal-content {
+        width: 100%;
+        max-width: 960px;
+        max-height: 90vh;
+        overflow-y: auto;
+        background-color: var(--clr-card-bg);
+        border-radius: 0.75rem;
+        border: 1px solid var(--clr-border);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    .modal-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+    }
+    .modal-field label {
+        display: block;
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+        margin-bottom: 0.35rem;
+    }
+    .modal-field input[type="date"],
+    .modal-field select {
+        width: 100%;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.5rem;
+        padding: 0.45rem 0.75rem;
+        font-size: 0.85rem;
+        background-color: var(--clr-white);
+    }
+    .modal-options {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        max-height: 220px;
+        overflow-y: auto;
+        padding: 0.5rem;
+        border: 1px solid rgba(148, 163, 184, 0.5);
+        border-radius: 0.5rem;
+        background-color: var(--clr-white);
+    }
+    .modal-options label {
+        display: flex;
+        gap: 0.45rem;
+        align-items: center;
+        font-size: 0.85rem;
+        color: var(--clr-dark-blue);
+    }
+    .modal-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .marker-label {
+        font-size: 0.7rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-empty {
+        padding: 2rem 1rem;
+        text-align: center;
+        font-size: 0.9rem;
+        color: var(--clr-text-secondary);
+    }
+    .route-selection-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+    }
+    .route-selection-list li {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border: 1px solid rgba(79, 131, 204, 0.35);
+        border-radius: 999px;
+        padding: 0.2rem 0.65rem;
+        font-size: 0.8rem;
+        color: var(--clr-dark-blue);
+        background-color: rgba(79, 131, 204, 0.12);
+    }
+    .route-selection-list button {
+        border: none;
+        background: transparent;
+        color: var(--clr-text-secondary);
+        cursor: pointer;
+    }
+    .planner-marker {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        border: 4px solid #1f2937;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.8rem;
+        background-clip: padding-box;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
+        color: #fff;
+    }
+    .planner-marker .inner {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .planner-marker.is-selected {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.35);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="planner-wrapper">
+    <div class="planner-heading flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+            <h2>Planejamento de Rotas</h2>
+            <p>
+                Intervalo: <strong>{{ period_display.start or '—' }}</strong>
+                até <strong>{{ period_display.end or '—' }}</strong> ·
+                {{ orders|length }} pedidos encontrados.
+            </p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            <button id="openPlannerFilters" class="btn-primary flex items-center gap-2 px-4 py-2 rounded-lg" type="button">
+                <i class="fas fa-filter"></i>
+                Filtrar
+            </button>
+        </div>
+    </div>
+
+    <div class="planner-layout">
+        <aside class="planner-sidebar">
+            <header>
+                <h3>Pedidos</h3>
+                <span>Selecione os pedidos para montar a rota sugerida.</span>
+            </header>
+            <div class="planner-list">
+                {% if orders %}
+                <table class="planner-table">
+                    <thead>
+                        <tr>
+                            <th>Pedido / Linha</th>
+                            <th>Cliente / Cidade</th>
+                            <th>Qtd</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in orders %}
+                        <tr class="planner-order-row" data-order-id="{{ order.pedido }}">
+                            <td>
+                                <div class="font-semibold text-sm">{{ order.pedido }}</div>
+                                <div class="text-xs text-slate-muted">{{ order.linha }}</div>
+                            </td>
+                            <td>
+                                <div>{{ order.cliente_nome }}</div>
+                                <div class="text-xs text-slate-muted">{{ order.cidade or '—' }}{% if order.estado %}/{{ order.estado }}{% endif %}</div>
+                            </td>
+                            <td class="text-right whitespace-nowrap">{{ order.quantidade_total | format_decimal_br }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="planner-empty">
+                    Nenhum pedido encontrado para os filtros escolhidos.
+                </div>
+                {% endif %}
+            </div>
+        </aside>
+
+        <section class="planner-map-panel">
+            <div class="planner-map-toolbar">
+                <div class="metric">
+                    <span>Pedidos selecionados</span>
+                    <strong id="selectedCount">0</strong>
+                </div>
+                <div class="metric">
+                    <span>Distância estimada</span>
+                    <strong id="routeDistance">—</strong>
+                </div>
+                <div class="metric flex-1" style="min-width: 160px;">
+                    <span>Sequência atual</span>
+                    <ul id="routeSelection" class="route-selection-list"></ul>
+                </div>
+                <button id="clearRoute" class="btn-secondary px-4 py-2 rounded-lg">Limpar rota</button>
+            </div>
+            <div id="routePlannerMap"></div>
+            <div class="planner-legends">
+                <div class="legend-group">
+                    <strong>Estágio de separação:</strong>
+                    <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.zero }}"></span>Sem separação</span>
+                    <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.partial }}"></span>Parcial</span>
+                    <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.total }}"></span>Total</span>
+                </div>
+                <div class="legend-group">
+                    <strong>Lotes de produção:</strong>
+                    {% if lot_color_legend %}
+                        {% for item in lot_color_legend %}
+                        <span class="legend-item">
+                            <span class="legend-dot fill-only" style="background-color: {{ item.color }}"></span>
+                            {{ item.label }}
+                        </span>
+                        {% endfor %}
+                    {% else %}
+                        <em>Selecione lotes de produção para diferenciar os marcadores.</em>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+    </div>
+</section>
+
+<div id="plannerFiltersModal" class="route-modal" role="dialog" aria-modal="true" aria-labelledby="plannerFiltersTitle">
+    <div class="modal-content">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 id="plannerFiltersTitle" class="text-lg font-semibold text-dark-blue">Filtros avançados</h3>
+                <p class="text-sm text-slate-500">Ajuste os filtros e gere uma nova visualização do mapa.</p>
+            </div>
+            <button class="icon-button" id="closePlannerFilters" aria-label="Fechar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form action="{{ url_for('load_lot_route_planner') }}" method="GET" class="space-y-6">
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label for="filterStartDate">Data inicial</label>
+                    <input type="date" id="filterStartDate" name="start_date" value="{{ filters.start_date }}">
+                </div>
+                <div class="modal-field">
+                    <label for="filterEndDate">Data final</label>
+                    <input type="date" id="filterEndDate" name="end_date" value="{{ filters.end_date }}">
+                </div>
+            </div>
+            <div class="modal-field">
+                <label>Lotes de produção</label>
+                <div class="modal-options">
+                    {% for lot in production_lot_options %}
+                    <label>
+                        <input type="checkbox" name="production_lots" value="{{ lot.code }}" {% if lot.code in filters.production_lots %}checked{% endif %}>
+                        <span>{{ lot.code }}{% if lot.description %} - {{ lot.description }}{% endif %}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label>Status</label>
+                    <div class="modal-options">
+                        {% for option in approval_status_options %}
+                        <label>
+                            <input type="checkbox" name="approval_statuses" value="{{ option.code }}" {% if option.code in filters.approval_statuses %}checked{% endif %}>
+                            {{ option.label }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal-field">
+                    <label>Situação</label>
+                    <div class="modal-options">
+                        {% for option in situation_options %}
+                        <label>
+                            <input type="checkbox" name="situations" value="{{ option.code }}" {% if option.code in filters.situations %}checked{% endif %}>
+                            {{ option.label or 'Não Informada' }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-field">
+                <label>Separado</label>
+                <div class="modal-options">
+                    <label>
+                        <input type="radio" name="separation_stage" value="" {% if not filters.separation_stage %}checked{% endif %}>
+                        Todos
+                    </label>
+                    <label>
+                        <input type="radio" name="separation_stage" value="zero" {% if filters.separation_stage == 'zero' %}checked{% endif %}>
+                        Igual a zero
+                    </label>
+                    <label>
+                        <input type="radio" name="separation_stage" value="partial" {% if filters.separation_stage == 'partial' %}checked{% endif %}>
+                        Parcial
+                    </label>
+                    <label>
+                        <input type="radio" name="separation_stage" value="total" {% if filters.separation_stage == 'total' %}checked{% endif %}>
+                        Total
+                    </label>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn-primary px-4 py-2 rounded-lg">Aplicar filtros</button>
+                <a href="{{ url_for('load_lot_route_planner') }}" class="btn-secondary text-center px-4 py-2 rounded-lg">Limpar tudo</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const plannerOrders = {{ map_orders | tojson }};
+    const borderColors = {{ stage_border_colors | tojson }};
+
+    let map;
+
+    const ordersById = new Map();
+    plannerOrders.forEach(order => ordersById.set(String(order.pedido), order));
+
+    const markersById = new Map();
+    let routeLine = null;
+    const selectedOrderIds = [];
+
+    const defaultView = [-14.2350, -51.9253];
+
+    function haversineDistance(start, end) {
+        const toRad = (value) => (value * Math.PI) / 180;
+        const R = 6371;
+        const dLat = toRad(end[0] - start[0]);
+        const dLon = toRad(end[1] - start[1]);
+        const lat1 = toRad(start[0]);
+        const lat2 = toRad(end[0]);
+        const a = Math.sin(dLat / 2) ** 2 + Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+    }
+
+    function calculateLinearDistance(points) {
+        if (points.length < 2) return 0;
+        let total = 0;
+        for (let i = 1; i < points.length; i += 1) {
+            total += haversineDistance(points[i - 1], points[i]);
+        }
+        return total;
+    }
+
+    function getStageKey(order) {
+        if (order.kpi_status === 1) return 'partial';
+        if (order.kpi_status === 2 || order.kpi_status === 3) return 'total';
+        return 'zero';
+    }
+
+    function formatQuantity(value) {
+        const normalized = Number(value || 0);
+        if (!Number.isFinite(normalized)) {
+            return '?';
+        }
+        if (normalized >= 1000) {
+            return Math.round(normalized / 100) / 10 + 'k';
+        }
+        return Math.round(normalized).toString();
+    }
+
+    function createMarkerIcon(order, isSelected) {
+        const borderColor = borderColors[getStageKey(order)] || '#1f2937';
+        const fillColor = order.marker_fill || '#1f3a5f';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'planner-marker' + (isSelected ? ' is-selected' : '');
+        wrapper.style.borderColor = borderColor;
+        const inner = document.createElement('div');
+        inner.className = 'inner';
+        inner.style.backgroundColor = fillColor;
+        inner.textContent = formatQuantity(order.quantidade_total);
+        wrapper.appendChild(inner);
+        return L.divIcon({
+            html: wrapper,
+            className: '',
+            iconSize: [46, 46],
+            iconAnchor: [23, 23]
+        });
+    }
+
+    function mountMarkers() {
+        if (!map) {
+            return;
+        }
+        const markerPoints = [];
+        plannerOrders.forEach(order => {
+            if (!order.latitude || !order.longitude) {
+                return;
+            }
+            const marker = L.marker([order.latitude, order.longitude], { icon: createMarkerIcon(order, false) });
+            marker.addTo(map);
+            marker.bindPopup(`<strong>Pedido ${order.pedido}</strong><br>${order.cliente || 'Cliente não informado'}`);
+            marker.on('click', () => toggleOrderSelection(String(order.pedido)));
+            markersById.set(String(order.pedido), marker);
+            markerPoints.push([order.latitude, order.longitude]);
+        });
+        if (!map) {
+            return;
+        }
+        if (markerPoints.length) {
+            const group = L.featureGroup(Array.from(markersById.values()));
+            map.fitBounds(group.getBounds(), { padding: [30, 30] });
+        } else {
+            map.setView(defaultView, 4);
+        }
+    }
+
+    function refreshMarker(orderId) {
+        const marker = markersById.get(orderId);
+        if (!marker) return;
+        const order = ordersById.get(orderId);
+        const isSelected = selectedOrderIds.includes(orderId);
+        marker.setIcon(createMarkerIcon(order, isSelected));
+    }
+
+    function updateSelectionSummary() {
+        const selectionList = document.getElementById('routeSelection');
+        selectionList.innerHTML = '';
+        selectedOrderIds.forEach(orderId => {
+            const order = ordersById.get(orderId);
+            if (!order) return;
+            const chip = document.createElement('li');
+            chip.innerHTML = `<strong>${orderId}</strong> ${order.cliente || ''}`;
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.innerHTML = '&times;';
+            removeBtn.addEventListener('click', () => toggleOrderSelection(orderId));
+            chip.appendChild(removeBtn);
+            selectionList.appendChild(chip);
+        });
+        document.getElementById('selectedCount').textContent = selectedOrderIds.length;
+    }
+
+    function updateRouteLine() {
+        if (!map) {
+            return;
+        }
+        if (routeLine) {
+            map.removeLayer(routeLine);
+            routeLine = null;
+        }
+        const coords = selectedOrderIds
+            .map(id => ordersById.get(id))
+            .filter(order => order && order.latitude && order.longitude)
+            .map(order => [order.latitude, order.longitude]);
+        if (coords.length >= 2) {
+            routeLine = L.polyline(coords, { color: '#1d4ed8', weight: 4, opacity: 0.85 }).addTo(map);
+            map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+            const distance = calculateLinearDistance(coords);
+            document.getElementById('routeDistance').textContent = `${distance.toFixed(1)} km`;
+        } else {
+            document.getElementById('routeDistance').textContent = '—';
+        }
+    }
+
+    function syncTableRows() {
+        document.querySelectorAll('.planner-order-row').forEach(row => {
+            const orderId = row.dataset.orderId;
+            row.classList.toggle('is-selected', selectedOrderIds.includes(orderId));
+        });
+    }
+
+    function toggleOrderSelection(orderId) {
+        const normalizedId = String(orderId);
+        const idx = selectedOrderIds.indexOf(normalizedId);
+        if (idx === -1) {
+            selectedOrderIds.push(normalizedId);
+        } else {
+            selectedOrderIds.splice(idx, 1);
+        }
+        refreshMarker(normalizedId);
+        updateSelectionSummary();
+        updateRouteLine();
+        syncTableRows();
+    }
+
+    function clearRoute() {
+        selectedOrderIds.splice(0, selectedOrderIds.length);
+        document.querySelectorAll('.planner-order-row').forEach(row => row.classList.remove('is-selected'));
+        markersById.forEach((_, id) => refreshMarker(id));
+        updateSelectionSummary();
+        updateRouteLine();
+    }
+
+    const clearRouteBtn = document.getElementById('clearRoute');
+    if (clearRouteBtn) {
+        clearRouteBtn.addEventListener('click', clearRoute);
+    }
+
+    document.querySelectorAll('.planner-order-row').forEach(row => {
+        row.addEventListener('click', () => toggleOrderSelection(row.dataset.orderId));
+    });
+
+    // Modal logic
+    document.addEventListener('DOMContentLoaded', () => {
+        const mapContainerExists = document.getElementById('routePlannerMap');
+        if (mapContainerExists) {
+            map = L.map('routePlannerMap');
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+        }
+
+        const plannerModal = document.getElementById('plannerFiltersModal');
+        const openFiltersBtn = document.getElementById('openPlannerFilters');
+        const closeFiltersBtn = document.getElementById('closePlannerFilters');
+
+        const openFilters = () => {
+            if (plannerModal) {
+                plannerModal.classList.add('is-visible');
+            }
+        };
+        const closeFilters = () => {
+            if (plannerModal) {
+                plannerModal.classList.remove('is-visible');
+            }
+        };
+
+        if (openFiltersBtn) {
+            openFiltersBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                openFilters();
+            });
+        }
+        if (closeFiltersBtn) {
+            closeFiltersBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                closeFilters();
+            });
+        }
+        if (plannerModal) {
+            plannerModal.addEventListener('click', (event) => {
+                if (event.target === plannerModal) {
+                    closeFilters();
+                }
+            });
+        }
+
+        mountMarkers();
+        updateSelectionSummary();
+    });
+</script>
+{% endblock %}

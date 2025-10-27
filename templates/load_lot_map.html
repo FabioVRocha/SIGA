@@ -16,6 +16,20 @@
         flex-direction: column;
         gap: 1.5rem;
     }
+    .route-lot-header {
+        border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+        padding-bottom: 1rem;
+    }
+    .route-lot-code {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: var(--clr-dark-blue);
+    }
+    .route-lot-description {
+        font-size: 0.95rem;
+        color: var(--clr-text-secondary);
+        margin-top: 0.25rem;
+    }
     .route-layout {
         display: grid;
         grid-template-columns: minmax(280px, 360px) 1fr;
@@ -115,6 +129,11 @@
         font-size: 1.2rem;
         color: var(--clr-dark-blue);
     }
+    .route-meta-card .route-meta-hint {
+        font-size: 0.75rem;
+        color: var(--clr-text-secondary);
+        margin-top: 0.35rem;
+    }
     .route-marker {
         background: #1f3a5f;
         color: #fff;
@@ -139,6 +158,30 @@
     .route-marker--custom-end {
         background: #c2410c;
     }
+    .route-suggestion-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        background-color: rgba(59, 130, 246, 0.08);
+        border-radius: 0.75rem;
+        padding: 0.85rem 1rem;
+    }
+    .route-suggestion-banner i {
+        color: #1d4ed8;
+        font-size: 1.2rem;
+        margin-top: 0.1rem;
+    }
+    .route-suggestion-banner p {
+        margin: 0;
+        color: var(--clr-dark-blue);
+        font-size: 0.9rem;
+    }
+    .route-suggestion-banner .route-suggestion-meta {
+        font-size: 0.8rem;
+        color: var(--clr-text-secondary);
+        margin-top: 0.3rem;
+    }
 </style>
 {% endblock %}
 
@@ -148,6 +191,17 @@
         <i class="fas fa-sliders-h"></i>
         <span>Parâmetros</span>
     </button>
+    {% if not is_suggestion_view and route_suggestion_url %}
+    <a href="{{ route_suggestion_url }}" class="sidebar-btn text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center justify-center gap-2">
+        <i class="fas fa-route"></i>
+        <span>Otimizar rota</span>
+    </a>
+    {% elif is_suggestion_view and route_map_url %}
+    <a href="{{ route_map_url }}" class="sidebar-btn text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center justify-center gap-2">
+        <i class="fas fa-map"></i>
+        <span>Mapa original</span>
+    </a>
+    {% endif %}
     <a href="{{ detail_url }}" class="sidebar-btn text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center justify-center gap-2">
         <i class="fas fa-list-ul"></i>
         <span>Detalhes do Lote</span>
@@ -161,12 +215,13 @@
 
 {% block content %}
 <section class="route-wrapper">
+    <div class="route-lot-header">
+        <p class="route-lot-code">Lote {{ lot_info.codigo }}</p>
+        {% if lot_info.descricao %}
+        <p class="route-lot-description">{{ lot_info.descricao }}</p>
+        {% endif %}
+    </div>
     <div class="route-meta-grid">
-        <div class="route-meta-card">
-            <span>Lote</span>
-            <strong>{{ lot_info.codigo }}</strong>
-            <p class="text-sm text-slate-muted mt-1">{{ lot_info.descricao }}</p>
-        </div>
         <div class="route-meta-card">
             <span>Previsão</span>
             <strong>
@@ -185,7 +240,23 @@
             <span>Paradas</span>
             <strong>{{ route_orders|length }}</strong>
         </div>
+        <div class="route-meta-card">
+            <span>Total da Rota</span>
+            <strong id="routeTotalKm">Calculando…</strong>
+            <p class="route-meta-hint">Somatório aproximado dos KM</p>
+        </div>
     </div>
+    {% if is_suggestion_view %}
+    <div class="route-suggestion-banner">
+        <i class="fas fa-magic"></i>
+        <div>
+            <p>Esta é uma sugestão automática baseada na proximidade das paradas. Utilize como referência e ajuste se necessário.</p>
+            <p class="route-suggestion-meta">
+                Paradas otimizadas: {{ suggestion_meta.get('optimized_count', 0) }} · Sem coordenadas: {{ suggestion_meta.get('without_coordinates', 0) }}
+            </p>
+        </div>
+    </div>
+    {% endif %}
 
     <div class="route-layout">
         <aside class="route-sidebar">
@@ -198,7 +269,7 @@
                 <table class="route-side-table">
                     <thead>
                         <tr>
-                            <th>Seq.</th>
+                            <th>{% if is_suggestion_view %}Sug. Seq.{% else %}Seq.{% endif %}</th>
                             <th>Pedido</th>
                             <th>Cidade / UF</th>
                         </tr>
@@ -206,7 +277,19 @@
                     <tbody>
                         {% for order in route_orders %}
                         <tr class="route-table-row" data-stop-index="{{ loop.index0 }}">
-                            <td class="font-semibold text-dark-blue">{{ order.sequencia or loop.index }}</td>
+                            <td class="font-semibold text-dark-blue">
+                                {% if is_suggestion_view %}
+                                    {{ order.suggested_position or loop.index }}
+                                    {% if order.sequencia %}
+                                    <div class="text-xs text-slate-muted">Original: {{ order.sequencia }}</div>
+                                    {% endif %}
+                                    {% if order.suggestion_source == 'missing_coordinates' %}
+                                    <div class="text-xs text-slate-muted">Sem coordenadas — mantido no final</div>
+                                    {% endif %}
+                                {% else %}
+                                    {{ order.sequencia or loop.index }}
+                                {% endif %}
+                            </td>
                             <td>
                                 <div class="font-semibold text-dark-blue">{{ order.pedido }}</div>
                                 <div class="text-xs text-slate-muted">{{ order.cliente }}</div>
@@ -298,16 +381,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const mapWaypoints = {{ map_waypoints | tojson }};
     const statusEl = document.getElementById('mapStatus');
     const mapEl = document.getElementById('lotRouteMap');
+    const totalKmEl = document.getElementById('routeTotalKm');
+    const isSuggestionView = {{ is_suggestion_view | tojson }};
 
     if (!mapEl) {
         return;
     }
 
     const map = L.map(mapEl).setView([-14.235, -51.9253], 4);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const defaultLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 18,
         attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
     }).addTo(map);
+    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+    });
+    L.control.layers(
+        {
+            'Mapa padrão': defaultLayer,
+            'Imagem de satélite': satelliteLayer
+        },
+        {},
+        { position: 'topright' }
+    ).addTo(map);
 
     if (!mapWaypoints.length) {
         statusEl.textContent = 'Não há pontos suficientes para montar a rota deste lote.';
@@ -325,6 +422,42 @@ document.addEventListener('DOMContentLoaded', () => {
     const orderMarkerRefs = {};
 
     const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    const EARTH_RADIUS_KM = 6371;
+
+    function toRadians(value) {
+        return (value * Math.PI) / 180;
+    }
+
+    function haversineDistance(start, end) {
+        const dLat = toRadians(end[0] - start[0]);
+        const dLon = toRadians(end[1] - start[1]);
+        const lat1 = toRadians(start[0]);
+        const lat2 = toRadians(end[0]);
+        const a = Math.sin(dLat / 2) ** 2 + Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+        return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)));
+    }
+
+    function calculateLinearDistance(points) {
+        if (!points || points.length < 2) {
+            return 0;
+        }
+        let total = 0;
+        for (let i = 1; i < points.length; i++) {
+            total += haversineDistance(points[i - 1], points[i]);
+        }
+        return total;
+    }
+
+    function setRouteKmValue(value) {
+        if (!totalKmEl) return;
+        if (value === null || typeof value === 'undefined' || !Number.isFinite(Number(value))) {
+            totalKmEl.textContent = '—';
+            return;
+        }
+        const normalized = Number(value);
+        const decimals = normalized >= 10 ? 1 : 2;
+        totalKmEl.textContent = `${normalized.toFixed(decimals)} km`;
+    }
 
     async function resolveCoordinates(stop) {
         if (stop.latitude && stop.longitude) {
@@ -403,25 +536,71 @@ document.addEventListener('DOMContentLoaded', () => {
             return null;
         }
         const combined = [points[0]];
+        let totalDistance = 0;
         for (let i = 0; i < points.length - 1; i++) {
             statusEl.textContent = `Calculando rota entre a parada ${i + 1} e ${i + 2}…`;
+            let segmentPoints = [points[i + 1]];
             try {
                 const segment = await fetchRoadSegment(points[i], points[i + 1]);
                 if (segment && segment.length) {
-                    segment.slice(1).forEach(coord => combined.push(coord));
-                } else {
-                    combined.push(points[i + 1]);
+                    segmentPoints = segment.slice(1);
                 }
                 await delay(650);
             } catch (error) {
-                combined.push(points[i + 1]);
+                segmentPoints = [points[i + 1]];
             }
+            let prevPoint = combined[combined.length - 1];
+            segmentPoints.forEach(coord => {
+                totalDistance += haversineDistance(prevPoint, coord);
+                combined.push(coord);
+                prevPoint = coord;
+            });
         }
-        return L.polyline(combined, {
+        const polyline = L.polyline(combined, {
             color: '#1f3a5f',
             weight: 4,
             opacity: 0.9
         }).addTo(map);
+        return {
+            polyline,
+            totalDistanceKm: totalDistance
+        };
+    }
+
+    function handleFallbackDistance(points) {
+        if (!points.length) {
+            setRouteKmValue(null);
+            return null;
+        }
+        if (points.length === 1) {
+            setRouteKmValue(0);
+            return null;
+        }
+        const distance = calculateLinearDistance(points);
+        setRouteKmValue(distance);
+        return L.polyline(points, {
+            color: '#64748b',
+            weight: 3,
+            dashArray: '6 6',
+            opacity: 0.9
+        }).addTo(map);
+    }
+
+    function focusMapOnLine(line) {
+        if (!line) return;
+        map.fitBounds(line.getBounds(), { padding: [30, 30] });
+    }
+
+    function focusOnSinglePoint(point) {
+        map.setView(point, 10);
+    }
+
+    function updateTotalKmFromResult(result) {
+        if (result && typeof result.totalDistanceKm === 'number') {
+            setRouteKmValue(result.totalDistanceKm);
+        } else {
+            setRouteKmValue(null);
+        }
     }
 
     async function plotRoute() {
@@ -474,18 +653,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (routePoints.length) {
             if (routePoints.length > 1) {
-                const roadPolyline = await buildRoadPolyline(routePoints);
-                if (roadPolyline) {
-                    map.fitBounds(roadPolyline.getBounds(), { padding: [30, 30] });
+                const roadResult = await buildRoadPolyline(routePoints);
+                if (roadResult && roadResult.polyline) {
+                    focusMapOnLine(roadResult.polyline);
+                    updateTotalKmFromResult(roadResult);
                 } else {
-                    map.fitBounds(L.polyline(routePoints).getBounds(), { padding: [30, 30] });
+                    const fallbackLine = handleFallbackDistance(routePoints);
+                    if (fallbackLine) {
+                        focusMapOnLine(fallbackLine);
+                    }
                 }
             } else {
-                map.setView(routePoints[0], 10);
+                focusOnSinglePoint(routePoints[0]);
+                setRouteKmValue(0);
             }
-            statusEl.textContent = 'Mapa carregado com rota otimizada. Utilize o painel ao lado para focar cada parada.';
+            if (isSuggestionView) {
+                statusEl.textContent = 'Mapa carregado com sugestão automática de rota. Revise antes de aplicar ao planejamento real.';
+            } else {
+                statusEl.textContent = 'Mapa carregado com rota otimizada. Utilize o painel ao lado para focar cada parada.';
+            }
         } else {
             statusEl.textContent = 'Não foi possível localizar nenhuma parada. Verifique se as cidades/UF estão preenchidas.';
+            setRouteKmValue(null);
         }
     }
 

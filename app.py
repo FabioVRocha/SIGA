@@ -12,6 +12,7 @@ from functools import wraps # Para criar um decorador de login
 from werkzeug.security import generate_password_hash, check_password_hash
 import re # Para expressões regulares, usado para parsear rgcdes
 import json # Para lidar com dados JSON (para parâmetros de usuário)
+import math
 from math import isclose
 from decimal import Decimal, InvalidOperation
 
@@ -54,6 +55,206 @@ ORDER_SITUATION_OPTIONS = [
 ORDER_SITUATION_LABELS = {
     option['code']: option['label'] for option in ORDER_SITUATION_OPTIONS
 }
+
+LOAD_LOT_ROUTE_PARAM_NAME = 'load_lot_route_prefs'
+
+
+def route_sequence_sort_value(raw_value):
+    """Normaliza o valor de sequência para permitir ordenação consistente."""
+    if raw_value is None:
+        return (float('inf'), '')
+    seq_str = str(raw_value).strip()
+    if not seq_str:
+        return (float('inf'), '')
+    digits_only = ''.join(ch for ch in seq_str if ch.isdigit())
+    if digits_only:
+        try:
+            return (int(digits_only), seq_str)
+        except ValueError:
+            pass
+    try:
+        normalized = seq_str.replace(',', '.')
+        return (float(normalized), seq_str)
+    except ValueError:
+        return (float('inf'), seq_str)
+
+
+def load_route_preferences_for_user(user_id):
+    """Recupera as preferências de pontos inicial/final salvas para o usuário."""
+    route_preferences = {
+        'start': {'enabled': False, 'cidade': '', 'estado': ''},
+        'end': {'enabled': False, 'cidade': '', 'estado': ''},
+    }
+    if not user_id:
+        return route_preferences
+    stored_prefs = get_user_parameters(user_id, LOAD_LOT_ROUTE_PARAM_NAME)
+    if not stored_prefs:
+        return route_preferences
+    try:
+        parsed = json.loads(stored_prefs)
+        for key in ('start', 'end'):
+            if key in parsed and isinstance(parsed[key], dict):
+                route_preferences[key]['enabled'] = bool(parsed[key].get('enabled'))
+                route_preferences[key]['cidade'] = (parsed[key].get('cidade') or '').strip()
+                route_preferences[key]['estado'] = (parsed[key].get('estado') or '').strip()
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return route_preferences
+
+
+def build_route_payload_from_orders(orders, preferred_sequence_field=None):
+    """Monta a estrutura utilizada no mapa a partir da lista de pedidos."""
+    payload = []
+    for index, order in enumerate(orders):
+        if preferred_sequence_field:
+            preferred_value = order.get(preferred_sequence_field)
+            sequence_display = str(preferred_value) if preferred_value else str(index + 1)
+        else:
+            sequence_display = order.get('sequencia') or str(index + 1)
+        payload.append(
+            {
+                'pedido': order.get('pedido', ''),
+                'sequencia': order.get('sequencia', ''),
+                'cliente': order.get('cliente', ''),
+                'cidade': order.get('cidade', ''),
+                'estado': order.get('estado', ''),
+                'latitude': order.get('latitude'),
+                'longitude': order.get('longitude'),
+                'sequence_display': sequence_display,
+                'marker_type': 'order',
+                'order_index': index,
+            }
+        )
+    return payload
+
+
+def build_custom_point(route_preferences, pref_key, label, marker_type):
+    """Cria um ponto artificial para o mapa a partir das preferências salvas."""
+    config = route_preferences.get(pref_key, {})
+    enabled = config.get('enabled')
+    city = (config.get('cidade') or '').strip()
+    state = (config.get('estado') or '').strip()
+    if not enabled or not (city or state):
+        return None
+    return {
+        'pedido': '',
+        'sequencia': '',
+        'sequence_display': label,
+        'cliente': 'Ponto ' + ('Inicial' if pref_key == 'start' else 'Final'),
+        'cidade': city,
+        'estado': state,
+        'latitude': None,
+        'longitude': None,
+        'marker_type': marker_type,
+        'order_index': None,
+    }
+
+
+def build_map_waypoints(route_payload, route_preferences):
+    """Combina cargas reais com pontos customizados para renderizar no mapa."""
+    map_waypoints = []
+    custom_start = build_custom_point(route_preferences, 'start', 'I', 'custom-start')
+    custom_end = build_custom_point(route_preferences, 'end', 'F', 'custom-end')
+    if custom_start:
+        map_waypoints.append(custom_start)
+    map_waypoints.extend(route_payload)
+    if custom_end:
+        map_waypoints.append(custom_end)
+    return map_waypoints
+
+
+def has_valid_coordinates(order):
+    """Determina se o pedido possui coordenadas geográficas utilizáveis."""
+    lat = order.get('latitude')
+    lon = order.get('longitude')
+    if lat in (None, '') or lon in (None, ''):
+        return False
+    try:
+        lat = float(lat)
+        lon = float(lon)
+    except (TypeError, ValueError):
+        return False
+    if math.isclose(lat, 0.0, abs_tol=1e-9) and math.isclose(lon, 0.0, abs_tol=1e-9):
+        return False
+    return True
+
+
+def haversine_distance_km(point_a, point_b):
+    """Calcula a distância aproximada entre dois pontos geográficos."""
+    lat1, lon1 = point_a
+    lat2, lon2 = point_b
+    radius = 6371
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    a = math.sin(d_lat / 2) ** 2 + math.sin(d_lon / 2) ** 2 * math.cos(lat1_rad) * math.cos(lat2_rad)
+    c = 2 * math.asin(min(1, math.sqrt(a)))
+    return radius * c
+
+
+def generate_route_suggestion_orders(orders):
+    """Reordena os pedidos usando uma heurística simples de vizinho mais próximo."""
+    if not orders:
+        return [], {
+            'optimized_count': 0,
+            'without_coordinates': 0,
+            'strategy': 'nearest_neighbor',
+            'total': 0,
+        }
+    valid_orders = []
+    missing_orders = []
+    for order in orders:
+        if has_valid_coordinates(order):
+            valid_orders.append(order)
+        else:
+            missing_orders.append(order)
+
+    if not valid_orders:
+        sequence = []
+        for position, order in enumerate(orders, start=1):
+            order_copy = dict(order)
+            order_copy['suggested_position'] = position
+            order_copy['suggestion_source'] = 'insufficient_coordinates'
+            sequence.append(order_copy)
+        return sequence, {
+            'optimized_count': 0,
+            'without_coordinates': len(missing_orders),
+            'strategy': 'sequence_fallback',
+            'total': len(orders),
+        }
+
+    remaining = valid_orders.copy()
+    optimized_sequence = []
+    current = remaining.pop(0)
+    optimized_sequence.append(current)
+    while remaining:
+        current_point = (current.get('latitude'), current.get('longitude'))
+        next_index = min(
+            range(len(remaining)),
+            key=lambda idx: haversine_distance_km(
+                current_point,
+                (remaining[idx].get('latitude'), remaining[idx].get('longitude'))
+            )
+        )
+        current = remaining.pop(next_index)
+        optimized_sequence.append(current)
+
+    optimized_ids = {id(order) for order in optimized_sequence}
+    combined_sequence = optimized_sequence + missing_orders
+    suggestion = []
+    for position, order in enumerate(combined_sequence, start=1):
+        order_copy = dict(order)
+        order_copy['suggested_position'] = position
+        order_copy['suggestion_source'] = 'optimized' if id(order) in optimized_ids else 'missing_coordinates'
+        suggestion.append(order_copy)
+
+    return suggestion, {
+        'optimized_count': len(optimized_sequence),
+        'without_coordinates': len(missing_orders),
+        'strategy': 'nearest_neighbor',
+        'total': len(orders),
+    }
 
 
 def format_currency_brl(value):
@@ -2463,7 +2664,7 @@ def calculate_order_kpi(reservado_raw, separado_raw, carregado_raw):
 
 # --- Rotas de Placeholder para o Menu (Vendas) ---
 def fetch_orders(filters):
-    """Busca os pedidos com agregações de quantidade, reservas, separações e carregamentos."""
+    """Busca os pedidos com agregações e metadados necessários para planejamento de rota."""
     orders = []
     error_message = None
     conn = get_erp_db_connection()
@@ -2474,6 +2675,7 @@ def fetch_orders(filters):
     has_lcapecod_column = False
     column_check_cursor = None
     pedprodu_columns = None
+    cidade_columns = None
 
     try:
         column_check_cursor = conn.cursor()
@@ -2497,8 +2699,44 @@ def fetch_orders(filters):
             column_check_cursor.close()
 
     try:
+        cidade_columns = get_table_columns(conn, 'cidade')
+    except Error as e:
+        print(f"Erro ao analisar colunas da tabela 'cidade': {e}")
+        cidade_columns = set()
+
+    latitude_column = None
+    longitude_column = None
+    if cidade_columns:
+        for candidate in ('cidlatitude', 'latitude', 'cidlat', 'latitude_gps'):
+            if candidate in cidade_columns:
+                latitude_column = candidate
+                break
+        for candidate in ('cidlongitude', 'longitude', 'cidlong', 'longitude_gps'):
+            if candidate in cidade_columns:
+                longitude_column = candidate
+                break
+
+    latitude_select = f"COALESCE(c.{latitude_column}, 0) AS cidade_latitude," if latitude_column else "NULL AS cidade_latitude,"
+    longitude_select = f"COALESCE(c.{longitude_column}, 0) AS cidade_longitude," if longitude_column else "NULL AS cidade_longitude,"
+
+    cidade_select = (
+        "CASE "
+        "WHEN COALESCE(c.cidnome, '') <> '' THEN c.cidnome "
+        "WHEN COALESCE(p.pedentcid::text, '') <> '' THEN p.pedentcid::text "
+        "ELSE '' "
+        "END"
+    )
+    estado_select = (
+        "CASE "
+        "WHEN COALESCE(c.estado, '') <> '' THEN c.estado "
+        "WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text "
+        "ELSE '' "
+        "END"
+    )
+
+    try:
         cur = conn.cursor()
-        query = """
+        query = f"""
             WITH prod_quant AS (
                 SELECT pedido, SUM(COALESCE(pprquanti, 0)) AS total_quantidade
                 FROM pedprodu
@@ -2550,12 +2788,40 @@ def fetch_orders(filters):
                     ) base_data
                 ) sub
                 GROUP BY sub.pedido
+            ),
+            production_lots AS (
+                SELECT
+                    CAST(lots.pedido AS TEXT) AS pedido,
+                    STRING_AGG(lots.lot_display, '; ' ORDER BY lots.lot_display) AS production_lots_display
+                FROM (
+                    SELECT DISTINCT
+                        ao.acaopedi AS pedido,
+                        CASE
+                            WHEN COALESCE(lp.lotcod::text, '') <> '' THEN
+                                lp.lotcod::text ||
+                                CASE
+                                    WHEN COALESCE(lp.lotdes, '') <> '' THEN ' - ' || lp.lotdes
+                                    ELSE ''
+                                END
+                            ELSE ''
+                        END AS lot_display
+                    FROM acaorde2 ao
+                    JOIN ordem o ON o.ordem = ao.acaoorde
+                    LEFT JOIN loteprod lp ON lp.lotcod = o.lotcod
+                    WHERE ao.acaopedi IS NOT NULL
+                ) lots
+                WHERE lots.lot_display <> ''
+                GROUP BY lots.pedido
             )
             SELECT
                 p.pedido,
                 p.lcaseque,
                 p.pedcliente,
                 COALESCE(e.empnome, '') AS empnome,
+                {cidade_select} AS cidade,
+                {estado_select} AS estado,
+                {latitude_select}
+                {longitude_select}
                 CASE
                     WHEN COALESCE(c.cidnome, '') <> '' AND COALESCE(c.estado, '') <> '' THEN c.cidnome || '/' || c.estado
                     WHEN COALESCE(c.cidnome, '') <> '' THEN c.cidnome
@@ -2571,13 +2837,15 @@ def fetch_orders(filters):
                 COALESCE(proj.carregado, 0) AS carregado,
                 COALESCE(linha.linha, 'OUTROS') AS linha,
                 COALESCE(p.pedaprova, '') AS approval_status_code,
-                COALESCE(p.pedsitua, '') AS situation_code
+                COALESCE(p.pedsitua, '') AS situation_code,
+                COALESCE(pl.production_lots_display, '') AS production_lots_display
             FROM pedido p
             LEFT JOIN empresa e ON p.pedcliente = e.empresa
             LEFT JOIN cidade c ON p.pedentcid = c.cidade
             LEFT JOIN prod_quant prod ON p.pedido = prod.pedido
             LEFT JOIN proj_totals proj ON p.pedido = proj.pedido
             LEFT JOIN linha_info linha ON p.pedido = linha.pedido
+            LEFT JOIN production_lots pl ON pl.pedido = CAST(p.pedido AS TEXT)
         """
         if has_lcapecod_column:
             query += "            LEFT JOIN lotecar lc ON p.lcapecod = lc.lcacod\n"
@@ -2754,29 +3022,81 @@ def fetch_orders(filters):
         cur.close()
 
         for row in rows:
-            reservado_raw = row[6]
-            separado_raw = row[7]
-            carregado_raw = row[8]
+            (
+                pedido,
+                lcaseque,
+                cliente_codigo,
+                cliente_nome,
+                cidade_nome,
+                estado_sigla,
+                latitude_raw,
+                longitude_raw,
+                cidade_uf,
+                quantidade_total_raw,
+                reservado_raw,
+                separado_raw,
+                carregado_raw,
+                linha,
+                approval_code,
+                situation_code,
+                production_lots_display,
+            ) = row
+
             kpi_status = calculate_order_kpi(reservado_raw, separado_raw, carregado_raw)
-            approval_code = (row[10] or '').strip() if len(row) > 10 else ''
-            situation_code = (row[11] or '').strip() if len(row) > 11 else ''
+
+            try:
+                quantidade_total = float(quantidade_total_raw) if quantidade_total_raw is not None else 0.0
+            except (TypeError, ValueError):
+                quantidade_total = 0.0
+
+            try:
+                reservado = float(reservado_raw) if reservado_raw is not None else 0.0
+            except (TypeError, ValueError):
+                reservado = 0.0
+
+            try:
+                separado = float(separado_raw) if separado_raw is not None else 0.0
+            except (TypeError, ValueError):
+                separado = 0.0
+
+            try:
+                carregado = float(carregado_raw) if carregado_raw is not None else 0.0
+            except (TypeError, ValueError):
+                carregado = 0.0
+
+            def parse_coord(raw_value):
+                if raw_value in (None, ''):
+                    return None
+                try:
+                    return float(raw_value)
+                except (TypeError, ValueError):
+                    return None
+
+            approval_code = (approval_code or '').strip()
+            situation_code = (situation_code or '').strip()
+            linha_value = linha or 'OUTROS'
 
             orders.append({
-                'pedido': row[0],
-                'lcaseque': row[1],
-                'cliente_codigo': row[2],
-                'cliente_nome': row[3],
-                'cidade_uf': row[4],
-                'quantidade_total': float(row[5]) if row[5] is not None else 0.0,
-                'reservado': float(reservado_raw) if reservado_raw is not None else 0.0,
-                'separado': float(separado_raw) if separado_raw is not None else 0.0,
-                'carregado': float(carregado_raw) if carregado_raw is not None else 0.0,
-                'linha': row[9],
+                'pedido': pedido,
+                'lcaseque': lcaseque,
+                'cliente_codigo': cliente_codigo,
+                'cliente_nome': cliente_nome,
+                'cidade': (cidade_nome or '').strip(),
+                'estado': (estado_sigla or '').strip(),
+                'cidade_uf': cidade_uf,
+                'latitude': parse_coord(latitude_raw),
+                'longitude': parse_coord(longitude_raw),
+                'quantidade_total': quantidade_total,
+                'reservado': reservado,
+                'separado': separado,
+                'carregado': carregado,
+                'linha': linha_value,
                 'approval_status_code': approval_code,
                 'approval_status': ORDER_APPROVAL_STATUS_LABELS.get(approval_code, 'Não Informado'),
                 'situation_code': situation_code,
                 'situation': ORDER_SITUATION_LABELS.get(situation_code, 'Não Informada'),
-                'kpi_status': kpi_status
+                'production_lots_display': production_lots_display or '',
+                'kpi_status': kpi_status,
             })
 
     except Error as e:
@@ -4073,6 +4393,184 @@ def load_lots_view():
         usuario_logado=session.get('username', 'Convidado')
     )
 
+
+@app.route('/load_lots/route_planner')
+@login_required
+def load_lot_route_planner():
+    today = datetime.date.today()
+    first_day = today.replace(day=1)
+    last_day = first_day.replace(day=calendar.monthrange(today.year, today.month)[1])
+
+    start_date_param = (request.args.get('start_date') or '').strip()
+    end_date_param = (request.args.get('end_date') or '').strip()
+    production_lots_param = [value.strip() for value in request.args.getlist('production_lots') if value and value.strip()]
+
+    approval_status_param = []
+    for raw_value in request.args.getlist('approval_statuses'):
+        code = (raw_value or '').strip().upper()
+        if code in ORDER_APPROVAL_STATUS_LABELS:
+            approval_status_param.append(code)
+
+    situation_param = []
+    for raw_value in request.args.getlist('situations'):
+        code = (raw_value or '').strip().upper()
+        if code in ORDER_SITUATION_LABELS:
+            situation_param.append(code)
+
+    separation_stage_param = (request.args.get('separation_stage') or '').strip().lower()
+    if separation_stage_param not in {'zero', 'partial', 'total', ''}:
+        separation_stage_param = ''
+
+    filters = {
+        'start_date': start_date_param,
+        'end_date': end_date_param,
+        'production_lots': production_lots_param,
+        'approval_statuses': approval_status_param,
+        'situations': situation_param,
+        'separation_stage': separation_stage_param,
+    }
+
+    query_filters = {
+        'production_lots': production_lots_param,
+        'approval_statuses': approval_status_param,
+        'situations': situation_param,
+        'sort_by': 'pedido',
+        'sort_order': 'desc',
+    }
+
+    if start_date_param:
+        query_filters['start_date'] = start_date_param
+    else:
+        filters['start_date'] = first_day.strftime('%Y-%m-%d')
+        query_filters['start_date'] = filters['start_date']
+
+    if end_date_param:
+        query_filters['end_date'] = end_date_param
+    else:
+        filters['end_date'] = last_day.strftime('%Y-%m-%d')
+        query_filters['end_date'] = filters['end_date']
+
+    orders, error_message = fetch_orders(query_filters)
+    if error_message:
+        flash(error_message, 'danger')
+
+    def matches_stage(order):
+        stage = separation_stage_param
+        kpi = order.get('kpi_status')
+        if stage == 'zero':
+            return (order.get('separado', 0) == 0) or kpi == 0
+        if stage == 'partial':
+            return kpi == 1
+        if stage == 'total':
+            return kpi in (2, 3)
+        return True
+
+    filtered_orders = [order for order in orders if matches_stage(order)]
+
+    def extract_production_lots(display_value):
+        entries = []
+        if not display_value:
+            return entries
+        for chunk in display_value.split(';'):
+            token = chunk.strip()
+            if not token:
+                continue
+            code_part = token.split(' - ')[0].strip()
+            entries.append({'code': code_part, 'label': token})
+        return entries
+
+    lot_display_map = {}
+    lot_codes_in_order = []
+    for order in filtered_orders:
+        for entry in extract_production_lots(order.get('production_lots_display', '')):
+            code = entry['code']
+            if code and code not in lot_display_map:
+                lot_display_map[code] = entry['label']
+                lot_codes_in_order.append(code)
+
+    color_palette = [
+        '#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#f97316', '#f43f5e',
+        '#a855f7', '#eab308', '#ec4899', '#10b981', '#6366f1', '#fb7185',
+    ]
+    lot_color_map = {}
+    for idx, code in enumerate(lot_codes_in_order):
+        lot_color_map[code] = color_palette[idx % len(color_palette)]
+
+    stage_border_colors = {
+        'zero': '#dc2626',
+        'partial': '#facc15',
+        'total': '#16a34a',
+    }
+
+    map_orders = []
+    for order in filtered_orders:
+        lot_entries = extract_production_lots(order.get('production_lots_display', ''))
+        primary_lot_code = ''
+        primary_lot_label = ''
+        marker_fill = '#1f2937'
+        for entry in lot_entries:
+            if entry['code'] in lot_color_map:
+                primary_lot_code = entry['code']
+                primary_lot_label = entry['label']
+                marker_fill = lot_color_map[entry['code']]
+                break
+        map_orders.append(
+            {
+                'pedido': order.get('pedido'),
+                'cliente': order.get('cliente_nome'),
+                'cidade': order.get('cidade'),
+                'estado': order.get('estado'),
+                'linha': order.get('linha'),
+                'quantidade_total': order.get('quantidade_total'),
+                'latitude': order.get('latitude'),
+                'longitude': order.get('longitude'),
+                'kpi_status': order.get('kpi_status'),
+                'reservado': order.get('reservado'),
+                'separado': order.get('separado'),
+                'production_lots_display': order.get('production_lots_display'),
+                'primary_lot_code': primary_lot_code,
+                'primary_lot_label': primary_lot_label,
+                'marker_fill': marker_fill,
+            }
+        )
+
+    lot_color_legend = [
+        {'code': code, 'label': lot_display_map.get(code, code), 'color': lot_color_map.get(code)}
+        for code in lot_codes_in_order
+    ]
+
+    def format_period(value):
+        if not value:
+            return ''
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').strftime('%d/%m/%Y')
+        except ValueError:
+            return ''
+
+    period_display = {
+        'start': format_period(query_filters.get('start_date')),
+        'end': format_period(query_filters.get('end_date')),
+    }
+
+    return render_template(
+        'load_route_planner.html',
+        page_title="Criar Rota",
+        orders=filtered_orders,
+        map_orders=map_orders,
+        filters=filters,
+        production_lot_options=get_distinct_production_lots(),
+        approval_status_options=ORDER_APPROVAL_STATUS_OPTIONS,
+        situation_options=ORDER_SITUATION_OPTIONS,
+        production_lot_colors=lot_color_map,
+        lot_color_legend=lot_color_legend,
+        stage_border_colors=stage_border_colors,
+        separation_stage=separation_stage_param,
+        period_display=period_display,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
+    )
+
+
 @app.route('/load_lots/<path:load_lot_code>')
 @login_required
 def load_lot_detail(load_lot_code):
@@ -4149,45 +4647,10 @@ def load_lot_map(load_lot_code):
         flash('Lote não encontrado para consulta.', 'warning')
         return redirect(url_for('load_lots_view'))
 
-    def sequence_sort_value(raw_value):
-        if raw_value is None:
-            return (float('inf'), '')
-        seq_str = str(raw_value).strip()
-        if not seq_str:
-            return (float('inf'), '')
-        digits_only = ''.join(ch for ch in seq_str if ch.isdigit())
-        if digits_only:
-            try:
-                return (int(digits_only), seq_str)
-            except ValueError:
-                pass
-        try:
-            normalized = seq_str.replace(',', '.')
-            return (float(normalized), seq_str)
-        except ValueError:
-            return (float('inf'), seq_str)
-
     ordered_stops = sorted(
         detail_orders,
-        key=lambda order: sequence_sort_value(order.get('sequencia'))
+        key=lambda order: route_sequence_sort_value(order.get('sequencia'))
     )
-
-    route_payload = []
-    for index, order in enumerate(ordered_stops):
-        route_payload.append(
-            {
-                'pedido': order.get('pedido', ''),
-                'sequencia': order.get('sequencia', ''),
-                'cliente': order.get('cliente', ''),
-                'cidade': order.get('cidade', ''),
-                'estado': order.get('estado', ''),
-                'latitude': order.get('latitude'),
-                'longitude': order.get('longitude'),
-                'sequence_display': order.get('sequencia') or str(index + 1),
-                'marker_type': 'order',
-                'order_index': index,
-            }
-        )
 
     start_date_param = (request.args.get('start_date') or '').strip()
     end_date_param = (request.args.get('end_date') or '').strip()
@@ -4202,55 +4665,13 @@ def load_lot_map(load_lot_code):
 
     detail_url = url_for('load_lot_detail', load_lot_code=lot_code, **nav_params)
     lots_url = url_for('load_lots_view', **nav_params)
+    route_suggestion_url = url_for('load_lot_route_suggestion', load_lot_code=lot_code, **nav_params)
+    route_map_url = url_for('load_lot_map', load_lot_code=lot_code, **nav_params)
 
     user_id = session.get('user_id')
-    route_preferences = {
-        'start': {'enabled': False, 'cidade': '', 'estado': ''},
-        'end': {'enabled': False, 'cidade': '', 'estado': ''},
-    }
-    param_name = f'load_lot_route_{lot_code}_prefs'
-    if user_id:
-        stored_prefs = get_user_parameters(user_id, param_name)
-        if stored_prefs:
-            try:
-                parsed = json.loads(stored_prefs)
-                for key in ('start', 'end'):
-                    if key in parsed and isinstance(parsed[key], dict):
-                        route_preferences[key]['enabled'] = bool(parsed[key].get('enabled'))
-                        route_preferences[key]['cidade'] = (parsed[key].get('cidade') or '').strip()
-                        route_preferences[key]['estado'] = (parsed[key].get('estado') or '').strip()
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-    def build_custom_point(pref_key, label, marker_type):
-        config = route_preferences.get(pref_key, {})
-        enabled = config.get('enabled')
-        city = (config.get('cidade') or '').strip()
-        state = (config.get('estado') or '').strip()
-        if not enabled or not (city or state):
-            return None
-        return {
-            'pedido': '',
-            'sequencia': '',
-            'sequence_display': label,
-            'cliente': 'Ponto ' + ('Inicial' if pref_key == 'start' else 'Final'),
-            'cidade': city,
-            'estado': state,
-            'latitude': None,
-            'longitude': None,
-            'marker_type': marker_type,
-            'order_index': None,
-        }
-
-    custom_start = build_custom_point('start', 'I', 'custom-start')
-    custom_end = build_custom_point('end', 'F', 'custom-end')
-
-    map_waypoints = []
-    if custom_start:
-        map_waypoints.append(custom_start)
-    map_waypoints.extend(route_payload)
-    if custom_end:
-        map_waypoints.append(custom_end)
+    route_preferences = load_route_preferences_for_user(user_id)
+    route_payload = build_route_payload_from_orders(ordered_stops)
+    map_waypoints = build_map_waypoints(route_payload, route_preferences)
 
     return render_template(
         'load_lot_map.html',
@@ -4263,6 +4684,74 @@ def load_lot_map(load_lot_code):
         parameters_url=url_for('save_load_lot_map_parameters', load_lot_code=lot_code),
         detail_url=detail_url,
         lots_url=lots_url,
+        route_suggestion_url=route_suggestion_url,
+        route_map_url=route_map_url,
+        is_suggestion_view=False,
+        suggestion_meta={},
+        nav_params=nav_params,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+@app.route('/load_lots/<path:load_lot_code>/map/suggestion')
+@login_required
+def load_lot_route_suggestion(load_lot_code):
+    lot_code = (load_lot_code or '').strip()
+    if not lot_code:
+        flash('Lote inválido.', 'warning')
+        return redirect(url_for('load_lots_view'))
+
+    detail_orders, lot_info, detail_error = fetch_load_lot_orders(lot_code)
+    if detail_error:
+        flash(detail_error, 'danger')
+
+    if not lot_info:
+        flash('Lote não encontrado para consulta.', 'warning')
+        return redirect(url_for('load_lots_view'))
+
+    ordered_stops = sorted(
+        detail_orders,
+        key=lambda order: route_sequence_sort_value(order.get('sequencia'))
+    )
+
+    suggested_orders, suggestion_meta = generate_route_suggestion_orders(ordered_stops)
+
+    start_date_param = (request.args.get('start_date') or '').strip()
+    end_date_param = (request.args.get('end_date') or '').strip()
+    nav_params = {
+        key: value
+        for key, value in {
+            'start_date': start_date_param,
+            'end_date': end_date_param,
+        }.items()
+        if value
+    }
+
+    detail_url = url_for('load_lot_detail', load_lot_code=lot_code, **nav_params)
+    lots_url = url_for('load_lots_view', **nav_params)
+    route_suggestion_url = url_for('load_lot_route_suggestion', load_lot_code=lot_code, **nav_params)
+    route_map_url = url_for('load_lot_map', load_lot_code=lot_code, **nav_params)
+
+    user_id = session.get('user_id')
+    route_preferences = load_route_preferences_for_user(user_id)
+    route_payload = build_route_payload_from_orders(suggested_orders, preferred_sequence_field='suggested_position')
+    map_waypoints = build_map_waypoints(route_payload, route_preferences)
+
+    return render_template(
+        'load_lot_map.html',
+        page_title=f"Sugestão de Rota {lot_info['codigo']}",
+        lot_info=lot_info,
+        route_orders=suggested_orders,
+        route_payload=route_payload,
+        map_waypoints=map_waypoints,
+        route_preferences=route_preferences,
+        parameters_url=url_for('save_load_lot_map_parameters', load_lot_code=lot_code),
+        detail_url=detail_url,
+        lots_url=lots_url,
+        route_suggestion_url=route_suggestion_url,
+        route_map_url=route_map_url,
+        is_suggestion_view=True,
+        suggestion_meta=suggestion_meta,
         nav_params=nav_params,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
@@ -4293,7 +4782,7 @@ def save_load_lot_map_parameters(load_lot_code):
         'end': extract_pref('end'),
     }
 
-    param_name = f'load_lot_route_{lot_code}_prefs'
+    param_name = LOAD_LOT_ROUTE_PARAM_NAME
     saved = save_user_parameters(user_id, param_name, json.dumps(preferences))
     if saved:
         flash('Preferências de rota salvas com sucesso.', 'success')
