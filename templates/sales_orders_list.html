@@ -807,17 +807,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusOptions = {{ approval_status_options | tojson }};
     const situationOptions = {{ situation_options | tojson }};
     const occurrenceOptions = {{ occurrence_options | tojson }};
+    const occurrenceBlankValue = {{ occurrence_blank_value | tojson }};
     const loadLotFilterOptions = {{ load_lot_filter_options | tojson }};
     const productionLotFilterOptions = {{ production_lot_filter_options | tojson }};
     
     const filters = {{ filters | tojson }};
+
+    const formatOccurrenceOption = (option) => {
+        if (!option) {
+            return { value: '', label: '' };
+        }
+        if (option.code === occurrenceBlankValue) {
+            return {
+                value: option.code,
+                label: option.description || 'Em branco',
+            };
+        }
+        if (option.description) {
+            return {
+                value: option.code,
+                label: `${option.code} - ${option.description}`,
+            };
+        }
+        return {
+            value: option.code,
+            label: option.code,
+        };
+    };
 
     filterGrid.appendChild(createDropdown('city', 'Cidades', 'cities', cityOptions.map(c => ({value: c, label: c})), filters.cities || []));
     filterGrid.appendChild(createDropdown('state', 'Estados', 'states', stateOptions.map(s => ({value: s, label: s})), filters.states || []));
     filterGrid.appendChild(createDropdown('vendor', 'Vendedores', 'vendors', vendorOptions.map(v => ({value: v.code, label: v.name || v.code})), filters.vendors || []));
     filterGrid.appendChild(createDropdown('status', 'Status', 'statuses', statusOptions.map(s => ({value: s.code, label: s.label})), filters.statuses || []));
     filterGrid.appendChild(createDropdown('situation', 'Situações', 'situations', situationOptions.map(s => ({value: s.code, label: s.label})), filters.situations || []));
-    filterGrid.appendChild(createDropdown('occurrence', 'Ocorrências', 'occurrences', occurrenceOptions.map(o => ({value: o.code, label: `${o.code} - ${o.description}`})), filters.occurrences || []));
+    filterGrid.appendChild(createDropdown('occurrence', 'Ocorrências', 'occurrences', occurrenceOptions.map(formatOccurrenceOption), filters.occurrences || []));
     filterGrid.appendChild(createDropdown('hasLoadLot', 'Lote de Carga', 'has_load_lot', loadLotFilterOptions.map(o => ({value: o.value, label: o.label})), filters.has_load_lot || [], false));
     filterGrid.appendChild(createDropdown('hasProductionLot', 'Lote de Produção', 'has_production_lot', productionLotFilterOptions.map(o => ({value: o.value, label: o.label})), filters.has_production_lot || [], false));
 

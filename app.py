@@ -56,6 +56,8 @@ ORDER_SITUATION_LABELS = {
     option['code']: option['label'] for option in ORDER_SITUATION_OPTIONS
 }
 
+OCCURRENCE_BLANK_VALUE = '__blank__'
+
 LOAD_LOT_ROUTE_PARAM_NAME = 'load_lot_route_prefs'
 
 
@@ -1012,17 +1014,44 @@ def get_distinct_occurrences():
             raw_rows = cur.fetchall()
             cur.close()
             occurrence_map = {}
-            for code, description in raw_rows:
-                if code not in occurrence_map or (not occurrence_map[code] and description):
-                    occurrence_map[code] = description
+            for code_raw, description_raw in raw_rows:
+                code = (code_raw or '').strip()
+                description = (description_raw or '').strip()
+                bucket = occurrence_map.setdefault(code, set())
+                if description:
+                    bucket.add(description)
+                elif not bucket:
+                    bucket.add('')
+
+            def pick_best_description(descriptions):
+                if not descriptions:
+                    return ''
+                def score(text):
+                    cleaned = (text or '').strip()
+                    if not cleaned:
+                        return (0, 0, 0, 0, '')
+                    has_letters = 1 if any(ch.isalpha() for ch in cleaned) else 0
+                    has_space = 1 if ' ' in cleaned else 0
+                    has_slash = 1 if '/' in cleaned else 0
+                    length = len(cleaned)
+                    return (has_letters, has_space, has_slash, length, cleaned)
+                return max(descriptions, key=score)
+
             occurrences = [
                 {
                     'code': code,
-                    'description': occurrence_map[code] or '',
+                    'description': pick_best_description(occurrence_map[code]),
                 }
                 for code in sorted(occurrence_map.keys())
                 if code or occurrence_map[code]
             ]
+            occurrences.insert(
+                0,
+                {
+                    'code': OCCURRENCE_BLANK_VALUE,
+                    'description': 'Em branco',
+                },
+            )
         except Error as e:
             print(f'Erro ao buscar ocorr�ncias de pedidos: {e}')
         finally:
@@ -3377,11 +3406,27 @@ def fetch_sales_orders(filters):
             query += f" AND COALESCE(p.pedsitua, '') IN ({placeholders})"
             params.extend(situations)
 
-        occurrences = [value.strip() for value in filters.get('occurrences', []) if value and value.strip()]
-        if occurrences:
-            placeholders = ', '.join(['%s'] * len(occurrences))
-            query += f" AND COALESCE(occ.occurrence_code, '') IN ({placeholders})"
-            params.extend(occurrences)
+        occurrences_raw = [
+            value.strip()
+            for value in filters.get('occurrences', [])
+            if value and value.strip()
+        ]
+        occurrence_codes = [
+            value for value in occurrences_raw
+            if value != OCCURRENCE_BLANK_VALUE
+        ]
+        include_blank_occurrence = OCCURRENCE_BLANK_VALUE in occurrences_raw
+        occurrence_conditions = []
+        if occurrence_codes:
+            placeholders = ', '.join(['%s'] * len(occurrence_codes))
+            occurrence_conditions.append(
+                f"COALESCE(occ.occurrence_code, '') IN ({placeholders})"
+            )
+            params.extend(occurrence_codes)
+        if include_blank_occurrence:
+            occurrence_conditions.append("COALESCE(occ.occurrence_code, '') = ''")
+        if occurrence_conditions:
+            query += " AND (" + " OR ".join(occurrence_conditions) + ")"
 
         has_load_lot = [value.strip().lower() for value in filters.get('has_load_lot', []) if value]
         if has_load_lot:
@@ -4892,6 +4937,7 @@ def sales_orders_list():
         situation_options=ORDER_SITUATION_OPTIONS,
         load_lot_filter_options=load_lot_filter_options,
         production_lot_filter_options=production_lot_filter_options,
+        occurrence_blank_value=OCCURRENCE_BLANK_VALUE,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
