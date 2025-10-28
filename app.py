@@ -943,7 +943,13 @@ def dashboard():
     """
     Rota para o dashboard principal do sistema.
     """
-    return render_template('dashboard.html', system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+    sales_summary = get_dashboard_sales_summary()
+    return render_template(
+        'dashboard.html',
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
+        dashboard_sales_summary=sales_summary,
+    )
 
 def get_product_line(group_name):
     """
@@ -1607,6 +1613,48 @@ def fetch_monthly_revenue(year, filters):
             conn.close()
 
     return monthly_totals
+
+
+def get_dashboard_sales_summary():
+    """Calcula o faturamento líquido do mês atual e a variação anual para o card do dashboard."""
+    today = datetime.date.today()
+    current_year = today.year
+    current_month = today.month
+
+    filters = {'month': [current_month]}
+
+    current_year_totals = fetch_monthly_revenue(current_year, filters) or [0.0] * 12
+    previous_year_totals = fetch_monthly_revenue(current_year - 1, filters) or [0.0] * 12
+
+    current_value = current_year_totals[current_month - 1] if current_year_totals else 0.0
+    previous_value = previous_year_totals[current_month - 1] if previous_year_totals else 0.0
+
+    comparison_text = "Sem variação em relação ao mesmo mês do ano anterior."
+    percent_change = None
+
+    if previous_value not in (None, 0):
+        percent_change = ((current_value - previous_value) / previous_value) * 100
+        if isclose(percent_change, 0.0, abs_tol=1e-6):
+            percent_change = 0.0
+        formatted_percent = format_decimal_br(abs(percent_change), 1)
+        if percent_change > 0:
+            comparison_text = f"Aumento de {formatted_percent}% em relação ao mesmo mês do ano anterior."
+        elif percent_change < 0:
+            comparison_text = f"Queda de {formatted_percent}% em relação ao mesmo mês do ano anterior."
+        else:
+            comparison_text = "Sem variação em relação ao mesmo mês do ano anterior."
+    else:
+        if isclose(current_value, 0.0, abs_tol=1e-6):
+            percent_change = 0.0
+        else:
+            comparison_text = "Sem base para comparação com o mesmo mês do ano anterior."
+
+    return {
+        'current_value': current_value,
+        'previous_value': previous_value,
+        'percent_change': percent_change,
+        'comparison_text': comparison_text,
+    }
 
 
 def fetch_all_cfops():

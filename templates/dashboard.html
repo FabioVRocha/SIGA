@@ -12,8 +12,8 @@
             <i class="fas fa-chart-line text-icon-blue"></i>
             <span>Vendas Faturadas (Mês)</span>
         </div>
-        <p class="text-3xl font-bold text-gray-900">R$ 150.000,00</p>
-        <p class="text-sm text-gray-600 mt-2">Aumento de 10% em relação ao mês anterior.</p>
+        <p class="text-3xl font-bold text-gray-900">{{ dashboard_sales_summary.current_value | format_currency_brl }}</p>
+        <p class="text-sm text-gray-600 mt-2">{{ dashboard_sales_summary.comparison_text }}</p>
     </div>
 
     <div class="dashboard-card">
