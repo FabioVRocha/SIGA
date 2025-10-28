@@ -61,6 +61,14 @@ ORDER_SITUATION_LABELS = {
     option['code']: option['label'] for option in ORDER_SITUATION_OPTIONS
 }
 
+SEPARATION_STAGE_OPTIONS = [
+    {'code': 'zero', 'label': 'Igual a zero'},
+    {'code': 'partial', 'label': 'Parcial'},
+    {'code': 'total', 'label': 'Total'},
+]
+
+VALID_SEPARATION_STAGE_CODES = {option['code'] for option in SEPARATION_STAGE_OPTIONS}
+
 OCCURRENCE_BLANK_VALUE = '__blank__'
 
 LOAD_LOT_ROUTE_PARAM_NAME = 'load_lot_route_prefs'
@@ -4842,9 +4850,11 @@ def load_lot_route_planner():
         if code in ORDER_SITUATION_LABELS:
             situation_param.append(code)
 
-    separation_stage_param = (request.args.get('separation_stage') or '').strip().lower()
-    if separation_stage_param not in {'zero', 'partial', 'total', ''}:
-        separation_stage_param = ''
+    separation_stage_param = []
+    for raw_value in request.args.getlist('separation_stage'):
+        code = (raw_value or '').strip().lower()
+        if code in VALID_SEPARATION_STAGE_CODES and code not in separation_stage_param:
+            separation_stage_param.append(code)
 
     filters = {
         'start_date': start_date_param,
@@ -4852,7 +4862,7 @@ def load_lot_route_planner():
         'production_lots': production_lots_param,
         'approval_statuses': approval_status_param,
         'situations': situation_param,
-        'separation_stage': separation_stage_param,
+        'separation_stages': separation_stage_param,
     }
 
     query_filters = {
@@ -4879,16 +4889,26 @@ def load_lot_route_planner():
     if error_message:
         flash(error_message, 'danger')
 
+    stage_filters = set(separation_stage_param)
+    if stage_filters and stage_filters == VALID_SEPARATION_STAGE_CODES:
+        stage_filters = set()
+
     def matches_stage(order):
-        stage = separation_stage_param
+        if not stage_filters:
+            return True
         kpi = order.get('kpi_status')
-        if stage == 'zero':
-            return (order.get('separado', 0) == 0) or kpi == 0
-        if stage == 'partial':
-            return kpi == 1
-        if stage == 'total':
-            return kpi in (2, 3)
-        return True
+        separado = order.get('separado', 0)
+
+        def stage_matches(stage_code):
+            if stage_code == 'zero':
+                return separado == 0 or kpi == 0
+            if stage_code == 'partial':
+                return kpi == 1
+            if stage_code == 'total':
+                return kpi in (2, 3)
+            return True
+
+        return any(stage_matches(code) for code in stage_filters)
 
     filtered_orders = [order for order in orders if matches_stage(order)]
 
@@ -4989,7 +5009,8 @@ def load_lot_route_planner():
         production_lot_colors=lot_color_map,
         lot_color_legend=lot_color_legend,
         stage_border_colors=stage_border_colors,
-        separation_stage=separation_stage_param,
+        separation_stages=separation_stage_param,
+        separation_stage_options=SEPARATION_STAGE_OPTIONS,
         period_display=period_display,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado'),

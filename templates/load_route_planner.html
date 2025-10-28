@@ -624,24 +624,33 @@
                 </div>
             </div>
             <div class="modal-field">
-                <label>Separado</label>
-                <div class="modal-options">
-                    <label>
-                        <input type="radio" name="separation_stage" value="" {% if not filters.separation_stage %}checked{% endif %}>
-                        Todos
-                    </label>
-                    <label>
-                        <input type="radio" name="separation_stage" value="zero" {% if filters.separation_stage == 'zero' %}checked{% endif %}>
-                        Igual a zero
-                    </label>
-                    <label>
-                        <input type="radio" name="separation_stage" value="partial" {% if filters.separation_stage == 'partial' %}checked{% endif %}>
-                        Parcial
-                    </label>
-                    <label>
-                        <input type="radio" name="separation_stage" value="total" {% if filters.separation_stage == 'total' %}checked{% endif %}>
-                        Total
-                    </label>
+                <label for="separationStageTrigger">Separado</label>
+                <div class="multi-combobox" data-multi-combobox data-field-name="separation_stage">
+                    <button type="button" class="multi-combobox-trigger" id="separationStageTrigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span data-role="label" data-placeholder="Todos">Todos</span>
+                        <span class="count-pill" data-role="count" hidden></span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="multi-combobox-panel" role="listbox" aria-multiselectable="true">
+                        <div class="multi-combobox-search">
+                            <input type="search" placeholder="Pesquisar..." data-role="search">
+                        </div>
+                        <ul class="multi-combobox-options" data-role="options">
+                            {% for option in separation_stage_options %}
+                            <li class="multi-combobox-option" data-option-label="{{ (option.label or option.code)|trim|lower }}">
+                                <label>
+                                    <input type="checkbox" name="separation_stage" value="{{ option.code }}" {% if option.code in filters.separation_stages %}checked{% endif %}>
+                                    <span>{{ option.label }}</span>
+                                </label>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        <div class="multi-combobox-empty" data-role="empty" hidden>Nenhuma opção encontrada.</div>
+                        <div class="multi-combobox-footer">
+                            <button type="button" class="btn-secondary" data-role="clear">Limpar</button>
+                            <button type="button" class="btn-secondary" data-role="select-all">Selecionar todos</button>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-actions">
