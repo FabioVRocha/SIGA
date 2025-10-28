@@ -303,17 +303,17 @@
                         {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
                         {% set kpi_status = order.kpi_status %}
                         {% set pedido_status_class = 'status-kpi-blue' if kpi_status == 3 else ('status-kpi-green' if kpi_status == 2 else ('status-kpi-yellow' if kpi_status == 1 else 'status-kpi-red')) %}
-                        <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};">
-                            <td class="py-2 px-4 whitespace-nowrap font-semibold {{ pedido_status_class }}">{{ order.pedido or 'N/A' }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap">{{ order.lcaseque or 'N/A' }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap">{{ order.cliente_codigo or 'N/A' }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap">{{ order.cliente_nome or 'N/A' }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap">{{ order.cidade_uf or 'N/A' }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.quantidade_total | format_decimal_br }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.reservado | format_decimal_br }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.separado | format_decimal_br }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.carregado | format_decimal_br }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap">{{ order.linha or 'N/A' }}</td>
+                        <tr class="hover-row text-sm text-dark-blue" data-order-row="true" style="background-color: {{ row_bg }};">
+                            <td class="py-2 px-4 whitespace-nowrap font-semibold {{ pedido_status_class }}" data-column="filter_pedido">{{ order.pedido or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap" data-column="filter_seq_lote">{{ order.lcaseque or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap" data-column="filter_cliente_codigo">{{ order.cliente_codigo or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap" data-column="filter_cliente_nome">{{ order.cliente_nome or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap" data-column="filter_cidade_uf">{{ order.cidade_uf or 'N/A' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right" data-column="filter_quantidade_total">{{ order.quantidade_total | format_decimal_br }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right" data-column="filter_reservado">{{ order.reservado | format_decimal_br }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right" data-column="filter_separado">{{ order.separado | format_decimal_br }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right" data-column="filter_carregado">{{ order.carregado | format_decimal_br }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap" data-column="filter_linha">{{ order.linha or 'N/A' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap text-center">
                                 <button
                                     type="button"
@@ -327,6 +327,11 @@
                             </td>
                         </tr>
                         {% endfor %}
+                        <tr id="noLocalResultsRow" class="hidden">
+                            <td colspan="11" class="py-6 px-4 text-center text-sm text-slate-muted">
+                                Nenhum pedido coincide com os filtros digitados.
+                            </td>
+                        </tr>
                         {% else %}
                         <tr>
                             <td colspan="11" class="py-6 px-4 text-center text-sm text-slate-muted">
@@ -695,6 +700,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const sortByInputs = document.querySelectorAll('input[name="sort_by"]');
     const sortOrderInputs = document.querySelectorAll('input[name="sort_order"]');
     const sortableButtons = document.querySelectorAll('[data-sort-column]');
+    const tableBody = columnFilterForm ? columnFilterForm.querySelector('tbody') : null;
+    const orderRows = tableBody ? Array.from(tableBody.querySelectorAll('tr[data-order-row="true"]')) : [];
+    const noLocalResultsRow = document.getElementById('noLocalResultsRow');
+    const numericFilterNames = new Set([
+        'filter_quantidade_total',
+        'filter_reservado',
+        'filter_separado',
+        'filter_carregado',
+    ]);
 
     const normalizeText = (value) => {
         if (!value) {
@@ -911,33 +925,71 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const debounce = (callback, delay = 300) => {
-        let timeoutId;
-        return (...args) => {
-            if (timeoutId) {
-                clearTimeout(timeoutId);
-            }
-            timeoutId = setTimeout(() => {
-                callback.apply(null, args);
-            }, delay);
-        };
+    const normalizeFilterValue = (value, isNumeric = false) => {
+        let normalized = normalizeText(value);
+        if (isNumeric) {
+            normalized = normalized.replace(/[^0-9]/g, '');
+        }
+        return normalized;
     };
 
-    if (columnFilterForm && columnFilterInputs.length > 0) {
-        const submitColumnFilters = () => {
-            if (typeof columnFilterForm.requestSubmit === 'function') {
-                columnFilterForm.requestSubmit();
-            } else {
-                columnFilterForm.submit();
-            }
-        };
-        const debouncedColumnSubmit = debounce(submitColumnFilters, 300);
+    const applyLocalTableFilters = () => {
+        if (orderRows.length === 0 || columnFilterInputs.length === 0) {
+            return;
+        }
+
+        const activeFilters = {};
 
         columnFilterInputs.forEach((input) => {
-            input.addEventListener('input', () => {
-                debouncedColumnSubmit();
-            });
+            const isNumeric = numericFilterNames.has(input.name);
+            const normalizedValue = normalizeFilterValue(input.value, isNumeric);
+            if (normalizedValue !== '') {
+                activeFilters[input.name] = normalizedValue;
+            }
         });
+
+        if (Object.keys(activeFilters).length === 0) {
+            orderRows.forEach((row) => row.classList.remove('hidden'));
+            if (noLocalResultsRow) {
+                noLocalResultsRow.classList.add('hidden');
+            }
+            return;
+        }
+
+        let matchCount = 0;
+
+        orderRows.forEach((row) => {
+            const rowMatches = Object.entries(activeFilters).every(([filterName, filterValue]) => {
+                const cell = row.querySelector(`[data-column="${filterName}"]`);
+                const cellValue = normalizeFilterValue(
+                    cell ? cell.textContent : '',
+                    numericFilterNames.has(filterName),
+                );
+                return cellValue.includes(filterValue);
+            });
+
+            if (rowMatches) {
+                row.classList.remove('hidden');
+                matchCount += 1;
+            } else {
+                row.classList.add('hidden');
+            }
+        });
+
+        if (noLocalResultsRow) {
+            if (matchCount === 0) {
+                noLocalResultsRow.classList.remove('hidden');
+            } else {
+                noLocalResultsRow.classList.add('hidden');
+            }
+        }
+    };
+
+    if (columnFilterInputs.length > 0) {
+        columnFilterInputs.forEach((input) => {
+            input.addEventListener('input', applyLocalTableFilters);
+        });
+        applyLocalTableFilters();
     }
 
     if (filterForm && columnFilterInputs.length > 0 && modalColumnFilterInputs.length > 0) {
@@ -963,6 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
             modalColumnFilterInputs.forEach((hidden) => {
                 hidden.value = '';
             });
+            applyLocalTableFilters();
             if (columnFilterForm) {
                 columnFilterForm.submit();
             } else {

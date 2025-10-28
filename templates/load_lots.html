@@ -92,7 +92,7 @@
         </div>
         
         <div class="overflow-x-auto">
-            <form id="columnFilterForm" action="{{ url_for('load_lots_view') }}" method="GET" class="space-y-3">
+            <form id="columnFilterForm" action="{{ url_for('load_lots_view') }}" method="GET" class="space-y-3" data-has-initial-column-filters="{{ 'true' if filters.filter_codigo or filters.filter_descricao or filters.filter_previsao or filters.filter_quantidade or filters.filter_m3 or filters.filter_valor else 'false' }}">
                 {% if filters.start_date %}<input type="hidden" name="start_date" value="{{ filters.start_date }}">{% endif %}
                 {% if filters.end_date %}<input type="hidden" name="end_date" value="{{ filters.end_date }}">{% endif %}
                 <input type="hidden" name="sort_by" id="columnSortByInput" value="{{ sort_by }}">
@@ -110,12 +110,12 @@
                             <th scope="col" class="px-4 py-3 text-center rounded-tr-lg">Ação</th>
                         </tr>
                         <tr class="bg-slate-100 text-xs text-dark-blue">
-                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_codigo" value="{{ filters.filter_codigo or '' }}" class="filter-input column-filter-input" placeholder="Lote"></th>
-                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_descricao" value="{{ filters.filter_descricao or '' }}" class="filter-input column-filter-input" placeholder="Descrição"></th>
-                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_previsao" value="{{ filters.filter_previsao or '' }}" class="filter-input column-filter-input" placeholder="Previsão (DD/MM/AAAA)"></th>
-                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_quantidade" value="{{ filters.filter_quantidade or '' }}" class="filter-input column-filter-input text-right" placeholder="Qtd."></th>
-                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_m3" value="{{ filters.filter_m3 or '' }}" class="filter-input column-filter-input text-right" placeholder="M³"></th>
-                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_valor" value="{{ filters.filter_valor or '' }}" class="filter-input column-filter-input text-right" placeholder="Valor"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_codigo" value="{{ filters.filter_codigo or '' }}" class="filter-input column-filter-input" placeholder="Lote" data-column-index="0"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_descricao" value="{{ filters.filter_descricao or '' }}" class="filter-input column-filter-input" placeholder="Descrição" data-column-index="1"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_previsao" value="{{ filters.filter_previsao or '' }}" class="filter-input column-filter-input" placeholder="Previsão (DD/MM/AAAA)" data-column-index="2"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_quantidade" value="{{ filters.filter_quantidade or '' }}" class="filter-input column-filter-input text-right" placeholder="Qtd." data-column-index="3"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_m3" value="{{ filters.filter_m3 or '' }}" class="filter-input column-filter-input text-right" placeholder="M³" data-column-index="4"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_valor" value="{{ filters.filter_valor or '' }}" class="filter-input column-filter-input text-right" placeholder="Valor" data-column-index="5"></th>
                             <th scope="col" class="px-4 py-2 text-center">
                                 <div class="flex items-center justify-center gap-3">
                                     <button type="submit" class="text-xs font-semibold text-blue-700 hover:underline">Aplicar</button>
@@ -128,7 +128,7 @@
                         {% if summary %}
                             {% for lot in summary %}
                             {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
-                            <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};">
+                            <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};" data-row-type="data">
                                 <td class="py-2 px-4 whitespace-nowrap font-semibold">{{ lot.codigo }}</td>
                                 <td class="py-2 px-4 whitespace-nowrap">{{ lot.descricao }}</td>
                                 <td class="py-2 px-4 whitespace-nowrap">
@@ -148,6 +148,9 @@
                                 </td>
                             </tr>
                             {% endfor %}
+                            <tr id="noResultsRow" data-row-type="no-results" style="display: none;">
+                                <td colspan="7" class="py-6 px-4 text-center text-sm text-slate-muted">Nenhum lote encontrado para o período e filtros informados.</td>
+                            </tr>
                         {% else %}
                             <tr>
                                 <td colspan="7" class="py-6 px-4 text-center text-sm text-slate-muted">Nenhum lote encontrado para o período e filtros informados.</td>
@@ -226,29 +229,69 @@
         });
 
         // Column filtering logic
-        const debounce = (callback, delay = 300) => {
-            let timeoutId;
-            return (...args) => {
-                if (timeoutId) clearTimeout(timeoutId);
-                timeoutId = setTimeout(() => {
-                    callback.apply(null, args);
-                }, delay);
-            };
+        let applyColumnFilters = null;
+        const normalizeValue = (value) => {
+            const stringValue = (value || '').toString();
+            const normalized = typeof stringValue.normalize === 'function'
+                ? stringValue.normalize('NFD')
+                : stringValue;
+            return normalized
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/—/g, '')
+                .trim()
+                .toLowerCase();
         };
 
         if (columnFilterForm && columnFilterInputs.length > 0) {
-            const submitColumnFilters = () => {
-                if (typeof columnFilterForm.requestSubmit === 'function') {
-                    columnFilterForm.requestSubmit();
-                } else {
-                    columnFilterForm.submit();
+            const tableBody = columnFilterForm.querySelector('tbody');
+            const dataRows = tableBody ? Array.from(tableBody.querySelectorAll('tr[data-row-type="data"]')) : [];
+            const noResultsRow = tableBody ? tableBody.querySelector('#noResultsRow') : null;
+
+            const filterRows = () => {
+                if (!dataRows.length) return;
+
+                const activeFilters = Array.from(columnFilterInputs)
+                    .map((input) => ({
+                        index: Number.parseInt(input.dataset.columnIndex, 10),
+                        value: normalizeValue(input.value)
+                    }))
+                    .filter(({ index, value }) => !Number.isNaN(index) && value.length > 0);
+
+                let visibleCount = 0;
+
+                dataRows.forEach((row) => {
+                    const matches = activeFilters.length === 0 || activeFilters.every(({ index, value }) => {
+                        const cell = row.cells[index];
+                        if (!cell) return false;
+                        const cellValue = normalizeValue(cell.textContent);
+                        return cellValue.includes(value);
+                    });
+
+                    if (matches) {
+                        row.style.display = '';
+                        visibleCount += 1;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+
+                if (noResultsRow) {
+                    noResultsRow.style.display = visibleCount === 0 ? '' : 'none';
                 }
             };
-            const debouncedColumnSubmit = debounce(submitColumnFilters, 500);
+
+            applyColumnFilters = filterRows;
 
             columnFilterInputs.forEach((input) => {
-                input.addEventListener('input', debouncedColumnSubmit);
+                input.addEventListener('input', filterRows);
+                input.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                    }
+                });
             });
+
+            filterRows();
         }
 
         if (clearColumnFiltersBtn) {
@@ -257,7 +300,10 @@
                 columnFilterInputs.forEach((input) => {
                     input.value = '';
                 });
-                if (columnFilterForm) {
+                if (applyColumnFilters) {
+                    applyColumnFilters();
+                }
+                if (columnFilterForm && columnFilterForm.dataset.hasInitialColumnFilters === 'true') {
                     columnFilterForm.submit();
                 }
             });

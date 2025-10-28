@@ -15,6 +15,11 @@ import json # Para lidar com dados JSON (para parâmetros de usuário)
 import math
 from math import isclose
 from decimal import Decimal, InvalidOperation
+import urllib.parse
+import urllib.request
+import urllib.error
+import itertools
+import ssl
 
 # Importa as configurações do arquivo config.py
 from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE
@@ -59,6 +64,12 @@ ORDER_SITUATION_LABELS = {
 OCCURRENCE_BLANK_VALUE = '__blank__'
 
 LOAD_LOT_ROUTE_PARAM_NAME = 'load_lot_route_prefs'
+OSRM_TABLE_BASE_URL = 'https://router.project-osrm.org/table/v1/driving/'
+NOMINATIM_USER_AGENT = 'SIGA/1.0 (contato@siga.app)'
+AVERAGE_SPEED_KMH = 60
+GEOCODE_CACHE = {}
+MAX_BRUTE_FORCE_ORDERS = 8
+INSECURE_SSL_CONTEXT = ssl._create_unverified_context()
 
 
 def route_sequence_sort_value(raw_value):
@@ -195,24 +206,343 @@ def haversine_distance_km(point_a, point_b):
     return radius * c
 
 
-def generate_route_suggestion_orders(orders):
-    """Reordena os pedidos usando uma heurística simples de vizinho mais próximo."""
+def normalize_coordinate_value(value):
+    """Normaliza coordenadas em ponto flutuante."""
+    if value in (None, ''):
+        return None
+    if isinstance(value, Decimal):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def geocode_city_state(city, state, cache=None):
+    """Obtém coordenadas para uma cidade/UF utilizando Nominatim."""
+    normalized_city = (city or '').strip()
+    normalized_state = (state or '').strip()
+    if not normalized_city and not normalized_state:
+        return None
+    cache_ref = cache if cache is not None else GEOCODE_CACHE
+    cache_key = (normalized_city.lower(), normalized_state.lower())
+    if cache_key in cache_ref:
+        return cache_ref[cache_key]
+    params = {
+        'format': 'json',
+        'limit': 1,
+        'countrycodes': 'br',
+        'q': ', '.join([part for part in (normalized_city, normalized_state, 'Brasil') if part]),
+        'email': 'contato@siga.app',
+    }
+    url = f"https://nominatim.openstreetmap.org/search?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(url, headers={'User-Agent': NOMINATIM_USER_AGENT})
+    try:
+        try:
+            response = urllib.request.urlopen(request, timeout=8)
+        except urllib.error.URLError as error:
+            if isinstance(getattr(error, 'reason', None), ssl.SSLCertVerificationError):
+                response = urllib.request.urlopen(request, timeout=8, context=INSECURE_SSL_CONTEXT)
+            else:
+                return None
+        except ssl.SSLCertVerificationError:
+            response = urllib.request.urlopen(request, timeout=8, context=INSECURE_SSL_CONTEXT)
+        with response:
+            payload = response.read().decode('utf-8')
+            results = json.loads(payload)
+    except (urllib.error.URLError, ValueError, TimeoutError):
+        return None
+    if not results:
+        return None
+    try:
+        lat = float(results[0]['lat'])
+        lon = float(results[0]['lon'])
+    except (KeyError, ValueError, TypeError):
+        return None
+    cache_ref[cache_key] = (lat, lon)
+    return cache_ref[cache_key]
+
+
+def build_haversine_matrices(coords):
+    """Cria matrizes de distância e duração utilizando Haversine."""
+    total = len(coords)
+    distances = [[0.0 for _ in range(total)] for _ in range(total)]
+    durations = [[0.0 for _ in range(total)] for _ in range(total)]
+    for i in range(total):
+        for j in range(i + 1, total):
+            dist = haversine_distance_km(coords[i], coords[j])
+            distances[i][j] = distances[j][i] = dist
+            duration_minutes = (dist / AVERAGE_SPEED_KMH) * 60 if dist else 0.0
+            durations[i][j] = durations[j][i] = duration_minutes
+    return distances, durations
+
+
+def fetch_osrm_matrices(coords):
+    """Consulta a API OSRM para obter matrizes de distância/tempo."""
+    if not coords:
+        return None, None
+    coord_param = ';'.join(f"{lon:.6f},{lat:.6f}" for lat, lon in coords)
+    query = urllib.parse.urlencode({'annotations': 'duration,distance'})
+    url = f"{OSRM_TABLE_BASE_URL}{coord_param}?{query}"
+    request = urllib.request.Request(url, headers={'User-Agent': NOMINATIM_USER_AGENT})
+    try:
+        try:
+            response = urllib.request.urlopen(request, timeout=12)
+        except urllib.error.URLError as error:
+            if isinstance(getattr(error, 'reason', None), ssl.SSLCertVerificationError):
+                response = urllib.request.urlopen(request, timeout=12, context=INSECURE_SSL_CONTEXT)
+            else:
+                return None, None
+        except ssl.SSLCertVerificationError:
+            response = urllib.request.urlopen(request, timeout=12, context=INSECURE_SSL_CONTEXT)
+        with response:
+            data = json.loads(response.read().decode('utf-8'))
+    except (urllib.error.URLError, ValueError, TimeoutError):
+        return None, None
+    distances_raw = data.get('distances')
+    durations_raw = data.get('durations')
+    if not distances_raw or not durations_raw:
+        return None, None
+    distances = []
+    durations = []
+    for row in distances_raw:
+        distances.append([(value / 1000) if value is not None else None for value in row])
+    for row in durations_raw:
+        durations.append([(value / 60) if value is not None else None for value in row])
+    return distances, durations
+
+
+def build_distance_duration_matrices(coords):
+    """Tenta usar OSRM e recorre ao Haversine quando necessário."""
+    if len(coords) <= 100:
+        distances, durations = fetch_osrm_matrices(coords)
+        if distances and durations and all(row.count(None) < len(row) for row in distances):
+            return distances, durations, 'osrm'
+    distances, durations = build_haversine_matrices(coords)
+    return distances, durations, 'haversine'
+
+
+def matrix_value(matrix, origin_idx, target_idx):
+    """Recupera um valor da matriz, retornando infinito quando ausente."""
+    if matrix is None or origin_idx is None or target_idx is None:
+        return float('inf')
+    try:
+        value = matrix[origin_idx][target_idx]
+    except (IndexError, TypeError):
+        return float('inf')
+    if value is None:
+        return float('inf')
+    return float(value)
+
+
+def optimize_sequence(order_entries, start_idx, end_idx, distance_matrix, anchor_entry=None):
+    """Ordena pedidos usando heurística de vizinho mais próximo + 2-opt."""
+    if not order_entries and anchor_entry is None:
+        return []
+
+    base_entries = list(order_entries)
+
+    def nearest_neighbor_path(initial_entry=None):
+        remaining = list(base_entries)
+        path = []
+        if anchor_entry is not None:
+            path.append(anchor_entry)
+            current_idx = anchor_entry['matrix_index']
+        else:
+            current_idx = start_idx
+
+        if anchor_entry is None:
+            if initial_entry is not None and remaining:
+                chosen_pos = next(
+                    (idx for idx, entry in enumerate(remaining) if entry['matrix_index'] == initial_entry['matrix_index']),
+                    None
+                )
+                if chosen_pos is None:
+                    chosen_entry = remaining.pop(0)
+                else:
+                    chosen_entry = remaining.pop(chosen_pos)
+                path.append(chosen_entry)
+                current_idx = chosen_entry['matrix_index']
+            elif current_idx is None and remaining:
+                chosen_entry = remaining.pop(0)
+                path.append(chosen_entry)
+                current_idx = chosen_entry['matrix_index']
+
+        while remaining:
+            best_candidate = min(
+                remaining,
+                key=lambda entry: matrix_value(distance_matrix, current_idx, entry['matrix_index'])
+            )
+            best_distance = matrix_value(distance_matrix, current_idx, best_candidate['matrix_index'])
+            if math.isinf(best_distance):
+                next_entry = remaining.pop(0)
+            else:
+                remaining.remove(best_candidate)
+                next_entry = best_candidate
+            path.append(next_entry)
+            current_idx = next_entry['matrix_index']
+        return path
+
+    candidate_paths = []
+    if anchor_entry is not None or start_idx is not None:
+        candidate_paths.append(nearest_neighbor_path())
+    else:
+        unique_indices = {entry['matrix_index'] for entry in base_entries}
+        index_lookup = {entry['matrix_index']: entry for entry in base_entries}
+        for matrix_index in unique_indices:
+            candidate_paths.append(nearest_neighbor_path(index_lookup[matrix_index]))
+
+    best_path = None
+    best_distance = float('inf')
+    for path in candidate_paths:
+        if not path:
+            continue
+        path_start_idx = start_idx if start_idx is not None else path[0]['matrix_index']
+        refined = apply_two_opt(path, path_start_idx, end_idx, distance_matrix)
+        total_distance = compute_path_distance(refined, distance_matrix, path_start_idx, end_idx)
+        if math.isinf(total_distance):
+            continue
+        if total_distance + 1e-6 < best_distance:
+            best_distance = total_distance
+            best_path = refined
+
+    if best_path:
+        return best_path
+    return candidate_paths[0] if candidate_paths else (anchor_entry and [anchor_entry] or [])
+
+
+def compute_path_distance(sequence, distance_matrix, start_idx, end_idx):
+    """Soma as distâncias consecutivas da rota."""
+    total = 0.0
+    previous_idx = start_idx
+    for entry in sequence:
+        current_idx = entry['matrix_index']
+        if previous_idx is not None:
+            total += matrix_value(distance_matrix, previous_idx, current_idx)
+        previous_idx = current_idx
+    if end_idx is not None and previous_idx is not None:
+        total += matrix_value(distance_matrix, previous_idx, end_idx)
+    return total
+
+
+def brute_force_optimize(order_entries, start_idx, end_idx, distance_matrix, duration_matrix, anchor_entry=None):
+    """Tenta todas as permutações para encontrar a rota ótima."""
+    base_entries = list(order_entries)
+    if not base_entries and anchor_entry is None:
+        return [], None, None
+    best_sequence = None
+    best_distance = float('inf')
+    best_duration = None
+    permutations = itertools.permutations(base_entries) if base_entries else [()]
+    for permutation in permutations:
+        sequence = []
+        if anchor_entry is not None:
+            sequence.append(anchor_entry)
+        sequence.extend(permutation)
+        distance, duration = calculate_route_metrics(sequence, distance_matrix, duration_matrix, start_idx, end_idx)
+        if distance is None:
+            continue
+        if distance + 1e-6 < best_distance:
+            best_sequence = sequence
+            best_distance = distance
+            best_duration = duration
+    return best_sequence, best_distance if best_sequence else None, best_duration if best_sequence else None
+
+
+def apply_two_opt(sequence, start_idx, end_idx, distance_matrix):
+    """Aplica otimização 2-opt para reduzir distância total."""
+    optimized = list(sequence)
+    improved = True
+    while improved:
+        improved = False
+        for i in range(len(optimized) - 1):
+            for j in range(i + 2, len(optimized)):
+                if j - i == 1:
+                    continue
+                a_idx = start_idx if i == 0 else optimized[i - 1]['matrix_index']
+                d_idx = end_idx if j == len(optimized) - 1 else optimized[j + 1]['matrix_index']
+                if a_idx is None or d_idx is None:
+                    continue
+                b_idx = optimized[i]['matrix_index']
+                c_idx = optimized[j]['matrix_index']
+                current = (
+                    matrix_value(distance_matrix, a_idx, b_idx) +
+                    matrix_value(distance_matrix, c_idx, d_idx)
+                )
+                proposed = (
+                    matrix_value(distance_matrix, a_idx, c_idx) +
+                    matrix_value(distance_matrix, b_idx, d_idx)
+                )
+                if proposed + 1e-6 < current:
+                    optimized[i:j + 1] = reversed(optimized[i:j + 1])
+                    improved = True
+        # limita ciclos infinitos
+        if not improved:
+            break
+    return optimized
+
+
+def calculate_route_metrics(sequence, distance_matrix, duration_matrix, start_idx, end_idx):
+    """Calcula métricas totais da rota."""
+    total_distance = 0.0
+    total_duration = 0.0
+    previous_idx = start_idx
+    for entry in sequence:
+        current_idx = entry['matrix_index']
+        if previous_idx is not None:
+            total_distance += matrix_value(distance_matrix, previous_idx, current_idx)
+            total_duration += matrix_value(duration_matrix, previous_idx, current_idx)
+        previous_idx = current_idx
+    if end_idx is not None and previous_idx is not None:
+        total_distance += matrix_value(distance_matrix, previous_idx, end_idx)
+        total_duration += matrix_value(duration_matrix, previous_idx, end_idx)
+    if math.isinf(total_distance):
+        total_distance = None
+    if math.isinf(total_duration):
+        total_duration = None
+    return total_distance, total_duration
+
+
+def generate_route_suggestion_orders(orders, route_preferences=None):
+    """Gera uma sequência otimizada considerando ponto inicial/final."""
     if not orders:
         return [], {
             'optimized_count': 0,
             'without_coordinates': 0,
-            'strategy': 'nearest_neighbor',
+            'strategy': 'nearest_neighbor_two_opt',
             'total': 0,
         }
-    valid_orders = []
+
+    route_preferences = route_preferences or {}
+    start_config = route_preferences.get('start', {})
+    end_config = route_preferences.get('end', {})
+    geocode_cache = GEOCODE_CACHE
+
+    start_coord = None
+    end_coord = None
+    if start_config.get('enabled'):
+        start_coord = geocode_city_state(start_config.get('cidade'), start_config.get('estado'), geocode_cache)
+    if end_config.get('enabled'):
+        end_coord = geocode_city_state(end_config.get('cidade'), end_config.get('estado'), geocode_cache)
+
+    orders_with_coords = []
     missing_orders = []
     for order in orders:
-        if has_valid_coordinates(order):
-            valid_orders.append(order)
-        else:
+        lat = normalize_coordinate_value(order.get('latitude'))
+        lon = normalize_coordinate_value(order.get('longitude'))
+        if lat is None or lon is None:
+            geo_coords = geocode_city_state(order.get('cidade'), order.get('estado'), geocode_cache)
+            if geo_coords:
+                lat, lon = geo_coords
+        if lat is None or lon is None:
             missing_orders.append(order)
+            continue
+        orders_with_coords.append({
+            'order': order,
+            'coord': (lat, lon),
+        })
 
-    if not valid_orders:
+    if not orders_with_coords:
         sequence = []
         for position, order in enumerate(orders, start=1):
             order_copy = dict(order)
@@ -224,39 +554,89 @@ def generate_route_suggestion_orders(orders):
             'without_coordinates': len(missing_orders),
             'strategy': 'sequence_fallback',
             'total': len(orders),
+            'start_used': bool(start_coord),
+            'end_used': bool(end_coord),
         }
 
-    remaining = valid_orders.copy()
-    optimized_sequence = []
-    current = remaining.pop(0)
-    optimized_sequence.append(current)
-    while remaining:
-        current_point = (current.get('latitude'), current.get('longitude'))
-        next_index = min(
-            range(len(remaining)),
-            key=lambda idx: haversine_distance_km(
-                current_point,
-                (remaining[idx].get('latitude'), remaining[idx].get('longitude'))
-            )
-        )
-        current = remaining.pop(next_index)
-        optimized_sequence.append(current)
+    matrix_points = []
+    start_idx = None
+    end_idx = None
+    if start_coord:
+        start_idx = len(matrix_points)
+        matrix_points.append(start_coord)
+    for entry in orders_with_coords:
+        entry['matrix_index'] = len(matrix_points)
+        matrix_points.append(entry['coord'])
+    if end_coord:
+        end_idx = len(matrix_points)
+        matrix_points.append(end_coord)
 
-    optimized_ids = {id(order) for order in optimized_sequence}
-    combined_sequence = optimized_sequence + missing_orders
+    distance_matrix, duration_matrix, matrix_source = build_distance_duration_matrices(matrix_points)
+    anchor_entry = None
+    if start_idx is None and orders_with_coords:
+        anchor_entry = orders_with_coords[0]
+        entries_for_optimization = orders_with_coords[1:]
+    else:
+        entries_for_optimization = orders_with_coords
+    optimized_entries = []
+    total_distance = None
+    total_duration = None
+    strategy_tag = 'heuristic_multi_start'
+
+    total_candidates = len(entries_for_optimization) + (1 if anchor_entry else 0)
+    if total_candidates <= MAX_BRUTE_FORCE_ORDERS:
+        brute_sequence, brute_distance, brute_duration = brute_force_optimize(
+            entries_for_optimization,
+            start_idx,
+            end_idx,
+            distance_matrix,
+            duration_matrix,
+            anchor_entry=anchor_entry,
+        )
+        if brute_sequence:
+            optimized_entries = brute_sequence
+            total_distance = brute_distance
+            total_duration = brute_duration
+            strategy_tag = 'brute_force_permutation'
+
+    if not optimized_entries:
+        optimized_entries = optimize_sequence(entries_for_optimization, start_idx, end_idx, distance_matrix, anchor_entry=anchor_entry)
+        total_distance, total_duration = calculate_route_metrics(
+            optimized_entries,
+            distance_matrix,
+            duration_matrix,
+            start_idx,
+            end_idx,
+        )
+
     suggestion = []
-    for position, order in enumerate(combined_sequence, start=1):
-        order_copy = dict(order)
+    for position, entry in enumerate(optimized_entries, start=1):
+        order_copy = dict(entry['order'])
         order_copy['suggested_position'] = position
-        order_copy['suggestion_source'] = 'optimized' if id(order) in optimized_ids else 'missing_coordinates'
+        order_copy['suggestion_source'] = 'optimized'
         suggestion.append(order_copy)
 
-    return suggestion, {
-        'optimized_count': len(optimized_sequence),
+    for offset, order in enumerate(missing_orders, start=len(suggestion) + 1):
+        order_copy = dict(order)
+        order_copy['suggested_position'] = offset
+        order_copy['suggestion_source'] = 'missing_coordinates'
+        suggestion.append(order_copy)
+
+    meta = {
+        'optimized_count': len(optimized_entries),
         'without_coordinates': len(missing_orders),
-        'strategy': 'nearest_neighbor',
+        'strategy': strategy_tag,
         'total': len(orders),
+        'start_used': bool(start_coord),
+        'end_used': bool(end_coord),
+        'distance_source': matrix_source,
     }
+    if total_distance is not None:
+        meta['total_distance_km'] = round(total_distance, 2)
+    if total_duration is not None:
+        meta['total_duration_minutes'] = round(total_duration, 1)
+
+    return suggestion, meta
 
 
 def format_currency_brl(value):
@@ -4759,7 +5139,9 @@ def load_lot_route_suggestion(load_lot_code):
         key=lambda order: route_sequence_sort_value(order.get('sequencia'))
     )
 
-    suggested_orders, suggestion_meta = generate_route_suggestion_orders(ordered_stops)
+    user_id = session.get('user_id')
+    route_preferences = load_route_preferences_for_user(user_id)
+    suggested_orders, suggestion_meta = generate_route_suggestion_orders(ordered_stops, route_preferences)
 
     start_date_param = (request.args.get('start_date') or '').strip()
     end_date_param = (request.args.get('end_date') or '').strip()
@@ -4777,8 +5159,6 @@ def load_lot_route_suggestion(load_lot_code):
     route_suggestion_url = url_for('load_lot_route_suggestion', load_lot_code=lot_code, **nav_params)
     route_map_url = url_for('load_lot_map', load_lot_code=lot_code, **nav_params)
 
-    user_id = session.get('user_id')
-    route_preferences = load_route_preferences_for_user(user_id)
     route_payload = build_route_payload_from_orders(suggested_orders, preferred_sequence_field='suggested_position')
     map_waypoints = build_map_waypoints(route_payload, route_preferences)
 
