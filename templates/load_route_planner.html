@@ -531,34 +531,44 @@
                     <input type="date" id="filterEndDate" name="end_date" value="{{ filters.end_date }}">
                 </div>
             </div>
-            <div class="modal-field">
-                <label for="productionLotsTrigger">Lotes de produção</label>
-                <div class="multi-combobox" data-multi-combobox data-field-name="production_lots">
-                    <button type="button" class="multi-combobox-trigger" id="productionLotsTrigger" aria-haspopup="listbox" aria-expanded="false">
-                        <span data-role="label" data-placeholder="Todos">Todos</span>
-                        <span class="count-pill" data-role="count" hidden></span>
-                        <i class="fas fa-chevron-down"></i>
-                    </button>
-                    <div class="multi-combobox-panel" role="listbox" aria-multiselectable="true">
-                        <div class="multi-combobox-search">
-                            <input type="search" placeholder="Pesquisar..." data-role="search">
-                        </div>
-                        <ul class="multi-combobox-options" data-role="options">
-                            {% for lot in production_lot_options %}
-                            <li class="multi-combobox-option" data-option-label="{{ (lot.code ~ ' ' ~ (lot.description or ''))|trim|lower }}">
-                                <label>
-                                    <input type="checkbox" name="production_lots" value="{{ lot.code }}" {% if lot.code in filters.production_lots %}checked{% endif %}>
-                                    <span>{{ lot.code }}{% if lot.description %} - {{ lot.description }}{% endif %}</span>
-                                </label>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                        <div class="multi-combobox-empty" data-role="empty" hidden>Nenhuma opção encontrada.</div>
-                        <div class="multi-combobox-footer">
-                            <button type="button" class="btn-secondary" data-role="clear">Limpar</button>
-                            <button type="button" class="btn-secondary" data-role="select-all">Selecionar todos</button>
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label for="productionLotsTrigger">Lotes de produção</label>
+                    <div class="multi-combobox" data-multi-combobox data-field-name="production_lots">
+                        <button type="button" class="multi-combobox-trigger" id="productionLotsTrigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span data-role="label" data-placeholder="Todos">Todos</span>
+                            <span class="count-pill" data-role="count" hidden></span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="multi-combobox-panel" role="listbox" aria-multiselectable="true">
+                            <div class="multi-combobox-search">
+                                <input type="search" placeholder="Pesquisar..." data-role="search">
+                            </div>
+                            <ul class="multi-combobox-options" data-role="options">
+                                {% for lot in production_lot_options %}
+                                <li class="multi-combobox-option" data-option-label="{{ (lot.code ~ ' ' ~ (lot.description or ''))|trim|lower }}">
+                                    <label>
+                                        <input type="checkbox" name="production_lots" value="{{ lot.code }}" {% if lot.code in filters.production_lots %}checked{% endif %}>
+                                        <span>{{ lot.code }}{% if lot.description %} - {{ lot.description }}{% endif %}</span>
+                                    </label>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            <div class="multi-combobox-empty" data-role="empty" hidden>Nenhuma opção encontrada.</div>
+                            <div class="multi-combobox-footer">
+                                <button type="button" class="btn-secondary" data-role="clear">Limpar</button>
+                                <button type="button" class="btn-secondary" data-role="select-all">Selecionar todos</button>
+                            </div>
                         </div>
                     </div>
+                </div>
+                <div class="modal-field">
+                    <label for="missingProductionLot">Pedidos sem lote de produção</label>
+                    <select id="missingProductionLot" name="missing_production_lot">
+                        <option value="" {% if not filters.missing_production_lot %}selected{% endif %}>Todos</option>
+                        <option value="yes" {% if filters.missing_production_lot == 'yes' %}selected{% endif %}>Sim</option>
+                        <option value="no" {% if filters.missing_production_lot == 'no' %}selected{% endif %}>Não</option>
+                    </select>
                 </div>
             </div>
             <div class="modal-grid">
@@ -899,18 +909,20 @@
     }
 
     function createMarkerIcon(order, isSelected) {
-        const borderColor = borderColors[getStageKey(order)] || '#1f2937';
+        if (!order) {
+            return L.divIcon({ className: '' });
+        }
+        const stageKey = order.stage_key || getStageKey(order);
+        const borderColor = order.marker_border || borderColors[stageKey] || '#1f2937';
         const fillColor = order.marker_fill || '#1f3a5f';
-        const wrapper = document.createElement('div');
-        wrapper.className = 'planner-marker' + (isSelected ? ' is-selected' : '');
-        wrapper.style.borderColor = borderColor;
-        const inner = document.createElement('div');
-        inner.className = 'inner';
-        inner.style.backgroundColor = fillColor;
-        inner.textContent = formatQuantity(order.quantidade_total);
-        wrapper.appendChild(inner);
+        const quantityLabel = formatQuantity(order.quantidade_total);
+        const markerHtml = `
+            <div class="planner-marker${isSelected ? ' is-selected' : ''}" style="border-color: ${borderColor};">
+                <div class="inner" style="background-color: ${fillColor};">${quantityLabel}</div>
+            </div>
+        `.trim();
         return L.divIcon({
-            html: wrapper,
+            html: markerHtml,
             className: '',
             iconSize: [46, 46],
             iconAnchor: [23, 23]

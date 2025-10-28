@@ -4885,6 +4885,9 @@ def load_lot_route_planner():
     start_date_param = (request.args.get('start_date') or '').strip()
     end_date_param = (request.args.get('end_date') or '').strip()
     production_lots_param = [value.strip() for value in request.args.getlist('production_lots') if value and value.strip()]
+    missing_production_lot_param = (request.args.get('missing_production_lot') or '').strip().lower()
+    if missing_production_lot_param not in {'yes', 'no'}:
+        missing_production_lot_param = ''
 
     approval_status_param = []
     for raw_value in request.args.getlist('approval_statuses'):
@@ -4911,6 +4914,7 @@ def load_lot_route_planner():
         'approval_statuses': approval_status_param,
         'situations': situation_param,
         'separation_stages': separation_stage_param,
+        'missing_production_lot': missing_production_lot_param,
     }
 
     query_filters = {
@@ -4960,6 +4964,17 @@ def load_lot_route_planner():
 
     filtered_orders = [order for order in orders if matches_stage(order)]
 
+    if missing_production_lot_param == 'yes':
+        filtered_orders = [
+            order for order in filtered_orders
+            if not (order.get('production_lots_display') or '').strip()
+        ]
+    elif missing_production_lot_param == 'no':
+        filtered_orders = [
+            order for order in filtered_orders
+            if (order.get('production_lots_display') or '').strip()
+        ]
+
     def extract_production_lots(display_value):
         entries = []
         if not display_value:
@@ -4995,8 +5010,32 @@ def load_lot_route_planner():
         'total': '#16a34a',
     }
 
+    geocode_cache = GEOCODE_CACHE
+
     map_orders = []
     for order in filtered_orders:
+        kpi_status = order.get('kpi_status')
+        if kpi_status == 1:
+            stage_key = 'partial'
+        elif kpi_status in (2, 3):
+            stage_key = 'total'
+        else:
+            stage_key = 'zero'
+        marker_border = stage_border_colors.get(stage_key, '#1f2937')
+
+        latitude = normalize_coordinate_value(order.get('latitude'))
+        longitude = normalize_coordinate_value(order.get('longitude'))
+        coordinate_source = 'database'
+        if (
+            latitude is None or longitude is None
+            or isclose(latitude, 0.0, abs_tol=1e-6)
+            or isclose(longitude, 0.0, abs_tol=1e-6)
+        ):
+            geocoded_coord = geocode_city_state(order.get('cidade'), order.get('estado'), geocode_cache)
+            if geocoded_coord:
+                latitude, longitude = geocoded_coord
+                coordinate_source = 'geocode'
+
         lot_entries = extract_production_lots(order.get('production_lots_display', ''))
         primary_lot_code = ''
         primary_lot_label = ''
@@ -5015,8 +5054,8 @@ def load_lot_route_planner():
                 'estado': order.get('estado'),
                 'linha': order.get('linha'),
                 'quantidade_total': order.get('quantidade_total'),
-                'latitude': order.get('latitude'),
-                'longitude': order.get('longitude'),
+                'latitude': latitude,
+                'longitude': longitude,
                 'kpi_status': order.get('kpi_status'),
                 'reservado': order.get('reservado'),
                 'separado': order.get('separado'),
@@ -5024,6 +5063,9 @@ def load_lot_route_planner():
                 'primary_lot_code': primary_lot_code,
                 'primary_lot_label': primary_lot_label,
                 'marker_fill': marker_fill,
+                'stage_key': stage_key,
+                'marker_border': marker_border,
+                'coordinate_source': coordinate_source,
             }
         )
 
