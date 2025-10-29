@@ -5257,7 +5257,7 @@ def load_lot_route_planner():
 
     return render_template(
         'load_route_planner.html',
-        page_title="Criar Rota",
+        page_title="Mapa Interativo",
         orders=filtered_orders,
         map_orders=[],
         filters=filters,

@@ -80,10 +80,6 @@
                 <p class="text-xs text-slate-muted">Total de {{ summary|length if summary else 0 }} registros encontrados.</p>
             </div>
             <div class="flex gap-2 flex-wrap justify-end">
-                <a href="{{ url_for('load_lot_route_planner') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
-                    <i class="fas fa-route mr-2"></i>
-                    Criar Rota
-                </a>
                 <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg" type="button">
                     <i class="fas fa-filter mr-2"></i>
                     Filtrar
