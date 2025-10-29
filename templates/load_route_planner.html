@@ -113,6 +113,9 @@
         background-color: rgba(79, 131, 204, 0.18);
         box-shadow: inset 0 0 0 1px rgba(79, 131, 204, 0.35);
     }
+    .planner-order-row.is-muted {
+        opacity: 0.45;
+    }
     @media (max-width: 768px) {
         .planner-table,
         .planner-table thead,
@@ -380,6 +383,22 @@
         border-radius: 999px;
         background-color: var(--clr-white);
         border: 1px solid rgba(148, 163, 184, 0.4);
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+        transition: box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+    }
+    .legend-item:focus-visible {
+        outline: 2px solid rgba(37, 99, 235, 0.55);
+        outline-offset: 2px;
+    }
+    .legend-item.is-active {
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.35);
+        border-color: rgba(37, 99, 235, 0.55);
+        transform: translateY(-1px);
+    }
+    .legend-item.is-muted {
+        opacity: 0.45;
     }
     .legend-dot {
         width: 0.75rem;
@@ -627,6 +646,14 @@
         transform: scale(1.05);
         box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.35);
     }
+    .planner-marker.is-selected .inner {
+        transform: scale(1.08);
+        box-shadow: 0 8px 20px rgba(31, 58, 95, 0.35);
+    }
+    .planner-marker.is-muted .inner {
+        opacity: 0.35;
+        box-shadow: none;
+    }
     .sequence-badge {
         display: inline-flex;
         align-items: center;
@@ -739,20 +766,33 @@
             </div>
         </section>
         <section class="planner-legends">
-            <div class="legend-group">
+            <div class="legend-group" data-legend-group="stage">
                 <strong>Estágio de separação:</strong>
-                <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.zero }}"></span>Sem separação</span>
-                <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.partial }}"></span>Parcial</span>
-                <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.total }}"></span>Total</span>
+                <button type="button" class="legend-item" data-stage-filter="zero" aria-pressed="true">
+                    <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.zero }}"></span>
+                    Sem separação
+                </button>
+                <button type="button" class="legend-item" data-stage-filter="partial" aria-pressed="true">
+                    <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.partial }}"></span>
+                    Separação Parcial
+                </button>
+                <button type="button" class="legend-item" data-stage-filter="total" aria-pressed="true">
+                    <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.total }}"></span>
+                    Separação Total
+                </button>
+                <button type="button" class="legend-item" data-stage-filter="carregado" aria-pressed="true">
+                    <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.carregado }}"></span>
+                    Carregado
+                </button>
             </div>
-            <div class="legend-group">
+            <div class="legend-group" data-legend-group="lot">
                 <strong>Lotes de produção:</strong>
                 {% if lot_color_legend %}
                     {% for item in lot_color_legend %}
-                    <span class="legend-item">
+                    <button type="button" class="legend-item" data-lot-filter="{{ item.code }}" aria-pressed="true">
                         <span class="legend-dot fill-only" style="background-color: {{ item.color }}"></span>
                         {{ item.label }}
-                    </span>
+                    </button>
                     {% endfor %}
                 {% else %}
                     <em>Selecione lotes de produção para diferenciar os marcadores.</em>
@@ -1216,6 +1256,10 @@
     const markersById = new Map();
     let routeLine = null;
     const selectedOrderIds = [];
+    const activeStageFilters = new Set();
+    const activeLotFilters = new Set();
+    let stageLegendButtons = [];
+    let lotLegendButtons = [];
 
     const mapLoadingOverlay = document.getElementById('routePlannerMapLoading');
     const mapLoadingMessage = document.getElementById('routePlannerMapLoadingMessage');
@@ -1608,8 +1652,33 @@
 
     function getStageKey(order) {
         if (order.kpi_status === 1) return 'partial';
-        if (order.kpi_status === 2 || order.kpi_status === 3) return 'total';
+        if (order.kpi_status === 2) return 'total';
+        if (order.kpi_status === 3) return 'carregado';
         return 'zero';
+    }
+
+    function doesOrderMatchLegendFilters(order) {
+        const hasStageFilter = activeStageFilters.size > 0;
+        const hasLotFilter = activeLotFilters.size > 0;
+        if (!order) {
+            return !(hasStageFilter || hasLotFilter);
+        }
+        const stageKey = order.stage_key || getStageKey(order);
+        if (hasStageFilter && !activeStageFilters.has(stageKey)) {
+            return false;
+        }
+        const lotCode = (order.primary_lot_code || '').trim();
+        if (hasLotFilter && (!lotCode || !activeLotFilters.has(lotCode))) {
+            return false;
+        }
+        return true;
+    }
+
+    function shouldDimOrder(order, isSelected) {
+        if (isSelected) {
+            return false;
+        }
+        return !doesOrderMatchLegendFilters(order);
     }
 
     function formatQuantity(value) {
@@ -1623,7 +1692,7 @@
         return Math.round(normalized).toString();
     }
 
-    function createMarkerIcon(order, isSelected) {
+    function createMarkerIcon(order, isSelected, isDimmed) {
         if (!order) {
             return L.divIcon({ className: '' });
         }
@@ -1631,8 +1700,15 @@
         const borderColor = order.marker_border || borderColors[stageKey] || '#1f2937';
         const fillColor = order.marker_fill || '#1f3a5f';
         const quantityLabel = formatQuantity(order.quantidade_total);
+        const classes = ['planner-marker'];
+        if (isSelected) {
+            classes.push('is-selected');
+        }
+        if (isDimmed) {
+            classes.push('is-muted');
+        }
         const markerHtml = `
-            <div class="planner-marker${isSelected ? ' is-selected' : ''}" style="border-color: ${borderColor};">
+            <div class="${classes.join(' ')}" style="border-color: ${borderColor};">
                 <div class="inner" style="background-color: ${fillColor};">${quantityLabel}</div>
             </div>
         `.trim();
@@ -1692,7 +1768,7 @@
                 if (!order || !order.latitude || !order.longitude) {
                     continue;
                 }
-                const marker = L.marker([order.latitude, order.longitude], { icon: createMarkerIcon(order, false) });
+                const marker = L.marker([order.latitude, order.longitude], { icon: createMarkerIcon(order, false, shouldDimOrder(order, false)) });
                 marker.bindPopup(buildPopupContent(order));
                 marker.on('click', () => toggleOrderSelection(String(order.pedido)));
                 markersById.set(String(order.pedido), marker);
@@ -1724,6 +1800,8 @@
                     map.setView(defaultView, 4);
                 }
                 hideMapLoading();
+                refreshLegendAppearance();
+                applyLegendFilters();
             }
         };
 
@@ -1762,7 +1840,48 @@
         if (!marker) return;
         const order = ordersById.get(orderId);
         const isSelected = selectedOrderIds.includes(orderId);
-        marker.setIcon(createMarkerIcon(order, isSelected));
+        marker.setIcon(createMarkerIcon(order, isSelected, shouldDimOrder(order, isSelected)));
+    }
+
+    function refreshLegendAppearance() {
+        const stageHasFilter = activeStageFilters.size > 0;
+        stageLegendButtons.forEach((button) => {
+            if (!button) {
+                return;
+            }
+            const value = button.dataset.stageFilter;
+            const isActive = !stageHasFilter || activeStageFilters.has(value);
+            button.classList.toggle('is-active', isActive);
+            button.classList.toggle('is-muted', stageHasFilter && !activeStageFilters.has(value));
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+        const lotHasFilter = activeLotFilters.size > 0;
+        lotLegendButtons.forEach((button) => {
+            if (!button) {
+                return;
+            }
+            const value = button.dataset.lotFilter;
+            const isActive = !lotHasFilter || activeLotFilters.has(value);
+            button.classList.toggle('is-active', isActive);
+            button.classList.toggle('is-muted', lotHasFilter && !activeLotFilters.has(value));
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    }
+
+    function applyLegendFilters() {
+        const hasAnyFilter = activeStageFilters.size > 0 || activeLotFilters.size > 0;
+        markersById.forEach((marker, orderId) => {
+            const order = ordersById.get(orderId);
+            const isSelected = selectedOrderIds.includes(orderId);
+            marker.setIcon(createMarkerIcon(order, isSelected, shouldDimOrder(order, isSelected)));
+        });
+        document.querySelectorAll('.planner-order-row').forEach((row) => {
+            const orderId = row.dataset.orderId;
+            const order = ordersById.get(orderId);
+            const isSelected = selectedOrderIds.includes(orderId);
+            const dimmed = shouldDimOrder(order, isSelected);
+            row.classList.toggle('is-muted', dimmed && (order || hasAnyFilter));
+        });
     }
 
     function updateSelectionSummary() {
@@ -1840,6 +1959,7 @@
         updateSelectionSummary();
         updateRouteLine();
         syncTableRows();
+        applyLegendFilters();
     }
 
     function clearRoute() {
@@ -1848,6 +1968,7 @@
         markersById.forEach((_, id) => refreshMarker(id));
         updateSelectionSummary();
         updateRouteLine();
+        applyLegendFilters();
     }
 
     const clearRouteBtn = document.getElementById('clearRoute');
@@ -1872,6 +1993,55 @@
     // Modal logic
     document.addEventListener('DOMContentLoaded', () => {
         setupMultiComboboxes();
+
+        stageLegendButtons = Array.from(document.querySelectorAll('[data-stage-filter]'));
+        lotLegendButtons = Array.from(document.querySelectorAll('[data-lot-filter]'));
+
+        const toggleFilterSet = (filterSet, value, options = {}) => {
+            const { solo = false, reset = false } = options;
+            if (reset) {
+                filterSet.clear();
+                return;
+            }
+            if (!value) {
+                return;
+            }
+            if (solo) {
+                const alreadySolo = filterSet.size === 1 && filterSet.has(value);
+                filterSet.clear();
+                if (!alreadySolo) {
+                    filterSet.add(value);
+                }
+                return;
+            }
+            if (filterSet.has(value)) {
+                filterSet.delete(value);
+            } else {
+                filterSet.add(value);
+            }
+        };
+
+        const bindLegendEvents = (buttons, filterSet, valueKey) => {
+            buttons.forEach((button) => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    const rawValue = button.dataset[valueKey];
+                    const value = rawValue === undefined ? '' : rawValue.toString().trim();
+                    const options = {
+                        solo: event.metaKey || event.ctrlKey,
+                        reset: event.altKey,
+                    };
+                    toggleFilterSet(filterSet, value, options);
+                    refreshLegendAppearance();
+                    applyLegendFilters();
+                });
+            });
+        };
+
+        bindLegendEvents(stageLegendButtons, activeStageFilters, 'stageFilter');
+        bindLegendEvents(lotLegendButtons, activeLotFilters, 'lotFilter');
+        refreshLegendAppearance();
+        applyLegendFilters();
 
         const mapContainerExists = document.getElementById('routePlannerMap');
         if (mapContainerExists) {

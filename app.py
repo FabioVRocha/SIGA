@@ -5121,10 +5121,21 @@ def load_lot_route_planner():
             if group_key and group_key not in lot_groups_in_order:
                 lot_groups_in_order.append(group_key)
 
-    color_palette = [
+    stage_border_colors = {
+        'zero': '#dc2626',
+        'partial': '#facc15',
+        'total': '#16a34a',
+        'carregado': '#2563eb',
+    }
+    stage_color_values = {color.lower() for color in stage_border_colors.values()}
+
+    base_color_palette = [
         '#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#f97316', '#f43f5e',
         '#a855f7', '#eab308', '#ec4899', '#10b981', '#6366f1', '#fb7185',
     ]
+    color_palette = [color for color in base_color_palette if color.lower() not in stage_color_values]
+    if not color_palette:
+        color_palette = ['#9333ea', '#0ea5e9', '#f97316', '#ec4899']
     group_color_map = {}
     for idx, group_key in enumerate(lot_groups_in_order):
         group_color_map[group_key] = color_palette[idx % len(color_palette)]
@@ -5139,12 +5150,6 @@ def load_lot_route_planner():
             lot_color_map[code] = color_palette[next_color_index % len(color_palette)]
             next_color_index += 1
 
-    stage_border_colors = {
-        'zero': '#dc2626',
-        'partial': '#facc15',
-        'total': '#16a34a',
-    }
-
     geocode_cache = GEOCODE_CACHE
 
     map_orders = []
@@ -5152,8 +5157,10 @@ def load_lot_route_planner():
         kpi_status = order.get('kpi_status')
         if kpi_status == 1:
             stage_key = 'partial'
-        elif kpi_status in (2, 3):
+        elif kpi_status == 2:
             stage_key = 'total'
+        elif kpi_status == 3:
+            stage_key = 'carregado'
         else:
             stage_key = 'zero'
         marker_border = stage_border_colors.get(stage_key, '#1f2937')
