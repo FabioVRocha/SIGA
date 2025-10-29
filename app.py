@@ -72,6 +72,7 @@ VALID_SEPARATION_STAGE_CODES = {option['code'] for option in SEPARATION_STAGE_OP
 OCCURRENCE_BLANK_VALUE = '__blank__'
 
 LOAD_LOT_ROUTE_PARAM_NAME = 'load_lot_route_prefs'
+LOAD_ROUTE_FILTERS_PARAM_NAME = 'load_route_planner_filters'
 OSRM_TABLE_BASE_URL = 'https://router.project-osrm.org/table/v1/driving/'
 NOMINATIM_USER_AGENT = 'SIGA/1.0 (contato@siga.app)'
 AVERAGE_SPEED_KMH = 60
@@ -4882,30 +4883,113 @@ def load_lot_route_planner():
     first_day = today.replace(day=1)
     last_day = first_day.replace(day=calendar.monthrange(today.year, today.month)[1])
 
-    start_date_param = (request.args.get('start_date') or '').strip()
-    end_date_param = (request.args.get('end_date') or '').strip()
-    production_lots_param = [value.strip() for value in request.args.getlist('production_lots') if value and value.strip()]
-    missing_production_lot_param = (request.args.get('missing_production_lot') or '').strip().lower()
-    if missing_production_lot_param not in {'yes', 'no'}:
+    user_id = session.get('user_id')
+    is_map_data_request = (request.args.get('map_data') or '').strip() == '1'
+    saved_filters = {}
+    if user_id:
+        raw_saved_filters = get_user_parameters(user_id, LOAD_ROUTE_FILTERS_PARAM_NAME)
+        if raw_saved_filters:
+            try:
+                parsed_filters = json.loads(raw_saved_filters)
+                if isinstance(parsed_filters, dict):
+                    saved_filters = parsed_filters
+            except (json.JSONDecodeError, TypeError):
+                saved_filters = {}
+
+    def clean_string(value):
+        if value is None:
+            return ''
+        return str(value).strip()
+
+    def clean_list(values):
+        if not values:
+            return []
+        if isinstance(values, str):
+            values_iterable = [values]
+        else:
+            try:
+                values_iterable = list(values)
+            except TypeError:
+                values_iterable = []
+        cleaned = []
+        for value in values_iterable:
+            text = clean_string(value)
+            if text:
+                cleaned.append(text)
+        return cleaned
+
+    def deduplicate_preserve_order(items):
+        seen = set()
+        result = []
+        for item in items:
+            if item not in seen:
+                seen.add(item)
+                result.append(item)
+        return result
+
+    reset_param = clean_string(request.args.get('reset')).lower()
+    ignore_saved_defaults = reset_param in {'1', 'true', 'yes', 'on'}
+
+    start_date_param = clean_string(request.args.get('start_date'))
+    end_date_param = clean_string(request.args.get('end_date'))
+    production_lots_param = deduplicate_preserve_order(clean_list(request.args.getlist('production_lots')))
+
+    if not start_date_param and not ignore_saved_defaults:
+        start_date_param = clean_string(saved_filters.get('start_date'))
+    if not end_date_param and not ignore_saved_defaults:
+        end_date_param = clean_string(saved_filters.get('end_date'))
+    if not production_lots_param and not ignore_saved_defaults:
+        production_lots_param = deduplicate_preserve_order(clean_list(saved_filters.get('production_lots')))
+
+    missing_production_lot_param = clean_string(request.args.get('missing_production_lot')).lower()
+    allowed_missing_values = {'', 'yes', 'no'}
+    if missing_production_lot_param not in allowed_missing_values:
         missing_production_lot_param = ''
+    if not missing_production_lot_param and not ignore_saved_defaults:
+        saved_missing = clean_string(saved_filters.get('missing_production_lot')).lower()
+        if saved_missing in allowed_missing_values:
+            missing_production_lot_param = saved_missing
 
     approval_status_param = []
     for raw_value in request.args.getlist('approval_statuses'):
-        code = (raw_value or '').strip().upper()
-        if code in ORDER_APPROVAL_STATUS_LABELS:
+        code = clean_string(raw_value).upper()
+        if code in ORDER_APPROVAL_STATUS_LABELS and code not in approval_status_param:
             approval_status_param.append(code)
+    if not approval_status_param and not ignore_saved_defaults:
+        saved_approval_statuses = [
+            code.upper()
+            for code in deduplicate_preserve_order(clean_list(saved_filters.get('approval_statuses')))
+            if code.upper() in ORDER_APPROVAL_STATUS_LABELS
+        ]
+        approval_status_param = saved_approval_statuses
 
     situation_param = []
     for raw_value in request.args.getlist('situations'):
-        code = (raw_value or '').strip().upper()
-        if code in ORDER_SITUATION_LABELS:
+        code = clean_string(raw_value).upper()
+        if code in ORDER_SITUATION_LABELS and code not in situation_param:
             situation_param.append(code)
+    if not situation_param and not ignore_saved_defaults:
+        saved_situations = [
+            code.upper()
+            for code in deduplicate_preserve_order(clean_list(saved_filters.get('situations')))
+            if code.upper() in ORDER_SITUATION_LABELS
+        ]
+        situation_param = saved_situations
 
     separation_stage_param = []
     for raw_value in request.args.getlist('separation_stage'):
-        code = (raw_value or '').strip().lower()
+        code = clean_string(raw_value).lower()
         if code in VALID_SEPARATION_STAGE_CODES and code not in separation_stage_param:
             separation_stage_param.append(code)
+    if not separation_stage_param and not ignore_saved_defaults:
+        saved_stages = []
+        for code in deduplicate_preserve_order(clean_list(saved_filters.get('separation_stages'))):
+            normalized = code.lower()
+            if normalized in VALID_SEPARATION_STAGE_CODES and normalized not in saved_stages:
+                saved_stages.append(normalized)
+        separation_stage_param = saved_stages
+
+    production_lots_param = deduplicate_preserve_order(production_lots_param)
 
     filters = {
         'start_date': start_date_param,
@@ -4939,6 +5023,8 @@ def load_lot_route_planner():
 
     orders, error_message = fetch_orders(query_filters)
     if error_message:
+        if is_map_data_request:
+            return jsonify({'success': False, 'message': error_message}), 500
         flash(error_message, 'danger')
 
     stage_filters = set(separation_stage_param)
@@ -5119,6 +5205,38 @@ def load_lot_route_planner():
             }
         )
 
+    if is_map_data_request:
+        def serialize_map_order(item):
+            sanitized = {}
+            for key, value in item.items():
+                if isinstance(value, Decimal):
+                    sanitized[key] = float(value)
+                else:
+                    sanitized[key] = value
+            return sanitized
+
+        def has_valid_coordinates(item):
+            lat = item.get('latitude')
+            lon = item.get('longitude')
+            if lat is None or lon is None:
+                return False
+            try:
+                return not isclose(float(lat), 0.0, abs_tol=1e-6) and not isclose(float(lon), 0.0, abs_tol=1e-6)
+            except (TypeError, ValueError):
+                return False
+
+        orders_with_coordinates = sum(1 for item in map_orders if has_valid_coordinates(item))
+        payload = {
+            'success': True,
+            'orders': [serialize_map_order(item) for item in map_orders],
+            'summary': {
+                'total_orders': len(map_orders),
+                'orders_with_coordinates': orders_with_coordinates,
+                'orders_without_coordinates': len(map_orders) - orders_with_coordinates,
+            },
+        }
+        return jsonify(payload)
+
     lot_color_legend = [
         {'code': code, 'label': lot_display_map.get(code, code), 'color': lot_color_map.get(code)}
         for code in lot_codes_in_order
@@ -5141,7 +5259,7 @@ def load_lot_route_planner():
         'load_route_planner.html',
         page_title="Criar Rota",
         orders=filtered_orders,
-        map_orders=map_orders,
+        map_orders=[],
         filters=filters,
         production_lot_options=get_distinct_production_lots(),
         approval_status_options=ORDER_APPROVAL_STATUS_OPTIONS,
@@ -5155,6 +5273,104 @@ def load_lot_route_planner():
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado'),
     )
+
+
+@app.route('/load_lots/route_planner/save_filters', methods=['POST'])
+@login_required
+def save_load_lot_route_filters():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def clean_string(value):
+        if value is None:
+            return ''
+        return str(value).strip()
+
+    def clean_list(values):
+        if not values:
+            return []
+        if isinstance(values, str):
+            values_iterable = [values]
+        else:
+            try:
+                values_iterable = list(values)
+            except TypeError:
+                values_iterable = []
+        cleaned = []
+        for value in values_iterable:
+            text = clean_string(value)
+            if text:
+                cleaned.append(text)
+        return cleaned
+
+    def deduplicate_preserve_order(items):
+        seen = set()
+        result = []
+        for item in items:
+            if item not in seen:
+                seen.add(item)
+                result.append(item)
+        return result
+
+    sanitized_filters = {}
+
+    start_date = clean_string(payload.get('start_date'))
+    if start_date:
+        try:
+            datetime.datetime.strptime(start_date, '%Y-%m-%d')
+        except ValueError:
+            start_date = ''
+    sanitized_filters['start_date'] = start_date
+
+    end_date = clean_string(payload.get('end_date'))
+    if end_date:
+        try:
+            datetime.datetime.strptime(end_date, '%Y-%m-%d')
+        except ValueError:
+            end_date = ''
+    sanitized_filters['end_date'] = end_date
+
+    allowed_missing_values = {'', 'yes', 'no'}
+    missing_production_lot = clean_string(payload.get('missing_production_lot')).lower()
+    if missing_production_lot not in allowed_missing_values:
+        missing_production_lot = ''
+    sanitized_filters['missing_production_lot'] = missing_production_lot
+
+    allowed_status_codes = set(ORDER_APPROVAL_STATUS_LABELS.keys())
+    approval_statuses = [
+        code.upper()
+        for code in deduplicate_preserve_order(clean_list(payload.get('approval_statuses')))
+        if code.upper() in allowed_status_codes
+    ]
+    sanitized_filters['approval_statuses'] = approval_statuses
+
+    allowed_situation_codes = set(ORDER_SITUATION_LABELS.keys())
+    situations = [
+        code.upper()
+        for code in deduplicate_preserve_order(clean_list(payload.get('situations')))
+        if code.upper() in allowed_situation_codes
+    ]
+    sanitized_filters['situations'] = situations
+
+    sanitized_filters['production_lots'] = deduplicate_preserve_order(clean_list(payload.get('production_lots')))
+
+    sanitized_filters['separation_stages'] = [
+        code.lower()
+        for code in deduplicate_preserve_order(clean_list(payload.get('separation_stages')))
+        if code.lower() in VALID_SEPARATION_STAGE_CODES
+    ]
+
+    try:
+        saved = save_user_parameters(user_id, LOAD_ROUTE_FILTERS_PARAM_NAME, json.dumps(sanitized_filters))
+        if not saved:
+            return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
+    except (TypeError, ValueError) as error:
+        return jsonify({'success': False, 'message': f'Não foi possível processar os filtros: {error}'}), 400
+
+    return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
 
 
 @app.route('/load_lots/<path:load_lot_code>')

@@ -162,7 +162,8 @@
         background-color: var(--clr-white);
         display: flex;
         flex-direction: column;
-        min-height: 640px;
+        position: relative;
+        min-height: 720px;
     }
     .planner-map-toolbar {
         padding: 1rem 1.25rem;
@@ -184,9 +185,73 @@
     .planner-map-toolbar button {
         margin-left: auto;
     }
+    .planner-map-container {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 520px;
+    }
     #routePlannerMap {
-        flex: 1;
-        min-height: 420px;
+        width: 100%;
+        height: 100%;
+        min-height: 520px;
+        border-bottom-left-radius: 0.75rem;
+        border-bottom-right-radius: 0.75rem;
+    }
+    .planner-map-loading,
+    .planner-map-error {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 2rem;
+        text-align: center;
+        z-index: 20;
+    }
+    .planner-map-loading {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(226, 232, 240, 0.92));
+        color: var(--clr-text-secondary);
+    }
+    .planner-map-error {
+        background: rgba(254, 226, 226, 0.92);
+        color: #b91c1c;
+        font-weight: 600;
+    }
+    .planner-map-spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(148, 163, 184, 0.35);
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: planner-spin 0.9s linear infinite;
+    }
+    .planner-map-progress {
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-map-loading.hidden,
+    .planner-map-error.hidden {
+        display: none;
+    }
+    @keyframes planner-spin {
+        from {
+            transform: rotate(0deg);
+        }
+        to {
+            transform: rotate(360deg);
+        }
+    }
+    .marker-cluster-small,
+    .marker-cluster-medium,
+    .marker-cluster-large {
+        background-color: rgba(37, 99, 235, 0.85);
+        border: 2px solid rgba(30, 41, 59, 0.65);
+        color: #fff;
+    }
+    .marker-cluster div {
+        background-color: transparent;
     }
     .planner-popup {
         font-size: 0.85rem;
@@ -247,8 +312,8 @@
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        gap: 0.75rem;
-        margin-top: 1rem;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
         font-size: 0.75rem;
         color: var(--clr-dark-blue);
     }
@@ -256,7 +321,7 @@
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.35rem 0.75rem;
+        padding: 0.25rem 0.65rem;
         border-radius: 9999px;
         background-color: var(--clr-light-gray);
     }
@@ -293,8 +358,8 @@
         grid-area: legend;
         display: flex;
         flex-direction: column;
-        gap: 0.75rem;
-        padding: 1rem 1.25rem;
+        gap: 0.5rem;
+        padding: 0.75rem 1.25rem;
         border: 1px solid var(--clr-border);
         border-radius: 0.75rem;
         background-color: var(--clr-light-gray);
@@ -303,7 +368,7 @@
     .legend-group {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.75rem;
+        gap: 0.5rem;
         font-size: 0.8rem;
         color: var(--clr-dark-blue);
     }
@@ -311,7 +376,7 @@
         display: inline-flex;
         align-items: center;
         gap: 0.4rem;
-        padding: 0.35rem 0.75rem;
+        padding: 0.25rem 0.65rem;
         border-radius: 999px;
         background-color: var(--clr-white);
         border: 1px solid rgba(148, 163, 184, 0.4);
@@ -511,8 +576,20 @@
     }
     .modal-actions {
         display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    .modal-feedback {
+        font-size: 0.8rem;
+        margin-top: 0.5rem;
+        min-height: 1.2rem;
+    }
+    .modal-feedback.is-success {
+        color: #15803d;
+    }
+    .modal-feedback.is-error {
+        color: #b91c1c;
     }
     .marker-label {
         font-size: 0.7rem;
@@ -651,7 +728,15 @@
                 </div>
                 <button id="clearRoute" class="btn-secondary px-4 py-2 rounded-lg">Limpar rota</button>
             </div>
-            <div id="routePlannerMap"></div>
+            <div class="planner-map-container">
+                <div id="routePlannerMap" aria-busy="true"></div>
+                <div class="planner-map-loading hidden" id="routePlannerMapLoading" role="status" aria-live="polite">
+                    <div class="planner-map-spinner" aria-hidden="true"></div>
+                    <p id="routePlannerMapLoadingMessage">Preparando o mapa...</p>
+                    <p class="planner-map-progress hidden" id="routePlannerMapLoadingProgress"></p>
+                </div>
+                <div class="planner-map-error hidden" id="routePlannerMapError" role="alert"></div>
+            </div>
         </section>
         <section class="planner-legends">
             <div class="legend-group">
@@ -688,7 +773,7 @@
                 <i class="fas fa-times"></i>
             </button>
         </div>
-        <form action="{{ url_for('load_lot_route_planner') }}" method="GET" class="space-y-6">
+        <form id="plannerFiltersForm" action="{{ url_for('load_lot_route_planner') }}" method="GET" class="space-y-6">
             <div class="modal-grid">
                 <div class="modal-field">
                     <label for="filterStartDate">Data inicial</label>
@@ -832,9 +917,11 @@
                 </div>
             </div>
             <div class="modal-actions">
+                <button type="button" id="savePlannerFilters" class="btn-secondary px-4 py-2 rounded-lg">Salvar filtros</button>
+                <a href="{{ url_for('load_lot_route_planner', reset=1) }}" class="btn-secondary text-center px-4 py-2 rounded-lg">Limpar tudo</a>
                 <button type="submit" class="btn-primary px-4 py-2 rounded-lg">Aplicar filtros</button>
-                <a href="{{ url_for('load_lot_route_planner') }}" class="btn-secondary text-center px-4 py-2 rounded-lg">Limpar tudo</a>
             </div>
+            <div id="plannerFiltersFeedback" class="modal-feedback" role="status" aria-live="polite"></div>
         </form>
     </div>
 </div>
@@ -1090,7 +1177,12 @@
         });
     }
 
-    const plannerOrders = {{ map_orders | tojson }};
+    let plannerOrders = [];
+    const mapDataUrl = (() => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('map_data', '1');
+        return url.toString();
+    })();
     const borderColors = {{ stage_border_colors | tojson }};
 
     const detailModal = document.getElementById('orderDetailModal');
@@ -1117,13 +1209,18 @@
     });
 
     let map;
+    let markerLayerGroup = null;
 
     const ordersById = new Map();
-    plannerOrders.forEach(order => ordersById.set(String(order.pedido), order));
 
     const markersById = new Map();
     let routeLine = null;
     const selectedOrderIds = [];
+
+    const mapLoadingOverlay = document.getElementById('routePlannerMapLoading');
+    const mapLoadingMessage = document.getElementById('routePlannerMapLoadingMessage');
+    const mapLoadingProgress = document.getElementById('routePlannerMapLoadingProgress');
+    const mapLoadingError = document.getElementById('routePlannerMapError');
 
     function escapeHtml(value) {
         if (value === null || value === undefined) {
@@ -1207,6 +1304,69 @@
         };
         return mapping[status] || 'status-kpi-red';
     };
+
+    function showMapLoading(message) {
+        if (mapLoadingError) {
+            mapLoadingError.classList.add('hidden');
+        }
+        if (mapLoadingOverlay) {
+            mapLoadingOverlay.classList.remove('hidden');
+        }
+        if (mapLoadingMessage && message) {
+            mapLoadingMessage.textContent = message;
+        }
+        if (mapLoadingProgress) {
+            mapLoadingProgress.textContent = '';
+            mapLoadingProgress.classList.add('hidden');
+        }
+    }
+
+    function updateMapLoadingProgress(current, total) {
+        if (!mapLoadingProgress) {
+            return;
+        }
+        if (!total || total <= 0) {
+            mapLoadingProgress.textContent = '';
+            mapLoadingProgress.classList.add('hidden');
+            return;
+        }
+        const percent = Math.min(100, Math.round((current / total) * 100));
+        mapLoadingProgress.textContent = `Processando ${current} de ${total} pedidos (${percent}%)`;
+        mapLoadingProgress.classList.remove('hidden');
+    }
+
+    function showMapLoadingError(message) {
+        if (mapLoadingOverlay) {
+            mapLoadingOverlay.classList.add('hidden');
+        }
+        if (mapLoadingError) {
+            mapLoadingError.textContent = message || 'Nao foi possivel carregar o mapa.';
+            mapLoadingError.classList.remove('hidden');
+        }
+    }
+
+    function hideMapLoading() {
+        if (mapLoadingOverlay) {
+            mapLoadingOverlay.classList.add('hidden');
+        }
+        if (mapLoadingProgress) {
+            mapLoadingProgress.textContent = '';
+            mapLoadingProgress.classList.add('hidden');
+        }
+        if (mapLoadingError) {
+            mapLoadingError.classList.add('hidden');
+        }
+    }
+
+    function setPlannerOrders(orderList) {
+        plannerOrders = Array.isArray(orderList) ? orderList : [];
+        ordersById.clear();
+        plannerOrders.forEach(order => {
+            if (order && order.pedido !== undefined && order.pedido !== null) {
+                ordersById.set(String(order.pedido), order);
+            }
+        });
+    }
 
     function buildPopupContent(order) {
         if (!order) {
@@ -1484,30 +1644,116 @@
         });
     }
 
+    function ensureMarkerLayer() {
+        if (!map) {
+            return null;
+        }
+        if (!markerLayerGroup) {
+            markerLayerGroup = L.featureGroup();
+            markerLayerGroup.addTo(map);
+        }
+        return markerLayerGroup;
+    }
+
     function mountMarkers() {
         if (!map) {
             return;
         }
-        const markerPoints = [];
-        plannerOrders.forEach(order => {
-            if (!order.latitude || !order.longitude) {
-                return;
-            }
-            const marker = L.marker([order.latitude, order.longitude], { icon: createMarkerIcon(order, false) });
-            marker.addTo(map);
-            marker.bindPopup(buildPopupContent(order));
-            marker.on('click', () => toggleOrderSelection(String(order.pedido)));
-            markersById.set(String(order.pedido), marker);
-            markerPoints.push([order.latitude, order.longitude]);
-        });
-        if (!map) {
+        const layer = ensureMarkerLayer();
+        if (!layer) {
             return;
         }
-        if (markerPoints.length) {
-            const group = L.featureGroup(Array.from(markersById.values()));
-            map.fitBounds(group.getBounds(), { padding: [30, 30] });
-        } else {
+        markersById.clear();
+        layer.clearLayers();
+        if (mapLoadingError) {
+            mapLoadingError.classList.add('hidden');
+        }
+        if (!plannerOrders.length) {
+            hideMapLoading();
             map.setView(defaultView, 4);
+            return;
+        }
+
+        const total = plannerOrders.length;
+        const chunkSize = total > 1200 ? 220 : 400;
+        let index = 0;
+        let bounds = null;
+
+        showMapLoading('Processando pedidos para o mapa...');
+        updateMapLoadingProgress(0, total);
+
+        const processChunk = () => {
+            const chunkMarkers = [];
+            let processedInChunk = 0;
+            while (index < total && processedInChunk < chunkSize) {
+                const order = plannerOrders[index];
+                index += 1;
+                processedInChunk += 1;
+                if (!order || !order.latitude || !order.longitude) {
+                    continue;
+                }
+                const marker = L.marker([order.latitude, order.longitude], { icon: createMarkerIcon(order, false) });
+                marker.bindPopup(buildPopupContent(order));
+                marker.on('click', () => toggleOrderSelection(String(order.pedido)));
+                markersById.set(String(order.pedido), marker);
+                chunkMarkers.push(marker);
+                const point = L.latLng(order.latitude, order.longitude);
+                if (!bounds) {
+                    bounds = L.latLngBounds(point, point);
+                } else {
+                    bounds.extend(point);
+                }
+            }
+
+            if (chunkMarkers.length) {
+                if (typeof layer.addLayers === 'function') {
+                    layer.addLayers(chunkMarkers);
+                } else {
+                    chunkMarkers.forEach(marker => layer.addLayer(marker));
+                }
+            }
+
+            updateMapLoadingProgress(Math.min(index, total), total);
+
+            if (index < total) {
+                window.requestAnimationFrame(processChunk);
+            } else {
+                if (bounds) {
+                    map.fitBounds(bounds, { padding: [30, 30] });
+                } else {
+                    map.setView(defaultView, 4);
+                }
+                hideMapLoading();
+            }
+        };
+
+        window.requestAnimationFrame(processChunk);
+    }
+
+    async function loadPlannerOrders() {
+        showMapLoading('Carregando pedidos no mapa...');
+        try {
+            const response = await fetch(mapDataUrl, {
+                headers: {
+                    Accept: 'application/json'
+                },
+                credentials: 'same-origin'
+            });
+            if (!response.ok) {
+                throw new Error(`Resposta inesperada: ${response.status}`);
+            }
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+            if (!contentType.includes('application/json')) {
+                throw new Error('Resposta sem JSON');
+            }
+            const result = await response.json();
+            const orders = Array.isArray(result.orders) ? result.orders : [];
+            setPlannerOrders(orders);
+            mountMarkers();
+            updateSelectionSummary();
+        } catch (error) {
+            console.error('Erro ao carregar pedidos do mapa:', error);
+            showMapLoadingError('Nao foi possivel carregar os pedidos do mapa.');
         }
     }
 
@@ -1629,11 +1875,16 @@
 
         const mapContainerExists = document.getElementById('routePlannerMap');
         if (mapContainerExists) {
-            map = L.map('routePlannerMap');
+            map = L.map('routePlannerMap', { preferCanvas: true });
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 18,
                 attribution: '&copy; OpenStreetMap'
             }).addTo(map);
+            window.setTimeout(() => {
+                if (map) {
+                    map.invalidateSize();
+                }
+            }, 0);
             map.on('popupopen', (event) => {
                 const popupEl = event.popup.getElement();
                 if (!popupEl) {
@@ -1690,6 +1941,105 @@
             });
         }
 
+        const filtersForm = document.getElementById('plannerFiltersForm');
+        const saveFiltersBtn = document.getElementById('savePlannerFilters');
+        const filtersFeedback = document.getElementById('plannerFiltersFeedback');
+        const saveFiltersEndpoint = '{{ url_for("save_load_lot_route_filters") }}';
+        let feedbackTimeoutId = null;
+
+        const updateFiltersFeedback = (message, tone) => {
+            if (!filtersFeedback) {
+                return;
+            }
+            filtersFeedback.textContent = message || '';
+            filtersFeedback.classList.remove('is-success', 'is-error');
+            if (tone === 'success') {
+                filtersFeedback.classList.add('is-success');
+            } else if (tone === 'error') {
+                filtersFeedback.classList.add('is-error');
+            }
+            if (feedbackTimeoutId) {
+                window.clearTimeout(feedbackTimeoutId);
+                feedbackTimeoutId = null;
+            }
+            if (tone === 'success' || tone === 'error') {
+                feedbackTimeoutId = window.setTimeout(() => {
+                    filtersFeedback.textContent = '';
+                    filtersFeedback.classList.remove('is-success', 'is-error');
+                    feedbackTimeoutId = null;
+                }, 4000);
+            }
+        };
+
+        const normalizeArrayValues = (values) => {
+            if (!Array.isArray(values)) {
+                return [];
+            }
+            return values
+                .map((value) => (value === null || value === undefined ? '' : String(value).trim()))
+                .filter((value) => value.length > 0);
+        };
+
+        const collectFilterPayload = () => {
+            if (!filtersForm) {
+                return {};
+            }
+            const formData = new FormData(filtersForm);
+            return {
+                start_date: (formData.get('start_date') || '').toString().trim(),
+                end_date: (formData.get('end_date') || '').toString().trim(),
+                missing_production_lot: (formData.get('missing_production_lot') || '').toString().trim(),
+                production_lots: normalizeArrayValues(formData.getAll('production_lots')),
+                approval_statuses: normalizeArrayValues(formData.getAll('approval_statuses')),
+                situations: normalizeArrayValues(formData.getAll('situations')),
+                separation_stages: normalizeArrayValues(formData.getAll('separation_stage')),
+            };
+        };
+
+        if (saveFiltersBtn && filtersForm) {
+            saveFiltersBtn.addEventListener('click', async (event) => {
+                event.preventDefault();
+                if (saveFiltersBtn.disabled) {
+                    return;
+                }
+                saveFiltersBtn.disabled = true;
+                updateFiltersFeedback('Salvando filtros...', null);
+                const payload = collectFilterPayload();
+                try {
+                    const response = await fetch(saveFiltersEndpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload),
+                    });
+                    if (response.status === 401) {
+                        updateFiltersFeedback('Sessão expirada. Faça login novamente para salvar os filtros.', 'error');
+                        return;
+                    }
+                    const responseType = response.headers.get('content-type') || '';
+                    if (response.redirected || !responseType.toLowerCase().includes('application/json')) {
+                        updateFiltersFeedback('Não foi possível salvar os filtros. Faça login novamente e tente outra vez.', 'error');
+                        return;
+                    }
+                    const result = await response.json().catch(() => ({}));
+                    if (response.ok && result && result.success) {
+                        updateFiltersFeedback(result.message || 'Filtros salvos com sucesso!', 'success');
+                    } else {
+                        const message = (result && result.message) || 'Não foi possível salvar os filtros.';
+                        updateFiltersFeedback(message, 'error');
+                    }
+                } catch (error) {
+                    console.error('Erro ao salvar filtros do planejador de rota:', error);
+                    updateFiltersFeedback('Erro de comunicação ao salvar os filtros.', 'error');
+                } finally {
+                    saveFiltersBtn.disabled = false;
+                }
+            });
+        }
+
         if (detailModal) {
             detailModal.addEventListener('click', (event) => {
                 if (event.target === detailModal) {
@@ -1698,8 +2048,12 @@
             });
         }
 
-        mountMarkers();
         updateSelectionSummary();
+        if (map) {
+            loadPlannerOrders();
+        } else {
+            hideMapLoading();
+        }
         const scheduleOrderListHeight = () => window.requestAnimationFrame(enforceOrderListHeight);
         scheduleOrderListHeight();
         window.addEventListener('resize', scheduleOrderListHeight);
