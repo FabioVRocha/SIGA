@@ -28,20 +28,30 @@
     .planner-layout {
         display: grid;
         grid-template-columns: minmax(280px, 360px) 1fr;
+        grid-template-areas:
+            "sidebar map"
+            "sidebar legend";
         gap: 1.5rem;
+        align-items: stretch;
     }
     @media (max-width: 1024px) {
         .planner-layout {
             grid-template-columns: 1fr;
+            grid-template-areas:
+                "sidebar"
+                "map"
+                "legend";
         }
     }
     .planner-sidebar {
+        grid-area: sidebar;
         border: 1px solid var(--clr-border);
         border-radius: 0.75rem;
         background-color: var(--clr-light-gray);
         display: flex;
         flex-direction: column;
-        max-height: 640px;
+        height: 100%;
+        align-self: stretch;
     }
     .planner-sidebar header {
         padding: 1rem 1.25rem;
@@ -58,6 +68,7 @@
         color: var(--clr-text-secondary);
     }
     .planner-list {
+        flex: 1 1 auto;
         overflow-y: auto;
         padding: 0.5rem 0;
     }
@@ -65,19 +76,31 @@
         width: 100%;
         border-collapse: separate;
         border-spacing: 0;
+        table-layout: fixed;
+    }
+    .planner-table th.sequence-col,
+    .planner-table td.sequence-col {
+        width: 3rem;
+        text-align: center;
     }
     .planner-table th {
         font-size: 0.7rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        padding: 0.35rem 1.25rem;
+        padding: 0.3rem 0.6rem;
         color: var(--clr-medium-gray);
+        white-space: nowrap;
     }
     .planner-table td {
-        padding: 0.6rem 1.25rem;
+        padding: 0.45rem 0.6rem;
         font-size: 0.85rem;
         color: var(--clr-dark-blue);
         border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+        word-break: break-word;
+    }
+    .planner-table td.sequence-col {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
     }
     .planner-order-row {
         cursor: pointer;
@@ -90,7 +113,50 @@
         background-color: rgba(79, 131, 204, 0.18);
         box-shadow: inset 0 0 0 1px rgba(79, 131, 204, 0.35);
     }
+    @media (max-width: 768px) {
+        .planner-table,
+        .planner-table thead,
+        .planner-table tbody,
+        .planner-table tr,
+        .planner-table th,
+        .planner-table td {
+            display: block;
+            width: 100%;
+        }
+        .planner-table thead {
+            display: none;
+        }
+        .planner-order-row {
+            padding: 0.65rem 0.9rem;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+        }
+        .planner-table td {
+            padding: 0.35rem 0;
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.35rem;
+            align-items: baseline;
+        }
+        .planner-table td::before {
+            content: attr(data-label);
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--clr-medium-gray);
+        }
+        .planner-table td.sequence-col {
+            grid-template-columns: 1fr;
+            justify-content: flex-start;
+        }
+        .planner-table td.sequence-col::before {
+            content: none;
+        }
+        .planner-table td.sequence-col .sequence-badge {
+            margin-bottom: 0.35rem;
+        }
+    }
     .planner-map-panel {
+        grid-area: map;
         border: 1px solid var(--clr-border);
         border-radius: 0.75rem;
         background-color: var(--clr-white);
@@ -122,13 +188,117 @@
         flex: 1;
         min-height: 420px;
     }
+    .planner-popup {
+        font-size: 0.85rem;
+        color: var(--clr-dark-blue);
+        min-width: 220px;
+    }
+    .planner-popup strong {
+        font-size: 0.95rem;
+        color: var(--clr-dark-blue);
+    }
+    .planner-popup-client {
+        margin-top: 0.3rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-popup-metrics {
+        margin-top: 0.75rem;
+        display: grid;
+        gap: 0.35rem;
+    }
+    .planner-popup-metric {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        font-size: 0.78rem;
+    }
+    .planner-popup-metric span:first-child {
+        color: var(--clr-text-secondary);
+    }
+    .planner-popup-detail-button {
+        margin-top: 0.85rem;
+        padding: 0.35rem 0.65rem;
+        font-size: 0.72rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--clr-border);
+        background-color: transparent;
+        color: var(--clr-dark-blue);
+        cursor: pointer;
+        transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .planner-popup-detail-button:hover {
+        background-color: rgba(79, 131, 204, 0.1);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+    }
+    #orderDetailModal .modal-content {
+        width: 100%;
+        max-width: 75rem;
+        max-height: 90vh;
+        overflow-y: auto;
+        border: 1px solid var(--clr-border);
+        background-color: var(--clr-card-bg);
+    }
+    #orderDetailModal .modal-footer {
+        border-top: 1px solid var(--clr-border);
+        padding-top: 1rem;
+        margin-top: 1rem;
+    }
+    .status-legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.75rem;
+        margin-top: 1rem;
+        font-size: 0.75rem;
+        color: var(--clr-dark-blue);
+    }
+    .status-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 9999px;
+        background-color: var(--clr-light-gray);
+    }
+    .status-legend-color {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 9999px;
+    }
+    .status-legend-color.red {
+        background-color: #dc2626;
+    }
+    .status-legend-color.yellow {
+        background-color: #f59e0b;
+    }
+    .status-legend-color.green {
+        background-color: #16a34a;
+    }
+    .status-legend-color.blue {
+        background-color: #2563eb;
+    }
+    .status-kpi-red {
+        color: #dc2626;
+    }
+    .status-kpi-yellow {
+        color: #f59e0b;
+    }
+    .status-kpi-green {
+        color: #16a34a;
+    }
+    .status-kpi-blue {
+        color: #2563eb;
+    }
     .planner-legends {
+        grid-area: legend;
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
         padding: 1rem 1.25rem;
-        border-top: 1px solid rgba(148, 163, 184, 0.35);
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
         background-color: var(--clr-light-gray);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
     }
     .legend-group {
         display: flex;
@@ -354,31 +524,6 @@
         font-size: 0.9rem;
         color: var(--clr-text-secondary);
     }
-    .route-selection-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        padding: 0;
-        margin: 0;
-        list-style: none;
-    }
-    .route-selection-list li {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        border: 1px solid rgba(79, 131, 204, 0.35);
-        border-radius: 999px;
-        padding: 0.2rem 0.65rem;
-        font-size: 0.8rem;
-        color: var(--clr-dark-blue);
-        background-color: rgba(79, 131, 204, 0.12);
-    }
-    .route-selection-list button {
-        border: none;
-        background: transparent;
-        color: var(--clr-text-secondary);
-        cursor: pointer;
-    }
     .planner-marker {
         width: 46px;
         height: 46px;
@@ -404,6 +549,25 @@
     .planner-marker.is-selected {
         transform: scale(1.05);
         box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.35);
+    }
+    .sequence-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.85rem;
+        height: 1.85rem;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background-color: transparent;
+        color: var(--clr-text-secondary);
+        font-size: 0.75rem;
+        font-weight: 600;
+        transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    .sequence-badge.is-active {
+        background-color: rgba(79, 131, 204, 0.2);
+        border-color: rgba(79, 131, 204, 0.45);
+        color: rgba(30, 64, 175, 0.95);
     }
 </style>
 {% endblock %}
@@ -438,6 +602,7 @@
                 <table class="planner-table">
                     <thead>
                         <tr>
+                            <th class="sequence-col">Seq</th>
                             <th>Pedido / Linha</th>
                             <th>Cliente / Cidade</th>
                             <th>Qtd</th>
@@ -446,15 +611,22 @@
                     <tbody>
                         {% for order in orders %}
                         <tr class="planner-order-row" data-order-id="{{ order.pedido }}">
-                            <td>
+                            <td class="sequence-col" data-label="Seq">
+                                <span
+                                    class="sequence-badge"
+                                    data-role="order-sequence"
+                                    data-order-id="{{ order.pedido }}"
+                                >&mdash;</span>
+                            </td>
+                            <td data-label="Pedido / Linha">
                                 <div class="font-semibold text-sm">{{ order.pedido }}</div>
                                 <div class="text-xs text-slate-muted">{{ order.linha }}</div>
                             </td>
-                            <td>
+                            <td data-label="Cliente / Cidade">
                                 <div>{{ order.cliente_nome }}</div>
                                 <div class="text-xs text-slate-muted">{{ order.cidade or '—' }}{% if order.estado %}/{{ order.estado }}{% endif %}</div>
                             </td>
-                            <td class="text-right whitespace-nowrap">{{ order.quantidade_total | format_decimal_br }}</td>
+                            <td class="text-right whitespace-nowrap" data-label="Qtd">{{ order.quantidade_total | format_decimal_br }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -477,33 +649,29 @@
                     <span>Distância estimada</span>
                     <strong id="routeDistance">—</strong>
                 </div>
-                <div class="metric flex-1" style="min-width: 160px;">
-                    <span>Sequência atual</span>
-                    <ul id="routeSelection" class="route-selection-list"></ul>
-                </div>
                 <button id="clearRoute" class="btn-secondary px-4 py-2 rounded-lg">Limpar rota</button>
             </div>
             <div id="routePlannerMap"></div>
-            <div class="planner-legends">
-                <div class="legend-group">
-                    <strong>Estágio de separação:</strong>
-                    <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.zero }}"></span>Sem separação</span>
-                    <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.partial }}"></span>Parcial</span>
-                    <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.total }}"></span>Total</span>
-                </div>
-                <div class="legend-group">
-                    <strong>Lotes de produção:</strong>
-                    {% if lot_color_legend %}
-                        {% for item in lot_color_legend %}
-                        <span class="legend-item">
-                            <span class="legend-dot fill-only" style="background-color: {{ item.color }}"></span>
-                            {{ item.label }}
-                        </span>
-                        {% endfor %}
-                    {% else %}
-                        <em>Selecione lotes de produção para diferenciar os marcadores.</em>
-                    {% endif %}
-                </div>
+        </section>
+        <section class="planner-legends">
+            <div class="legend-group">
+                <strong>Estágio de separação:</strong>
+                <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.zero }}"></span>Sem separação</span>
+                <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.partial }}"></span>Parcial</span>
+                <span class="legend-item"><span class="legend-dot border-only" style="border-color: {{ stage_border_colors.total }}"></span>Total</span>
+            </div>
+            <div class="legend-group">
+                <strong>Lotes de produção:</strong>
+                {% if lot_color_legend %}
+                    {% for item in lot_color_legend %}
+                    <span class="legend-item">
+                        <span class="legend-dot fill-only" style="background-color: {{ item.color }}"></span>
+                        {{ item.label }}
+                    </span>
+                    {% endfor %}
+                {% else %}
+                    <em>Selecione lotes de produção para diferenciar os marcadores.</em>
+                {% endif %}
             </div>
         </section>
     </div>
@@ -668,6 +836,71 @@
                 <a href="{{ url_for('load_lot_route_planner') }}" class="btn-secondary text-center px-4 py-2 rounded-lg">Limpar tudo</a>
             </div>
         </form>
+    </div>
+</div>
+<div
+    id="orderDetailModal"
+    class="modal"
+    data-endpoint="{{ url_for('order_logistics_details', pedido='__PLACEHOLDER__') }}"
+>
+    <div class="modal-content order-detail-modal-content p-6 md:p-8 rounded-xl space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="section-heading">Detalhes do Pedido</h2>
+            <button id="closeOrderDetailModalBtn" class="close-button" aria-label="Fechar detalhes do pedido">&times;</button>
+        </div>
+        <div id="orderDetailLoading" class="py-6 text-center text-sm text-dark-blue hidden">
+            <i class="fas fa-spinner fa-spin mr-2"></i> Carregando detalhes do pedido...
+        </div>
+        <div id="orderDetailError" class="py-6 text-center text-sm text-red-600 hidden"></div>
+        <div id="orderDetailContent" class="space-y-4 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-dark-blue">
+                <div><span class="font-semibold">Pedido:</span> <span id="orderDetailPedido">--</span></div>
+                <div><span class="font-semibold">Cliente:</span> <span id="orderDetailCliente">--</span></div>
+                <div><span class="font-semibold">Cidade:</span> <span id="orderDetailCidade">--</span></div>
+                <div><span class="font-semibold">UF:</span> <span id="orderDetailUF">--</span></div>
+                <div><span class="font-semibold">Data do Pedido:</span> <span id="orderDetailDataPedido">--</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Produção:</span> <span id="orderDetailLoteProducao">--</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="orderDetailLoteCarga">--</span></div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white rounded-xl overflow-hidden">
+                    <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                        <tr class="text-xs font-medium uppercase tracking-wider">
+                            <th scope="col" class="px-4 py-3 text-left">Código do Produto</th>
+                            <th scope="col" class="px-4 py-3 text-left">Sequência</th>
+                            <th scope="col" class="px-4 py-3 text-left">Produto</th>
+                            <th scope="col" class="px-4 py-3 text-right">Reservado</th>
+                            <th scope="col" class="px-4 py-3 text-right">Separado</th>
+                            <th scope="col" class="px-4 py-3 text-right">Carregado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orderDetailTableBody" class="text-sm text-dark-blue"></tbody>
+                </table>
+            </div>
+            <div id="orderDetailEmptyState" class="hidden text-sm text-center text-slate-muted">
+                Nenhum item encontrado para este pedido.
+            </div>
+        </div>
+        <div class="modal-footer">
+            <div class="status-legend">
+                <div class="status-legend-item">
+                    <span class="status-legend-color red"></span>
+                    <span>Vermelho = Nada Separado</span>
+                </div>
+                <div class="status-legend-item">
+                    <span class="status-legend-color yellow"></span>
+                    <span>Amarelo = Parcialmente Separado</span>
+                </div>
+                <div class="status-legend-item">
+                    <span class="status-legend-color green"></span>
+                    <span>Verde = Totalmente Separado</span>
+                </div>
+                <div class="status-legend-item">
+                    <span class="status-legend-color blue"></span>
+                    <span>Azul = Totalmente Carregado</span>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -860,6 +1093,29 @@
     const plannerOrders = {{ map_orders | tojson }};
     const borderColors = {{ stage_border_colors | tojson }};
 
+    const detailModal = document.getElementById('orderDetailModal');
+    const closeDetailModalBtn = document.getElementById('closeOrderDetailModalBtn');
+    const detailLoading = document.getElementById('orderDetailLoading');
+    const detailError = document.getElementById('orderDetailError');
+    const detailContent = document.getElementById('orderDetailContent');
+    const detailTableBody = document.getElementById('orderDetailTableBody');
+    const detailEmptyState = document.getElementById('orderDetailEmptyState');
+    const detailEndpointTemplate = detailModal ? detailModal.dataset.endpoint || '' : '';
+    const detailFields = {
+        pedido: document.getElementById('orderDetailPedido'),
+        cliente: document.getElementById('orderDetailCliente'),
+        cidade: document.getElementById('orderDetailCidade'),
+        uf: document.getElementById('orderDetailUF'),
+        dataPedido: document.getElementById('orderDetailDataPedido'),
+        loteProducao: document.getElementById('orderDetailLoteProducao'),
+        loteCarga: document.getElementById('orderDetailLoteCarga'),
+    };
+
+    const numberFormatter = new Intl.NumberFormat('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+
     let map;
 
     const ordersById = new Map();
@@ -868,6 +1124,305 @@
     const markersById = new Map();
     let routeLine = null;
     const selectedOrderIds = [];
+
+    function escapeHtml(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return String(value).replace(/[&<>"']/g, (char) => {
+            const entities = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;',
+            };
+            return entities[char] || char;
+        });
+    }
+
+    const safeText = (value, fallback = 'N/A') => {
+        if (value === null || value === undefined) {
+            return fallback;
+        }
+        const trimmed = String(value).trim();
+        return trimmed === '' ? fallback : trimmed;
+    };
+
+    const setFieldText = (element, value) => {
+        if (!element) {
+            return;
+        }
+        element.textContent = safeText(value, '--');
+    };
+
+    const setFieldList = (element, value) => {
+        if (!element) {
+            return;
+        }
+        element.textContent = '';
+        const values = Array.isArray(value)
+            ? value
+            : String(value || '')
+                  .split(';')
+                  .map((item) => item.trim())
+                  .filter((item) => item.length > 0);
+        if (!values.length) {
+            element.textContent = '--';
+            return;
+        }
+        values.forEach((item, index) => {
+            if (index > 0) {
+                element.appendChild(document.createElement('br'));
+            }
+            element.appendChild(document.createTextNode(item));
+        });
+    };
+
+    const formatNumber = (value) => {
+        const numericValue = Number(value);
+        if (Number.isNaN(numericValue)) {
+            return numberFormatter.format(0);
+        }
+        return numberFormatter.format(numericValue);
+    };
+
+    const formatPopupQuantity = (value) => {
+        const numericValue = Number(value);
+        if (Number.isNaN(numericValue)) {
+            return '--';
+        }
+        return numberFormatter.format(numericValue);
+    };
+
+    const getStatusClass = (status) => {
+        if (status === null || status === undefined) {
+            return 'status-kpi-red';
+        }
+        const mapping = {
+            0: 'status-kpi-red',
+            1: 'status-kpi-yellow',
+            2: 'status-kpi-green',
+            3: 'status-kpi-blue',
+        };
+        return mapping[status] || 'status-kpi-red';
+    };
+
+    function buildPopupContent(order) {
+        if (!order) {
+            return '<div class="planner-popup">Pedido não encontrado.</div>';
+        }
+        const cliente = escapeHtml(order.cliente || 'Cliente não informado');
+        const reservado = formatPopupQuantity(order.reservado);
+        const separado = formatPopupQuantity(order.separado);
+        const carregado = formatPopupQuantity(order.carregado);
+        return `
+            <div class="planner-popup">
+                <strong>Pedido ${escapeHtml(order.pedido)}</strong>
+                <div class="planner-popup-client">${cliente}</div>
+                <div class="planner-popup-metrics">
+                    <div class="planner-popup-metric"><span>Reservado</span><span>${reservado}</span></div>
+                    <div class="planner-popup-metric"><span>Separado</span><span>${separado}</span></div>
+                    <div class="planner-popup-metric"><span>Carregado</span><span>${carregado}</span></div>
+                </div>
+                <button type="button" class="planner-popup-detail-button" data-pedido="${escapeHtml(order.pedido)}">Ver detalhes</button>
+            </div>
+        `.trim();
+    }
+
+    function showDetailLoading() {
+        if (detailLoading) {
+            detailLoading.classList.remove('hidden');
+        }
+        if (detailError) {
+            detailError.classList.add('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.add('hidden');
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+    }
+
+    function showDetailError(message) {
+        if (detailLoading) {
+            detailLoading.classList.add('hidden');
+        }
+        if (detailError) {
+            detailError.textContent = message || 'Não foi possível carregar os detalhes do pedido.';
+            detailError.classList.remove('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.add('hidden');
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+    }
+
+    function showDetailContent() {
+        if (detailLoading) {
+            detailLoading.classList.add('hidden');
+        }
+        if (detailError) {
+            detailError.classList.add('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.remove('hidden');
+        }
+    }
+
+    function resetDetailFields() {
+        Object.values(detailFields).forEach((element) => {
+            if (element) {
+                element.textContent = '--';
+            }
+        });
+        if (detailTableBody) {
+            detailTableBody.innerHTML = '';
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+    }
+
+    function renderItems(items) {
+        if (!detailTableBody) {
+            return;
+        }
+        detailTableBody.innerHTML = '';
+        if (!Array.isArray(items) || items.length === 0) {
+            if (detailEmptyState) {
+                detailEmptyState.classList.remove('hidden');
+            }
+            return;
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+        items.forEach((item) => {
+            const row = document.createElement('tr');
+            row.className = 'hover-row text-sm text-dark-blue';
+
+            const codeCell = document.createElement('td');
+            codeCell.className = `py-3 px-4 whitespace-nowrap font-semibold ${getStatusClass(item.kpi_status)}`;
+            codeCell.textContent = safeText(item.codigo_produto);
+
+            const sequenceCell = document.createElement('td');
+            sequenceCell.className = 'py-3 px-4 whitespace-nowrap';
+            sequenceCell.textContent = safeText(item.sequencia);
+
+            const productCell = document.createElement('td');
+            productCell.className = 'py-3 px-4 whitespace-nowrap';
+            productCell.textContent = safeText(item.produto);
+
+            const reservadoCell = document.createElement('td');
+            reservadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            reservadoCell.textContent = formatNumber(item.reservado);
+
+            const separadoCell = document.createElement('td');
+            separadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            separadoCell.textContent = formatNumber(item.separado);
+
+            const carregadoCell = document.createElement('td');
+            carregadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            carregadoCell.textContent = formatNumber(item.carregado);
+
+            row.appendChild(codeCell);
+            row.appendChild(sequenceCell);
+            row.appendChild(productCell);
+            row.appendChild(reservadoCell);
+            row.appendChild(separadoCell);
+            row.appendChild(carregadoCell);
+
+            detailTableBody.appendChild(row);
+        });
+    }
+
+    function populateDetailModal(data) {
+        if (!data) {
+            showDetailError('Não foi possível carregar os detalhes do pedido.');
+            return;
+        }
+        const header = data.header || {};
+        setFieldText(detailFields.pedido, header.pedido);
+        setFieldText(detailFields.cliente, header.cliente);
+        setFieldText(detailFields.cidade, header.cidade);
+        setFieldText(detailFields.uf, header.uf);
+        setFieldText(detailFields.dataPedido, header.data_pedido);
+        setFieldList(detailFields.loteProducao, header.lote_producao);
+        setFieldText(detailFields.loteCarga, header.lote_carga);
+        renderItems(Array.isArray(data.items) ? data.items : []);
+        showDetailContent();
+    }
+
+    function getDetailUrl(pedido) {
+        if (!detailEndpointTemplate || !pedido) {
+            return '';
+        }
+        return detailEndpointTemplate.replace('__PLACEHOLDER__', encodeURIComponent(pedido));
+    }
+
+    function openDetailModal() {
+        if (detailModal) {
+            detailModal.style.display = 'flex';
+        }
+    }
+
+    function closeDetailModal() {
+        if (detailModal) {
+            detailModal.style.display = 'none';
+        }
+        resetDetailFields();
+        if (detailLoading) {
+            detailLoading.classList.add('hidden');
+        }
+        if (detailError) {
+            detailError.classList.add('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.add('hidden');
+        }
+    }
+
+    async function openOrderDetails(pedido) {
+        if (!pedido) {
+            return;
+        }
+        openDetailModal();
+        resetDetailFields();
+        showDetailLoading();
+        const detailUrl = getDetailUrl(pedido);
+        if (!detailUrl) {
+            showDetailError('Endpoint de detalhes não configurado.');
+            return;
+        }
+        try {
+            const response = await fetch(detailUrl, {
+                headers: {
+                    Accept: 'application/json',
+                },
+            });
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (parseError) {
+                console.error('Erro ao interpretar a resposta dos detalhes do pedido:', parseError);
+            }
+            if (!response.ok || !payload) {
+                const message = payload && payload.error
+                    ? payload.error
+                    : 'Não foi possível carregar os detalhes do pedido.';
+                showDetailError(message);
+                return;
+            }
+            populateDetailModal(payload);
+        } catch (fetchError) {
+            console.error('Erro ao buscar detalhes do pedido:', fetchError);
+            showDetailError('Não foi possível carregar os detalhes do pedido.');
+        }
+    }
 
     const defaultView = [-14.2350, -51.9253];
 
@@ -940,7 +1495,7 @@
             }
             const marker = L.marker([order.latitude, order.longitude], { icon: createMarkerIcon(order, false) });
             marker.addTo(map);
-            marker.bindPopup(`<strong>Pedido ${order.pedido}</strong><br>${order.cliente || 'Cliente não informado'}`);
+            marker.bindPopup(buildPopupContent(order));
             marker.on('click', () => toggleOrderSelection(String(order.pedido)));
             markersById.set(String(order.pedido), marker);
             markerPoints.push([order.latitude, order.longitude]);
@@ -965,21 +1520,18 @@
     }
 
     function updateSelectionSummary() {
-        const selectionList = document.getElementById('routeSelection');
-        selectionList.innerHTML = '';
-        selectedOrderIds.forEach(orderId => {
-            const order = ordersById.get(orderId);
-            if (!order) return;
-            const chip = document.createElement('li');
-            chip.innerHTML = `<strong>${orderId}</strong> ${order.cliente || ''}`;
-            const removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.innerHTML = '&times;';
-            removeBtn.addEventListener('click', () => toggleOrderSelection(orderId));
-            chip.appendChild(removeBtn);
-            selectionList.appendChild(chip);
-        });
         document.getElementById('selectedCount').textContent = selectedOrderIds.length;
+        document.querySelectorAll('[data-role="order-sequence"]').forEach(badge => {
+            const orderId = badge.dataset.orderId;
+            const idx = selectedOrderIds.indexOf(orderId);
+            if (idx === -1) {
+                badge.textContent = '—';
+                badge.classList.remove('is-active');
+            } else {
+                badge.textContent = idx + 1;
+                badge.classList.add('is-active');
+            }
+        });
     }
 
     function updateRouteLine() {
@@ -1009,6 +1561,25 @@
             const orderId = row.dataset.orderId;
             row.classList.toggle('is-selected', selectedOrderIds.includes(orderId));
         });
+    }
+
+    // Limit the order list to 12 visible rows before enabling scroll.
+    function enforceOrderListHeight() {
+        const plannerList = document.querySelector('.planner-list');
+        if (!plannerList) {
+            return;
+        }
+        const rows = plannerList.querySelectorAll('.planner-table tbody tr');
+        plannerList.style.removeProperty('max-height');
+        if (rows.length <= 12) {
+            return;
+        }
+        const twelfthRow = rows[11];
+        const listRect = plannerList.getBoundingClientRect();
+        const rowRect = twelfthRow.getBoundingClientRect();
+        const paddingBottom = parseFloat(window.getComputedStyle(plannerList).paddingBottom) || 0;
+        const maxHeight = Math.ceil(rowRect.bottom - listRect.top + paddingBottom);
+        plannerList.style.maxHeight = `${maxHeight}px`;
     }
 
     function toggleOrderSelection(orderId) {
@@ -1042,6 +1613,16 @@
         row.addEventListener('click', () => toggleOrderSelection(row.dataset.orderId));
     });
 
+    if (closeDetailModalBtn) {
+        closeDetailModalBtn.addEventListener('click', closeDetailModal);
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && detailModal && detailModal.style.display === 'flex') {
+            closeDetailModal();
+        }
+    });
+
     // Modal logic
     document.addEventListener('DOMContentLoaded', () => {
         setupMultiComboboxes();
@@ -1053,6 +1634,25 @@
                 maxZoom: 18,
                 attribution: '&copy; OpenStreetMap'
             }).addTo(map);
+            map.on('popupopen', (event) => {
+                const popupEl = event.popup.getElement();
+                if (!popupEl) {
+                    return;
+                }
+                const detailButton = popupEl.querySelector('.planner-popup-detail-button');
+                if (!detailButton) {
+                    return;
+                }
+                detailButton.addEventListener('click', (buttonEvent) => {
+                    buttonEvent.preventDefault();
+                    buttonEvent.stopPropagation();
+                    const pedido = detailButton.dataset.pedido;
+                    if (map) {
+                        map.closePopup();
+                    }
+                    openOrderDetails(pedido);
+                });
+            });
         }
 
         const plannerModal = document.getElementById('plannerFiltersModal');
@@ -1090,8 +1690,20 @@
             });
         }
 
+        if (detailModal) {
+            detailModal.addEventListener('click', (event) => {
+                if (event.target === detailModal) {
+                    closeDetailModal();
+                }
+            });
+        }
+
         mountMarkers();
         updateSelectionSummary();
+        const scheduleOrderListHeight = () => window.requestAnimationFrame(enforceOrderListHeight);
+        scheduleOrderListHeight();
+        window.addEventListener('resize', scheduleOrderListHeight);
+        window.addEventListener('load', scheduleOrderListHeight);
     });
 </script>
 {% endblock %}

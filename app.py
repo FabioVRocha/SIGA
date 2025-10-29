@@ -4979,30 +4979,79 @@ def load_lot_route_planner():
         entries = []
         if not display_value:
             return entries
+
+        def get_description(raw_label):
+            parts = raw_label.split(' - ', 1)
+            if len(parts) == 2:
+                return parts[1].strip() or raw_label.strip()
+            return raw_label.strip()
+
+        def get_group_key(raw_label, prefix_length=9):
+            description = get_description(raw_label)
+            if not description:
+                return ''
+            return description[:prefix_length].strip().lower()
+
         for chunk in display_value.split(';'):
             token = chunk.strip()
             if not token:
                 continue
             code_part = token.split(' - ')[0].strip()
-            entries.append({'code': code_part, 'label': token})
+            description = get_description(token)
+            entries.append(
+                {
+                    'code': code_part,
+                    'label': token,
+                    'description': description,
+                    'group_key': get_group_key(token),
+                }
+            )
         return entries
+
+    selected_production_lot_codes = {code for code in production_lots_param if code}
+    if selected_production_lot_codes and missing_production_lot_param != 'yes':
+        def order_has_only_selected_lots(order):
+            entries = extract_production_lots(order.get('production_lots_display', ''))
+            order_codes = {entry['code'] for entry in entries if entry['code']}
+            if not order_codes:
+                return False
+            return order_codes.issubset(selected_production_lot_codes)
+
+        filtered_orders = [order for order in filtered_orders if order_has_only_selected_lots(order)]
 
     lot_display_map = {}
     lot_codes_in_order = []
+    code_group_map = {}
+    lot_groups_in_order = []
     for order in filtered_orders:
         for entry in extract_production_lots(order.get('production_lots_display', '')):
             code = entry['code']
+            group_key = entry.get('group_key', '')
             if code and code not in lot_display_map:
                 lot_display_map[code] = entry['label']
                 lot_codes_in_order.append(code)
+            if code and group_key:
+                code_group_map[code] = group_key
+            if group_key and group_key not in lot_groups_in_order:
+                lot_groups_in_order.append(group_key)
 
     color_palette = [
         '#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#f97316', '#f43f5e',
         '#a855f7', '#eab308', '#ec4899', '#10b981', '#6366f1', '#fb7185',
     ]
+    group_color_map = {}
+    for idx, group_key in enumerate(lot_groups_in_order):
+        group_color_map[group_key] = color_palette[idx % len(color_palette)]
+
     lot_color_map = {}
-    for idx, code in enumerate(lot_codes_in_order):
-        lot_color_map[code] = color_palette[idx % len(color_palette)]
+    next_color_index = 0
+    for code in lot_codes_in_order:
+        group_key = code_group_map.get(code)
+        if group_key:
+            lot_color_map[code] = group_color_map[group_key]
+        else:
+            lot_color_map[code] = color_palette[next_color_index % len(color_palette)]
+            next_color_index += 1
 
     stage_border_colors = {
         'zero': '#dc2626',
@@ -5059,6 +5108,7 @@ def load_lot_route_planner():
                 'kpi_status': order.get('kpi_status'),
                 'reservado': order.get('reservado'),
                 'separado': order.get('separado'),
+                'carregado': order.get('carregado'),
                 'production_lots_display': order.get('production_lots_display'),
                 'primary_lot_code': primary_lot_code,
                 'primary_lot_label': primary_lot_label,
