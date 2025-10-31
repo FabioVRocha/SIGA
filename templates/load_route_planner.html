@@ -222,6 +222,33 @@
         color: #b91c1c;
         font-weight: 600;
     }
+    .planner-map-error-message {
+        margin: 0;
+        line-height: 1.5;
+    }
+    .planner-map-retry-button {
+        background-color: var(--clr-dark-blue);
+        color: var(--clr-white);
+        border: none;
+        border-radius: 9999px;
+        padding: 0.5rem 1.25rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+        transition: background-color 0.18s ease, transform 0.18s ease;
+    }
+    .planner-map-retry-button:hover {
+        background-color: #1e3a8a;
+    }
+    .planner-map-retry-button:focus-visible {
+        outline: 2px solid var(--clr-white);
+        outline-offset: 2px;
+    }
+    .planner-map-retry-button:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+    }
     .planner-map-spinner {
         width: 40px;
         height: 40px;
@@ -445,6 +472,137 @@
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
+    }
+    .planner-reports-container {
+        display: grid;
+        grid-template-columns: 230px 1fr;
+        gap: 1.5rem;
+    }
+    @media (max-width: 900px) {
+        .planner-reports-container {
+            grid-template-columns: 1fr;
+        }
+    }
+    .planner-reports-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .planner-report-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        align-items: flex-start;
+        width: 100%;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background-color: var(--clr-white);
+        padding: 0.8rem 1rem;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+        text-align: left;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    }
+    .planner-report-item:hover,
+    .planner-report-item:focus-visible {
+        border-color: rgba(37, 99, 235, 0.45);
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+        transform: translateY(-1px);
+        outline: none;
+    }
+    .planner-report-item.is-active {
+        border-color: rgba(37, 99, 235, 0.55);
+        background-color: rgba(37, 99, 235, 0.08);
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.22);
+    }
+    .planner-report-item-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+    }
+    .planner-report-item-subtitle {
+        font-size: 0.8rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-reports-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+    .planner-report-card {
+        display: none;
+        flex-direction: column;
+        gap: 1.25rem;
+        padding: 1.5rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background-color: var(--clr-white);
+    }
+    .planner-report-card.is-active {
+        display: flex;
+    }
+    .planner-report-card__header h4 {
+        margin: 0 0 0.4rem;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+    }
+    .planner-report-card__header p {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-report-card__body {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .planner-report-summary {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-report-summary strong {
+        font-size: 1.15rem;
+        color: var(--clr-dark-blue);
+    }
+    .distribution-map-wrapper {
+        overflow-x: auto;
+    }
+    .distribution-map {
+        width: 100%;
+        max-width: 820px;
+        height: auto;
+    }
+    .distribution-map rect {
+        fill: rgba(148, 163, 184, 0.18);
+        stroke: rgba(148, 163, 184, 0.65);
+        stroke-width: 1.5;
+        transition: fill 0.2s ease, stroke 0.2s ease;
+    }
+    .distribution-map g.has-positive rect {
+        fill: rgba(34, 197, 94, 0.2);
+        stroke: #16a34a;
+    }
+    .distribution-map g.has-negative rect {
+        fill: rgba(248, 113, 113, 0.25);
+        stroke: #dc2626;
+    }
+    .distribution-map text {
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+        text-anchor: middle;
+        fill: var(--clr-dark-blue);
+    }
+    .distribution-map text.uf-code {
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+    .distribution-map text.uf-value {
+        font-size: 0.85rem;
+        fill: var(--clr-text-secondary);
     }
     .multi-combobox {
         position: relative;
@@ -692,6 +850,10 @@
                 <i class="fas fa-filter"></i>
                 Filtrar
             </button>
+            <button id="openPlannerReports" class="btn-secondary flex items-center gap-2 px-4 py-2 rounded-lg" type="button">
+                <i class="fas fa-file-alt"></i>
+                Relatório
+            </button>
         </div>
     </div>
 
@@ -762,7 +924,12 @@
                     <p id="routePlannerMapLoadingMessage">Preparando o mapa...</p>
                     <p class="planner-map-progress hidden" id="routePlannerMapLoadingProgress"></p>
                 </div>
-                <div class="planner-map-error hidden" id="routePlannerMapError" role="alert"></div>
+                <div class="planner-map-error hidden" id="routePlannerMapError" role="alert">
+                    <p class="planner-map-error-message" id="routePlannerMapErrorMessage"></p>
+                    <button type="button" class="planner-map-retry-button" id="routePlannerMapRetry">
+                        Tentar novamente
+                    </button>
+                </div>
             </div>
         </section>
         <section class="planner-legends">
@@ -963,6 +1130,209 @@
             </div>
             <div id="plannerFiltersFeedback" class="modal-feedback" role="status" aria-live="polite"></div>
         </form>
+    </div>
+</div>
+<div id="plannerReportsModal" class="route-modal" role="dialog" aria-modal="true" aria-labelledby="plannerReportsTitle">
+    <div class="modal-content">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 id="plannerReportsTitle" class="text-lg font-semibold text-dark-blue">Relatórios</h3>
+                <p class="text-sm text-slate-500">Visualize indicadores consolidados do centro de distribuição.</p>
+            </div>
+            <button class="icon-button" id="closePlannerReports" aria-label="Fechar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="planner-reports-container">
+            <aside class="planner-reports-sidebar" role="tablist" aria-label="Relatórios disponíveis">
+                <button type="button" class="planner-report-item is-active" data-report-target="distribution-center" role="tab" aria-selected="true" aria-controls="report-panel-distribution-center">
+                    <span class="planner-report-item-title">Centro de Distribuição</span>
+                    <span class="planner-report-item-subtitle">Saldo por UF</span>
+                </button>
+            </aside>
+            <section class="planner-reports-panel">
+                <article class="planner-report-card is-active" id="report-panel-distribution-center" data-report-panel="distribution-center" role="tabpanel" aria-hidden="false">
+                    <header class="planner-report-card__header">
+                        <h4>Centro de Distribuição</h4>
+                        <p>Quantidade disponível por UF considerando separado menos carregado para os pedidos filtrados.</p>
+                        <div class="planner-report-summary">
+                            <span>Total disponível</span>
+                            <strong id="distributionCenterSummary">0</strong>
+                        </div>
+                    </header>
+                    <div class="planner-report-card__body">
+                        <div class="distribution-map-wrapper">
+                            <svg id="distributionCenterMap" class="distribution-map" viewBox="0 0 840 660" role="img" aria-labelledby="distributionCenterMapTitle">
+                                <title id="distributionCenterMapTitle">Saldo de produtos por UF</title>
+                                <g data-uf="RR" transform="translate(92, 0)">
+                                    <title>RR: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">RR</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="AP" transform="translate(184, 0)">
+                                    <title>AP: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">AP</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="AM" transform="translate(92, 72)">
+                                    <title>AM: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">AM</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="PA" transform="translate(276, 72)">
+                                    <title>PA: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">PA</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="MA" transform="translate(368, 72)">
+                                    <title>MA: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">MA</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="PI" transform="translate(460, 72)">
+                                    <title>PI: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">PI</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="CE" transform="translate(552, 72)">
+                                    <title>CE: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">CE</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="RN" transform="translate(644, 72)">
+                                    <title>RN: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">RN</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="AC" transform="translate(0, 144)">
+                                    <title>AC: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">AC</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="RO" transform="translate(92, 144)">
+                                    <title>RO: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">RO</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="TO" transform="translate(368, 144)">
+                                    <title>TO: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">TO</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="PB" transform="translate(644, 144)">
+                                    <title>PB: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">PB</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="PE" transform="translate(552, 144)">
+                                    <title>PE: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">PE</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="AL" transform="translate(552, 216)">
+                                    <title>AL: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">AL</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="SE" transform="translate(644, 216)">
+                                    <title>SE: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">SE</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="BA" transform="translate(460, 216)">
+                                    <title>BA: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">BA</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="MT" transform="translate(184, 216)">
+                                    <title>MT: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">MT</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="GO" transform="translate(276, 288)">
+                                    <title>GO: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">GO</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="DF" transform="translate(368, 288)">
+                                    <title>DF: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">DF</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="MG" transform="translate(460, 288)">
+                                    <title>MG: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">MG</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="ES" transform="translate(552, 288)">
+                                    <title>ES: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">ES</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="MS" transform="translate(184, 360)">
+                                    <title>MS: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">MS</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="SP" transform="translate(460, 360)">
+                                    <title>SP: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">SP</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="RJ" transform="translate(552, 360)">
+                                    <title>RJ: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">RJ</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="PR" transform="translate(368, 432)">
+                                    <title>PR: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">PR</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="SC" transform="translate(368, 504)">
+                                    <title>SC: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">SC</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="RS" transform="translate(368, 576)">
+                                    <title>RS: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">RS</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                            </svg>
+                        </div>
+                        <p class="text-xs text-slate-500">Valores negativos indicam estados com carregamento superior ao separado.</p>
+                    </div>
+                </article>
+            </section>
+        </div>
     </div>
 </div>
 <div
@@ -1224,6 +1594,7 @@
         return url.toString();
     })();
     const borderColors = {{ stage_border_colors | tojson }};
+    const distributionReportData = {{ (distribution_report_data or {}) | tojson | safe }};
 
     const detailModal = document.getElementById('orderDetailModal');
     const closeDetailModalBtn = document.getElementById('closeOrderDetailModalBtn');
@@ -1265,6 +1636,8 @@
     const mapLoadingMessage = document.getElementById('routePlannerMapLoadingMessage');
     const mapLoadingProgress = document.getElementById('routePlannerMapLoadingProgress');
     const mapLoadingError = document.getElementById('routePlannerMapError');
+    const mapLoadingErrorMessage = document.getElementById('routePlannerMapErrorMessage');
+    const mapLoadingRetryButton = document.getElementById('routePlannerMapRetry');
 
     function escapeHtml(value) {
         if (value === null || value === undefined) {
@@ -1353,11 +1726,17 @@
         if (mapLoadingError) {
             mapLoadingError.classList.add('hidden');
         }
+        if (mapLoadingErrorMessage) {
+            mapLoadingErrorMessage.textContent = '';
+        }
+        if (mapLoadingRetryButton) {
+            mapLoadingRetryButton.disabled = true;
+        }
         if (mapLoadingOverlay) {
             mapLoadingOverlay.classList.remove('hidden');
         }
-        if (mapLoadingMessage && message) {
-            mapLoadingMessage.textContent = message;
+        if (mapLoadingMessage) {
+            mapLoadingMessage.textContent = message || 'Carregando mapa...';
         }
         if (mapLoadingProgress) {
             mapLoadingProgress.textContent = '';
@@ -1380,11 +1759,19 @@
     }
 
     function showMapLoadingError(message) {
+        const finalMessage = message || 'Nao foi possivel carregar o mapa.';
         if (mapLoadingOverlay) {
             mapLoadingOverlay.classList.add('hidden');
         }
+        if (mapLoadingErrorMessage) {
+            mapLoadingErrorMessage.textContent = finalMessage;
+        } else if (mapLoadingError) {
+            mapLoadingError.textContent = finalMessage;
+        }
+        if (mapLoadingRetryButton) {
+            mapLoadingRetryButton.disabled = false;
+        }
         if (mapLoadingError) {
-            mapLoadingError.textContent = message || 'Nao foi possivel carregar o mapa.';
             mapLoadingError.classList.remove('hidden');
         }
     }
@@ -1399,6 +1786,9 @@
         }
         if (mapLoadingError) {
             mapLoadingError.classList.add('hidden');
+        }
+        if (mapLoadingRetryButton) {
+            mapLoadingRetryButton.disabled = false;
         }
     }
 
@@ -1835,6 +2225,16 @@
         }
     }
 
+    if (mapLoadingRetryButton) {
+        mapLoadingRetryButton.addEventListener('click', () => {
+            if (mapLoadingRetryButton.disabled) {
+                return;
+            }
+            mapLoadingRetryButton.disabled = true;
+            loadPlannerOrders();
+        });
+    }
+
     function refreshMarker(orderId) {
         const marker = markersById.get(orderId);
         if (!marker) return;
@@ -1993,6 +2393,124 @@
     // Modal logic
     document.addEventListener('DOMContentLoaded', () => {
         setupMultiComboboxes();
+
+        const reportsModal = document.getElementById('plannerReportsModal');
+        const openReportsBtn = document.getElementById('openPlannerReports');
+        const closeReportsBtn = document.getElementById('closePlannerReports');
+        const reportButtons = Array.from(document.querySelectorAll('[data-report-target]'));
+        const reportPanels = Array.from(document.querySelectorAll('[data-report-panel]'));
+        const distributionMap = document.getElementById('distributionCenterMap');
+        const distributionSummary = document.getElementById('distributionCenterSummary');
+        const distributionTiles = distributionMap ? Array.from(distributionMap.querySelectorAll('[data-uf]')) : [];
+        const quantityFormatter = new Intl.NumberFormat('pt-BR', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        });
+
+        const updateDistributionMap = () => {
+            if (!distributionMap || distributionTiles.length === 0) {
+                if (distributionSummary) {
+                    distributionSummary.textContent = quantityFormatter.format(0);
+                }
+                return;
+            }
+            let total = 0;
+            distributionTiles.forEach((tile) => {
+                const uf = (tile.dataset.uf || '').trim();
+                if (!uf) {
+                    return;
+                }
+                const rawValue = Object.prototype.hasOwnProperty.call(distributionReportData, uf)
+                    ? distributionReportData[uf]
+                    : 0;
+                const numericValue = Number(rawValue);
+                const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+                const normalizedValue = Math.abs(safeValue) < 1e-6 ? 0 : safeValue;
+                total += normalizedValue;
+                const formatted = quantityFormatter.format(normalizedValue);
+                const valueElements = tile.querySelectorAll('.uf-value');
+                if (valueElements.length) {
+                    valueElements.forEach((element) => {
+                        element.textContent = formatted;
+                    });
+                }
+                tile.classList.toggle('has-positive', normalizedValue > 0);
+                tile.classList.toggle('has-negative', normalizedValue < 0);
+                tile.dataset.quantity = normalizedValue;
+                const titleElement = tile.querySelector('title');
+                if (titleElement) {
+                    titleElement.textContent = `${uf}: ${formatted} itens`;
+                }
+            });
+            if (distributionSummary) {
+                distributionSummary.textContent = quantityFormatter.format(total);
+            }
+        };
+
+        const activateReport = (target) => {
+            if (!target) {
+                return;
+            }
+            reportButtons.forEach((button) => {
+                const isActive = button.dataset.reportTarget === target;
+                button.classList.toggle('is-active', isActive);
+                button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+            reportPanels.forEach((panel) => {
+                const isActive = panel.dataset.reportPanel === target;
+                panel.classList.toggle('is-active', isActive);
+                panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+            });
+        };
+
+        const toggleReportsModal = (show) => {
+            if (!reportsModal) {
+                return;
+            }
+            if (show) {
+                reportsModal.classList.add('is-visible');
+                updateDistributionMap();
+            } else {
+                reportsModal.classList.remove('is-visible');
+            }
+        };
+
+        if (openReportsBtn) {
+            openReportsBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                toggleReportsModal(true);
+            });
+        }
+        if (closeReportsBtn) {
+            closeReportsBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                toggleReportsModal(false);
+            });
+        }
+        if (reportsModal) {
+            reportsModal.addEventListener('click', (event) => {
+                if (event.target === reportsModal) {
+                    toggleReportsModal(false);
+                }
+            });
+        }
+        if (reportButtons.length) {
+            reportButtons.forEach((button) => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    const target = button.dataset.reportTarget;
+                    activateReport(target);
+                    updateDistributionMap();
+                });
+            });
+            activateReport(reportButtons[0].dataset.reportTarget);
+        }
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && reportsModal && reportsModal.classList.contains('is-visible')) {
+                toggleReportsModal(false);
+            }
+        });
+        updateDistributionMap();
 
         stageLegendButtons = Array.from(document.querySelectorAll('[data-stage-filter]'));
         lotLegendButtons = Array.from(document.querySelectorAll('[data-lot-filter]'));

@@ -471,17 +471,18 @@
                     </ul>
                 </li>
                 <li>
-                    <div class="sidebar-nav-item flex justify-between items-center cursor-pointer" id="vendas-toggle">
+                    <div class="sidebar-nav-item flex justify-between items-center cursor-pointer" id="comercial-toggle">
                         <span class="flex items-center gap-3">
                             <i class="fas fa-shopping-cart"></i>
-                            <span class="menu-text">Vendas</span>
+                            <span class="menu-text">Comercial</span>
                         </span>
                         <i class="fas fa-chevron-right arrow-icon"></i>
                     </div>
-                    <ul id="vendas-submenu" class="ml-6 mt-1 hidden">
+                    <ul id="comercial-submenu" class="ml-6 mt-1 hidden">
                         <li><a href="{{ url_for('invoices_mirror') }}" class="sidebar-nav-item text-sm"><i class="fas fa-file-invoice"></i><span class="menu-text">Espelho Notas Fiscais</span></a></li>
                         <li><a href="{{ url_for('sales_orders_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-file-contract"></i><span class="menu-text">Pedidos de Vendas</span></a></li>
                         <li><a href="{{ url_for('load_lots_view') }}" class="sidebar-nav-item text-sm"><i class="fas fa-dolly"></i><span class="menu-text">Lotes de Carga</span></a></li>
+                        <li><a href="{{ url_for('technical_assistance_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-tools"></i><span class="menu-text">Assistência Técnica</span></a></li>
                         <li><a href="{{ url_for('sales_returns_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-undo-alt"></i><span class="menu-text">Devoluções de Venda</span></a></li>
                     </ul>
                 </li>
@@ -601,7 +602,7 @@
             const currentPath = window.location.pathname;
             const toggleConfigs = [
                 { id: 'cadastros-toggle', submenuId: 'cadastros-submenu' },
-                { id: 'vendas-toggle', submenuId: 'vendas-submenu' },
+                { id: 'comercial-toggle', submenuId: 'comercial-submenu' },
                 { id: 'producao-toggle', submenuId: 'producao-submenu' },
                 { id: 'financeiro-toggle', submenuId: 'financeiro-submenu' },
                 { id: 'estoque-toggle', submenuId: 'estoque-submenu' },

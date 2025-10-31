@@ -1,0 +1,965 @@
+{% extends "base.html" %}
+
+{% block title %}Assistência Técnica{% endblock %}
+
+{% block page_title %}Assistência Técnica{% endblock %}
+
+{% block content %}
+<style>
+    .list-section {
+        background-color: var(--clr-card-bg);
+        border-radius: 0.75rem;
+        border: 1px solid var(--clr-border);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+        padding: 1.5rem;
+    }
+    @media (min-width: 1024px) {
+        .list-section {
+            padding: 2rem;
+        }
+    }
+    .section-heading {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+    }
+    .text-dark-blue {
+        color: var(--clr-dark-blue);
+    }
+    .text-slate-muted {
+        color: var(--clr-text-secondary);
+    }
+    .hover-row:hover {
+        background-color: rgba(79, 131, 204, 0.12);
+        transition: background-color 0.2s ease-in-out;
+    }
+    .sort-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: none;
+        border: none;
+        color: inherit;
+        font: inherit;
+        text-transform: inherit;
+        width: 100%;
+        padding: 0;
+        cursor: pointer;
+    }
+    .sort-button:focus-visible {
+        outline: 2px solid var(--clr-light-blue);
+        outline-offset: 2px;
+    }
+    .sort-button.justify-end {
+        justify-content: flex-end;
+    }
+    .sort-icon {
+        font-size: 0.75rem;
+        opacity: 0.5;
+    }
+    .sort-button.active .sort-icon {
+        opacity: 1;
+        color: var(--clr-light-blue);
+    }
+    .form-input, .filter-input {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--clr-dark-blue);
+        background-color: var(--clr-white);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .form-input::placeholder, .filter-input::placeholder {
+        color: var(--clr-text-secondary);
+    }
+    .form-input:focus, .filter-input:focus {
+        border-color: var(--clr-light-blue);
+        box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.15);
+        outline: none;
+    }
+    .modal-content {
+        background-color: var(--clr-card-bg);
+        border: 1px solid var(--clr-border);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    #assistanceDetailModal .modal-content {
+        width: 100%;
+        max-width: 80rem;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .summary-footer {
+        margin-top: 1.5rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        justify-content: center;
+        background-color: rgba(148, 163, 184, 0.12);
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        padding: 1.25rem 1.5rem;
+    }
+    @media (min-width: 768px) {
+        .summary-footer {
+            justify-content: flex-start;
+        }
+    }
+    .summary-card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        min-width: 12rem;
+        padding: 1rem 1.25rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background-color: rgba(148, 163, 184, 0.12);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .summary-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12);
+    }
+    .summary-label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: rgba(15, 23, 42, 0.65);
+    }
+    .summary-value {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: var(--clr-dark-blue);
+    }
+    .summary-card--blue {
+        background-color: rgba(59, 130, 246, 0.12);
+        border-color: rgba(59, 130, 246, 0.35);
+    }
+    .summary-card--blue .summary-label,
+    .summary-card--blue .summary-value {
+        color: #1d4ed8;
+    }
+    .summary-card--green {
+        background-color: rgba(74, 222, 128, 0.16);
+        border-color: rgba(74, 222, 128, 0.35);
+    }
+    .summary-card--green .summary-label,
+    .summary-card--green .summary-value {
+        color: #15803d;
+    }
+    .summary-card--amber {
+        background-color: rgba(251, 191, 36, 0.18);
+        border-color: rgba(251, 191, 36, 0.35);
+    }
+    .summary-card--amber .summary-label,
+    .summary-card--amber .summary-value {
+        color: #b45309;
+    }
+</style>
+
+<div class="space-y-6">
+    <section class="list-section">
+        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
+            <div>
+                <h2 class="section-heading">Assistência Técnica</h2>
+                <p class="text-xs text-slate-muted">Total de <span id="visibleRecordsCount" data-total="{{ assistance_records|length if assistance_records else 0 }}">{{ assistance_records|length if assistance_records else 0 }}</span> registros encontrados.</p>
+            </div>
+            <div class="flex justify-end w-full md:w-auto">
+                <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+                    <i class="fas fa-filter mr-2"></i> Filtrar
+                </button>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <form id="columnFilterForm" action="{{ url_for('technical_assistance_list') }}" method="GET" class="space-y-3">
+                <!-- Hidden inputs for existing filters from modal -->
+                <input type="hidden" name="sort_by" id="columnSortByInput" value="{{ sort_by }}">
+                <input type="hidden" name="sort_order" id="columnSortOrderInput" value="{{ sort_order }}">
+                {% if filters.start_date %}<input type="hidden" name="start_date" value="{{ filters.start_date }}">{% endif %}
+                {% if filters.end_date %}<input type="hidden" name="end_date" value="{{ filters.end_date }}">{% endif %}
+                {% for status in filters.statuses or [] %}<input type="hidden" name="statuses" value="{{ status }}">{% endfor %}
+
+                <div class="bg-slate-100 border border-slate-200 rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex flex-col gap-1 text-slate-muted">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-600">Busca rápida</span>
+                        <span class="text-xs">Filtra apenas os resultados exibidos.</span>
+                    </div>
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+                        <input id="globalTableSearch" type="text" class="filter-input sm:w-72" placeholder="Digite para filtrar todos os campos">
+                        <button type="button" id="clearColumnFiltersBtn" class="text-xs text-red-600 hover:underline sm:ml-2">Limpar filtros</button>
+                    </div>
+                </div>
+
+                <table class="min-w-full bg-white rounded-xl overflow-hidden">
+                    <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                        <tr class="text-xs font-medium uppercase tracking-wider">
+                            <th scope="col" class="px-4 py-3 text-left rounded-tl-lg"><button type="button" class="sort-button {% if sort_by == 'assistec' %}active{% endif %}" data-sort-column="assistec"><span>Chamado</span><i class="fas {% if sort_by == 'assistec' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'assdata' %}active{% endif %}" data-sort-column="assdata"><span>Data</span><i class="fas {% if sort_by == 'assdata' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'cliente_nome' %}active{% endif %}" data-sort-column="cliente_nome"><span>Cliente</span><i class="fas {% if sort_by == 'cliente_nome' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'cidade_estado' %}active{% endif %}" data-sort-column="cidade_estado"><span>Cidade/UF</span><i class="fas {% if sort_by == 'cidade_estado' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'representante_nome' %}active{% endif %}" data-sort-column="representante_nome"><span>Representante</span><i class="fas {% if sort_by == 'representante_nome' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'responsavel_nome' %}active{% endif %}" data-sort-column="responsavel_nome"><span>Responsavel</span><i class="fas {% if sort_by == 'responsavel_nome' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'status_label' %}active{% endif %}" data-sort-column="status_label"><span>Status</span><i class="fas {% if sort_by == 'status_label' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'situacao_label' %}active{% endif %}" data-sort-column="situacao_label"><span>Situação</span><i class="fas {% if sort_by == 'situacao_label' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'quantidade_pecas' %}active{% endif %}" data-sort-column="quantidade_pecas"><span>Peças</span><i class="fas {% if sort_by == 'quantidade_pecas' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'valor_total' %}active{% endif %}" data-sort-column="valor_total"><span>Valor</span><i class="fas {% if sort_by == 'valor_total' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'ultima_alteracao_display' %}active{% endif %}" data-sort-column="ultima_alteracao_display"><span>Atualização</span><i class="fas {% if sort_by == 'ultima_alteracao_display' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left">Observação</th>
+                            <th scope="col" class="px-4 py-3 text-center rounded-tr-lg">Ações</th>
+                        </tr>
+                        <tr class="bg-slate-100 text-xs text-dark-blue">
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="assistance_code" value="{{ filters.get('assistance_code', '') }}" class="filter-input column-filter-input" data-field="assistance_code" placeholder="Chamado">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="assistance_date" value="{{ filters.get('assistance_date', '') }}" class="filter-input column-filter-input" data-field="date" placeholder="Data">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="customer" value="{{ filters.get('customer', '') }}" class="filter-input column-filter-input" data-field="customer" placeholder="Cliente">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="city" value="{{ filters.get('city', '') }}" class="filter-input column-filter-input" data-field="city" placeholder="Cidade/UF">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="representative" value="{{ filters.get('representative', '') }}" class="filter-input column-filter-input" data-field="representative" placeholder="Representante">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="responsavel" value="{{ filters.get('responsavel', '') }}" class="filter-input column-filter-input" data-field="responsavel" placeholder="Responsavel">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="status" value="{{ filters.get('status', '') }}" class="filter-input column-filter-input" data-field="status" placeholder="Status">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="situation" value="{{ filters.get('situation', '') }}" class="filter-input column-filter-input" data-field="situation" placeholder="Situação">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="pieces" value="{{ filters.get('pieces', '') }}" class="filter-input column-filter-input" data-field="pieces" placeholder="Peças">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="value" value="{{ filters.get('value', '') }}" class="filter-input column-filter-input" data-field="value" placeholder="Valor">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="updated" value="{{ filters.get('updated', '') }}" class="filter-input column-filter-input" data-field="updated" placeholder="Atualização">
+                            </th>
+                            <th scope="col" class="px-4 py-2">
+                                <input type="text" name="observation" value="{{ filters.get('observation', '') }}" class="filter-input column-filter-input" data-field="observation" placeholder="Observação">
+                            </th>
+                            <th scope="col" class="px-4 py-2 text-center"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if assistance_records %}
+                        {% for assistance in assistance_records %}
+                        {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
+                        <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};" data-row="true">
+                            <td class="py-2 px-4 whitespace-nowrap font-semibold">{{ assistance.assistec or '—' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">
+                                {% if assistance.assdata %}{{ assistance.assdata.strftime('%d/%m/%Y') }}{% else %}—{% endif %}
+                            </td>
+                            <td class="py-2 px-4 whitespace-nowrap">
+                                <div class="font-medium">{{ assistance.cliente_nome or '—' }}</div>
+                                <div class="text-xs text-slate-muted">
+                                    {% if assistance.asscliente %}Código {{ assistance.asscliente }}{% else %}Sem código{% endif %}
+                                </div>
+                            </td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ assistance.cidade_estado or '—' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">
+                                {% set rep_nome = assistance.representante_nome %}
+                                {% set rep_codigo = assistance.assrepres %}
+                                {% if rep_nome %}{{ rep_nome }}{% if rep_codigo %} ({{ rep_codigo }}){% endif %}{% elif rep_codigo %}{{ rep_codigo }}{% else %}—{% endif %}
+                            </td>
+                            <td class="py-2 px-4 whitespace-nowrap">
+                                {% if assistance.responsavel_nome %}{{ assistance.responsavel_nome }}{% else %}—{% endif %}
+                            </td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ assistance.status_label }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ assistance.situacao_label }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ assistance.quantidade_pecas|format_decimal_br(0) }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ assistance.valor_total|format_currency_brl }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ assistance.ultima_alteracao_display or '—' }}</td>
+                            <td class="py-2 px-4">
+                                {% if assistance.observacao %}
+                                <span class="block text-sm text-slate-600 leading-relaxed">{{ assistance.observacao }}</span>
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                            <td class="py-2 px-4 text-center">
+                                {% if assistance.assistec %}
+                                <button
+                                    type="button"
+                                    class="icon-button assistance-detail-button"
+                                    data-assistance-code="{{ assistance.assistec }}"
+                                    aria-label="Visualizar detalhes da assistência {{ assistance.assistec }}"
+                                    title="Visualizar detalhes"
+                                >
+                                    <i class="fas fa-eye text-blue-600 hover:text-blue-800"></i>
+                                </button>
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        <tr id="noMatchingRows" style="display: none;">
+                            <td colspan="13" class="py-6 px-4 text-center text-sm text-slate-muted">
+                                Nenhum registro corresponde aos filtros digitados.
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="13" class="py-6 px-4 text-center text-sm text-slate-muted">
+                                Nenhum registro encontrado. Ajuste os filtros ou utilize os campos de busca acima.
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </form>
+        </div>
+        {% if assistance_records %}
+        <div class="summary-footer">
+            <div class="summary-card summary-card--blue">
+                <p class="summary-label">Chamados</p>
+                <p class="summary-value">{{ totals.total_registros }}</p>
+            </div>
+            <div class="summary-card summary-card--amber">
+                <p class="summary-label">Peças</p>
+                <p class="summary-value">{{ totals.total_pecas|format_decimal_br(0) }}</p>
+            </div>
+            <div class="summary-card summary-card--green">
+                <p class="summary-label">Valor Total</p>
+                <p class="summary-value">{{ totals.valor_total|format_currency_brl }}</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="text-center py-12 px-4 text-sm text-slate-muted">
+            <div class="flex flex-col items-center gap-3">
+                <i class="fas fa-tools text-2xl" style="color: var(--clr-medium-gray);"></i>
+                <p class="font-semibold text-dark-blue">Nenhuma assistência técnica encontrada.</p>
+                <p>Use o botão "Filtrar" para ajustar sua busca.</p>
+            </div>
+        </div>
+        {% endif %}
+    </section>
+</div>
+
+<div
+    id="assistanceDetailModal"
+    class="modal"
+    data-endpoint="{{ url_for('technical_assistance_details', assistance_identifier='__PLACEHOLDER__') }}"
+>
+    <div class="modal-content assistance-detail-modal-content p-6 md:p-8 rounded-xl space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="section-heading">Detalhes da Assistência</h2>
+            <button id="closeAssistanceDetailModalBtn" class="close-button" aria-label="Fechar detalhes da assistência">&times;</button>
+        </div>
+        <div id="assistanceDetailLoading" class="py-6 text-center text-sm text-dark-blue hidden">
+            <i class="fas fa-spinner fa-spin mr-2"></i> Carregando detalhes da assistência...
+        </div>
+        <div id="assistanceDetailError" class="py-6 text-center text-sm text-red-600 hidden"></div>
+        <div id="assistanceDetailContent" class="space-y-4 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-dark-blue">
+                <div><span class="font-semibold">Assistência:</span> <span id="assistanceDetailCodigo">--</span></div>
+                <div><span class="font-semibold">Cliente:</span> <span id="assistanceDetailCliente">--</span></div>
+                <div><span class="font-semibold">Cidade:</span> <span id="assistanceDetailCidade">--</span></div>
+                <div><span class="font-semibold">UF:</span> <span id="assistanceDetailUf">--</span></div>
+                <div><span class="font-semibold">Data do Pedido:</span> <span id="assistanceDetailDataPedido">--</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Produção:</span> <span id="assistanceDetailLoteProducao">--</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="assistanceDetailLoteCarga">--</span></div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white rounded-xl overflow-hidden">
+                    <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                        <tr class="text-xs font-medium uppercase tracking-wider">
+                            <th scope="col" class="px-4 py-3 text-left">Código do Produto</th>
+                            <th scope="col" class="px-4 py-3 text-left">Sequência</th>
+                            <th scope="col" class="px-4 py-3 text-left">Produto</th>
+                            <th scope="col" class="px-4 py-3 text-right">Quantidade</th>
+                            <th scope="col" class="px-4 py-3 text-right">Valor Unitário</th>
+                            <th scope="col" class="px-4 py-3 text-right">Valor Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="assistanceDetailTableBody" class="text-sm text-dark-blue"></tbody>
+                </table>
+            </div>
+            <div id="assistanceDetailTotals" class="summary-footer hidden">
+                <div class="summary-card">
+                    <span class="summary-label">Quantidade Total</span>
+                    <span class="summary-value" id="assistanceDetailTotalQuantidade">--</span>
+                </div>
+                <div class="summary-card">
+                    <span class="summary-label">Valor Total</span>
+                    <span class="summary-value" id="assistanceDetailTotalValor">--</span>
+                </div>
+            </div>
+            <div id="assistanceDetailEmptyState" class="hidden text-sm text-center text-slate-muted">
+                Nenhum item encontrado para esta assistência.
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="filterModal" class="modal">
+    <div class="modal-content" style="max-width: 56rem;">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="section-heading">Filtrar Assistências</h2>
+            <button id="closeFilterModalBtn" class="close-button">&times;</button>
+        </div>
+        <form id="filterForm" action="{{ url_for('technical_assistance_list') }}" method="GET" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                    <label class="form-label" for="start_date">Data Inicial</label>
+                    <input id="start_date" name="start_date" type="date" class="form-input"
+                           value="{{ filters.start_date }}">
+                </div>
+                <div>
+                    <label class="form-label" for="end_date">Data Final</label>
+                    <input id="end_date" name="end_date" type="date" class="form-input"
+                           value="{{ filters.end_date }}">
+                </div>
+                <div>
+                    <label class="form-label" for="statuses">Status</label>
+                    <select id="statuses" name="statuses" multiple class="form-input min-h-[6rem]">
+                        {% for option in status_options %}
+                            <option value="{{ option.code }}" {% if option.code in filters.statuses %}selected{% endif %}>
+                                {{ option.label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-slate-500 mt-1">Use Ctrl/Cmd para selecionar mais de um.</p>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-4 mt-6">
+                <button type="button" id="clearFiltersBtn" class="btn btn-secondary">Limpar Filtros</button>
+                <button type="submit" class="btn btn-primary">Aplicar Filtros</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const filterModal = document.getElementById('filterModal');
+    const openFilterModalBtn = document.getElementById('openFilterModalBtn');
+    const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+    const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+    const columnFilterForm = document.getElementById('columnFilterForm');
+    const clearColumnFiltersBtn = document.getElementById('clearColumnFiltersBtn');
+    const sortableButtons = document.querySelectorAll('[data-sort-column]');
+    const sortByInput = document.getElementById('columnSortByInput');
+    const sortOrderInput = document.getElementById('columnSortOrderInput');
+    const globalSearchInput = document.getElementById('globalTableSearch');
+    const visibleCountElement = document.getElementById('visibleRecordsCount');
+    const noMatchingRows = document.getElementById('noMatchingRows');
+    const assistanceDetailModal = document.getElementById('assistanceDetailModal');
+    const closeAssistanceDetailModalBtn = document.getElementById('closeAssistanceDetailModalBtn');
+    const assistanceDetailButtons = Array.from(document.querySelectorAll('.assistance-detail-button[data-assistance-code]'));
+    const assistanceDetailLoading = document.getElementById('assistanceDetailLoading');
+    const assistanceDetailError = document.getElementById('assistanceDetailError');
+    const assistanceDetailContent = document.getElementById('assistanceDetailContent');
+    const assistanceDetailTableBody = document.getElementById('assistanceDetailTableBody');
+    const assistanceDetailEmptyState = document.getElementById('assistanceDetailEmptyState');
+    const assistanceDetailEndpointTemplate = assistanceDetailModal ? assistanceDetailModal.dataset.endpoint || '' : '';
+    const assistanceDetailFields = {
+        codigo: document.getElementById('assistanceDetailCodigo'),
+        cliente: document.getElementById('assistanceDetailCliente'),
+        cidade: document.getElementById('assistanceDetailCidade'),
+        uf: document.getElementById('assistanceDetailUf'),
+        dataPedido: document.getElementById('assistanceDetailDataPedido'),
+        loteProducao: document.getElementById('assistanceDetailLoteProducao'),
+        loteCarga: document.getElementById('assistanceDetailLoteCarga'),
+    };
+    const assistanceDetailTotalsContainer = document.getElementById('assistanceDetailTotals');
+    const assistanceDetailTotalsFields = {
+        quantidade: document.getElementById('assistanceDetailTotalQuantidade'),
+        valor: document.getElementById('assistanceDetailTotalValor'),
+    };
+    let lastFocusedAssistanceTrigger = null;
+
+    const safeText = (value, fallback = '—') => {
+        if (value === null || value === undefined) {
+            return fallback;
+        }
+        const normalized = String(value).trim();
+        return normalized || fallback;
+    };
+
+    const setFieldText = (element, value) => {
+        if (!element) {
+            return;
+        }
+        element.textContent = safeText(value);
+    };
+
+    const setFieldList = (element, value) => {
+        if (!element) {
+            return;
+        }
+        const items = Array.isArray(value)
+            ? value
+            : String(value || '')
+                  .split(';')
+                  .map((item) => item.trim())
+                  .filter((item) => item.length > 0);
+        if (!items.length) {
+            element.textContent = '—';
+            return;
+        }
+        element.textContent = '';
+        items.forEach((item, index) => {
+            if (index > 0) {
+                element.appendChild(document.createElement('br'));
+            }
+            element.appendChild(document.createTextNode(item));
+        });
+    };
+
+    const quantityFormatter = new Intl.NumberFormat('pt-BR', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 4,
+    });
+    const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+
+    const formatQuantity = (value) => {
+        const numeric = Number(value);
+        if (Number.isNaN(numeric)) {
+            return quantityFormatter.format(0);
+        }
+        return quantityFormatter.format(numeric);
+    };
+
+    const formatCurrency = (value) => {
+        const numeric = Number(value);
+        if (Number.isNaN(numeric)) {
+            return currencyFormatter.format(0);
+        }
+        return currencyFormatter.format(numeric);
+    };
+
+    const updateAssistanceTotals = (totals) => {
+        if (!assistanceDetailTotalsContainer) {
+            return;
+        }
+        const quantityValue =
+            totals && typeof totals.quantidade_total !== 'undefined'
+                ? totals.quantidade_total
+                : 0;
+        const totalValue =
+            totals && typeof totals.valor_total !== 'undefined'
+                ? totals.valor_total
+                : 0;
+        if (assistanceDetailTotalsFields.quantidade) {
+            assistanceDetailTotalsFields.quantidade.textContent = formatQuantity(quantityValue);
+        }
+        if (assistanceDetailTotalsFields.valor) {
+            assistanceDetailTotalsFields.valor.textContent = formatCurrency(totalValue);
+        }
+        assistanceDetailTotalsContainer.classList.remove('hidden');
+    };
+
+    const resetAssistanceDetail = () => {
+        Object.values(assistanceDetailFields).forEach((element) => {
+            if (element) {
+                element.textContent = '--';
+            }
+        });
+        if (assistanceDetailTableBody) {
+            assistanceDetailTableBody.innerHTML = '';
+        }
+        if (assistanceDetailEmptyState) {
+            assistanceDetailEmptyState.classList.add('hidden');
+        }
+        if (assistanceDetailTotalsFields.quantidade) {
+            assistanceDetailTotalsFields.quantidade.textContent = '--';
+        }
+        if (assistanceDetailTotalsFields.valor) {
+            assistanceDetailTotalsFields.valor.textContent = '--';
+        }
+        if (assistanceDetailTotalsContainer) {
+            assistanceDetailTotalsContainer.classList.add('hidden');
+        }
+    };
+
+    const showAssistanceDetailLoading = () => {
+        if (assistanceDetailLoading) {
+            assistanceDetailLoading.classList.remove('hidden');
+        }
+        if (assistanceDetailError) {
+            assistanceDetailError.classList.add('hidden');
+            assistanceDetailError.textContent = '';
+        }
+        if (assistanceDetailContent) {
+            assistanceDetailContent.classList.add('hidden');
+        }
+        if (assistanceDetailTotalsContainer) {
+            assistanceDetailTotalsContainer.classList.add('hidden');
+        }
+    };
+
+    const showAssistanceDetailContent = () => {
+        if (assistanceDetailContent) {
+            assistanceDetailContent.classList.remove('hidden');
+        }
+        if (assistanceDetailLoading) {
+            assistanceDetailLoading.classList.add('hidden');
+        }
+        if (assistanceDetailError) {
+            assistanceDetailError.classList.add('hidden');
+        }
+    };
+
+    const showAssistanceDetailError = (message) => {
+        if (assistanceDetailError) {
+            assistanceDetailError.textContent = message || 'Não foi possível carregar os detalhes da assistência.';
+            assistanceDetailError.classList.remove('hidden');
+        }
+        if (assistanceDetailLoading) {
+            assistanceDetailLoading.classList.add('hidden');
+        }
+        if (assistanceDetailContent) {
+            assistanceDetailContent.classList.add('hidden');
+        }
+        if (assistanceDetailTotalsContainer) {
+            assistanceDetailTotalsContainer.classList.add('hidden');
+        }
+    };
+
+    const renderAssistanceItems = (items) => {
+        if (!assistanceDetailTableBody) {
+            return;
+        }
+        assistanceDetailTableBody.innerHTML = '';
+        if (!Array.isArray(items) || items.length === 0) {
+            if (assistanceDetailEmptyState) {
+                assistanceDetailEmptyState.classList.remove('hidden');
+            }
+            return;
+        }
+        if (assistanceDetailEmptyState) {
+            assistanceDetailEmptyState.classList.add('hidden');
+        }
+        const createCell = (value, alignRight = false) => {
+            const cell = document.createElement('td');
+            cell.className = `px-4 py-2 ${alignRight ? 'text-right' : 'text-left'}`;
+            cell.textContent = safeText(value);
+            return cell;
+        };
+
+        items.forEach((item) => {
+            const row = document.createElement('tr');
+            row.appendChild(createCell(item.codigo_produto));
+            row.appendChild(createCell(item.sequencia));
+            row.appendChild(createCell(item.produto));
+            row.appendChild(createCell(formatQuantity(item.quantidade), true));
+            row.appendChild(createCell(formatCurrency(item.valor_unitario), true));
+            row.appendChild(createCell(formatCurrency(item.valor_total), true));
+            assistanceDetailTableBody.appendChild(row);
+        });
+    };
+
+    const closeAssistanceDetailModal = () => {
+        if (assistanceDetailModal) {
+            assistanceDetailModal.style.display = 'none';
+        }
+        if (lastFocusedAssistanceTrigger) {
+            lastFocusedAssistanceTrigger.focus({ preventScroll: true });
+        }
+    };
+
+    const fetchAssistanceDetail = async (code) => {
+        if (!code || !assistanceDetailEndpointTemplate) {
+            showAssistanceDetailError('Código da assistência inválido.');
+            return;
+        }
+        const endpoint = assistanceDetailEndpointTemplate.replace('__PLACEHOLDER__', encodeURIComponent(code));
+        try {
+            const response = await fetch(endpoint, {
+                headers: { Accept: 'application/json' },
+            });
+            if (!response.ok) {
+                let message = 'Erro ao carregar detalhes da assistência.';
+                try {
+                    const payload = await response.json();
+                    if (payload && payload.error) {
+                        message = payload.error;
+                    }
+                } catch (parseError) {
+                    console.error('Erro ao interpretar a resposta da assistência:', parseError);
+                }
+                throw new Error(message);
+            }
+            const data = await response.json();
+            const header = data.header || {};
+            setFieldText(assistanceDetailFields.codigo, header.assistencia);
+            setFieldText(assistanceDetailFields.cliente, header.cliente);
+            setFieldText(assistanceDetailFields.cidade, header.cidade);
+            setFieldText(assistanceDetailFields.uf, header.uf);
+            setFieldText(assistanceDetailFields.dataPedido, header.data_pedido);
+            setFieldList(assistanceDetailFields.loteProducao, header.lote_producao);
+            setFieldList(assistanceDetailFields.loteCarga, header.lote_carga);
+            updateAssistanceTotals(data.totals);
+            renderAssistanceItems(Array.isArray(data.items) ? data.items : []);
+            showAssistanceDetailContent();
+        } catch (error) {
+            console.error('Erro ao buscar detalhes da assistência:', error);
+            showAssistanceDetailError(error.message);
+        }
+    };
+
+    const openAssistanceDetailModal = (code, trigger) => {
+        if (!assistanceDetailModal || !code) {
+            return;
+        }
+        lastFocusedAssistanceTrigger = trigger || null;
+        assistanceDetailModal.style.display = 'flex';
+        resetAssistanceDetail();
+        showAssistanceDetailLoading();
+        fetchAssistanceDetail(code);
+    };
+
+    if (closeAssistanceDetailModalBtn) {
+        closeAssistanceDetailModalBtn.addEventListener('click', closeAssistanceDetailModal);
+    }
+
+    if (assistanceDetailModal) {
+        assistanceDetailModal.addEventListener('click', (event) => {
+            if (event.target === assistanceDetailModal) {
+                closeAssistanceDetailModal();
+            }
+        });
+    }
+
+    assistanceDetailButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const code = (button.dataset.assistanceCode || '').trim();
+            if (!code) {
+                return;
+            }
+            openAssistanceDetailModal(code, button);
+        });
+    });
+
+    const columnFilterInputs = columnFilterForm ? Array.from(columnFilterForm.querySelectorAll('.column-filter-input')) : [];
+    const dataRows = Array.from(document.querySelectorAll('tr[data-row=\"true\"]'));
+
+    if (visibleCountElement && !visibleCountElement.dataset.total) {
+        visibleCountElement.dataset.total = String(dataRows.length);
+    }
+
+    // Modal handling
+    if (openFilterModalBtn) {
+        openFilterModalBtn.addEventListener('click', () => {
+            if (filterModal) {
+                filterModal.style.display = 'flex';
+            }
+        });
+    }
+    if (closeFilterModalBtn) {
+        closeFilterModalBtn.addEventListener('click', () => {
+            if (filterModal) {
+                filterModal.style.display = 'none';
+            }
+        });
+    }
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', () => {
+            window.location.href = "{{ url_for('technical_assistance_list') }}";
+        });
+    }
+    if (filterModal) {
+        window.addEventListener('click', (event) => {
+            if (event.target === filterModal) {
+                filterModal.style.display = 'none';
+            }
+        });
+    }
+
+    const fieldIndexMap = {
+        assistance_code: 0,
+        date: 1,
+        customer: 2,
+        city: 3,
+        representative: 4,
+        responsavel: 5,
+        status: 6,
+        situation: 7,
+        pieces: 8,
+        value: 9,
+        updated: 10,
+        observation: 11,
+    };
+
+    const normalizeText = (value) => {
+        return (value || '')
+            .toString()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '');
+    };
+
+    const rowCache = dataRows.map((row) => {
+        const cells = Array.from(row.querySelectorAll('td'));
+        const fields = {};
+
+        Object.entries(fieldIndexMap).forEach(([field, index]) => {
+            const cellValue = cells[index] ? cells[index].textContent : '';
+            fields[field] = {
+                raw: cellValue || '',
+                normalized: normalizeText(cellValue),
+            };
+        });
+
+        return {
+            element: row,
+            fields,
+            combined: normalizeText(cells.map((cell) => cell.textContent).join(' ')),
+        };
+    });
+
+    const updateVisibleCount = (count) => {
+        if (!visibleCountElement) {
+            return;
+        }
+        const fallback = parseInt(visibleCountElement.dataset.total || '0', 10);
+        const nextValue = typeof count === 'number' ? count : fallback;
+        visibleCountElement.textContent = String(nextValue);
+    };
+
+    const applyFilters = () => {
+        if (!rowCache.length) {
+            updateVisibleCount(0);
+            if (noMatchingRows) {
+                noMatchingRows.style.display = 'none';
+            }
+            return;
+        }
+
+        const quickFilter = normalizeText(globalSearchInput ? globalSearchInput.value : '');
+        const columnFilters = {};
+
+        columnFilterInputs.forEach((input) => {
+            const key = input.dataset.field;
+            if (!key) {
+                return;
+            }
+            const value = normalizeText(input.value);
+            if (value) {
+                columnFilters[key] = value;
+            }
+        });
+
+        let visibleCount = 0;
+
+        rowCache.forEach((row) => {
+            let matches = true;
+
+            for (const [field, filterValue] of Object.entries(columnFilters)) {
+                const fieldValue = row.fields[field]?.normalized || '';
+                if (!fieldValue.includes(filterValue)) {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches && quickFilter) {
+                matches = row.combined.includes(quickFilter);
+            }
+
+            row.element.style.display = matches ? '' : 'none';
+
+            if (matches) {
+                visibleCount += 1;
+            }
+        });
+
+        updateVisibleCount(visibleCount);
+
+        if (noMatchingRows) {
+            noMatchingRows.style.display = visibleCount === 0 ? '' : 'none';
+        }
+    };
+
+    let filterDebounce;
+    const scheduleFilter = () => {
+        clearTimeout(filterDebounce);
+        filterDebounce = setTimeout(applyFilters, 150);
+    };
+
+    if (columnFilterForm) {
+        columnFilterForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            applyFilters();
+        });
+    }
+
+    columnFilterInputs.forEach((input) => {
+        input.addEventListener('input', scheduleFilter);
+        input.addEventListener('change', scheduleFilter);
+    });
+
+    if (globalSearchInput) {
+        globalSearchInput.addEventListener('input', scheduleFilter);
+        globalSearchInput.addEventListener('change', scheduleFilter);
+    }
+
+    if (clearColumnFiltersBtn) {
+        clearColumnFiltersBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            columnFilterInputs.forEach((input) => {
+                input.value = '';
+            });
+            if (globalSearchInput) {
+                globalSearchInput.value = '';
+            }
+            applyFilters();
+        });
+    }
+
+    // Sorting
+    if (columnFilterForm) {
+        sortableButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const column = button.dataset.sortColumn;
+                const currentOrder = sortOrderInput.value;
+
+                let nextOrder = 'asc';
+                if (sortByInput.value === column && currentOrder === 'asc') {
+                    nextOrder = 'desc';
+                }
+
+                sortByInput.value = column;
+                sortOrderInput.value = nextOrder;
+
+                columnFilterForm.submit();
+            });
+        });
+    }
+
+    applyFilters();
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') {
+            return;
+        }
+        if (filterModal && filterModal.style.display === 'flex') {
+            filterModal.style.display = 'none';
+        }
+        if (assistanceDetailModal && assistanceDetailModal.style.display === 'flex') {
+            closeAssistanceDetailModal();
+        }
+    });
+});
+</script>
+{% endblock %}

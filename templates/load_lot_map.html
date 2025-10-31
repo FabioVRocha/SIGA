@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
 {% block title %}Mapa Lote {{ lot_info.codigo }}{% endblock %}
 {% block page_title %}Mapa do Lote {{ lot_info.codigo }}{% endblock %}
@@ -63,33 +63,6 @@
     .route-side-table th,
     .route-side-table td {
         padding: 0.65rem 0.5rem;
-    }
-    .route-copy-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        font-size: 0.75rem;
-        padding: 0.25rem 0.5rem;
-        color: var(--clr-text-secondary);
-        border-radius: 0.5rem;
-        border: 1px solid transparent;
-        background: transparent;
-        cursor: pointer;
-        transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-    .route-copy-button:hover,
-    .route-copy-button:focus {
-        color: var(--clr-dark-blue);
-        border-color: rgba(148, 163, 184, 0.45);
-        background-color: rgba(148, 163, 184, 0.12);
-    }
-    .route-copy-button:focus {
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
-    }
-    .route-copy-button[disabled] {
-        opacity: 0.6;
-        cursor: not-allowed;
     }
     .route-side-table th {
         font-size: 0.75rem;
@@ -255,12 +228,12 @@
                 {% if lot_info.previsao %}
                     {{ lot_info.previsao.strftime('%d/%m/%Y') }}
                 {% else %}
-                    —
+                    ÔÇö
                 {% endif %}
             </strong>
         </div>
         <div class="route-meta-card">
-            <span>Volumes (M³)</span>
+            <span>Volumes (M&#179;)</span>
             <strong>{{ lot_info.total_m3|format_decimal_br(3) }}</strong>
         </div>
         <div class="route-meta-card">
@@ -269,7 +242,7 @@
         </div>
         <div class="route-meta-card">
             <span>Total da Rota</span>
-            <strong id="routeTotalKm">Calculando…</strong>
+            <strong id="routeTotalKm">CalculandoÔÇª</strong>
             <p class="route-meta-hint">Somatório aproximado dos KM</p>
         </div>
     </div>
@@ -277,22 +250,9 @@
     <div class="route-suggestion-banner">
         <i class="fas fa-magic"></i>
         <div>
-            {% set total_distance = suggestion_meta.get('total_distance_km') %}
-            {% set total_duration = suggestion_meta.get('total_duration_minutes') %}
             <p>Esta é uma sugestão automática baseada na proximidade das paradas. Utilize como referência e ajuste se necessário.</p>
-            {% if suggestion_meta.get('start_used') and route_preferences.start.cidade %}
             <p class="route-suggestion-meta">
-                Partida considerada: {{ route_preferences.start.cidade }}{% if route_preferences.start.estado %} / {{ route_preferences.start.estado }}{% endif %}
-            </p>
-            {% endif %}
-            <p class="route-suggestion-meta">
-                Paradas otimizadas: {{ suggestion_meta.get('optimized_count', 0) }} · Sem coordenadas: {{ suggestion_meta.get('without_coordinates', 0) }}
-                {% if total_distance is not none %}
-                · Distância estimada: {{ '%.2f' % total_distance }} km
-                {% endif %}
-                {% if total_duration is not none %}
-                · Tempo estimado: {{ '%.2f' % (total_duration / 60) }} h
-                {% endif %}
+                Paradas otimizadas: {{ suggestion_meta.get('optimized_count', 0) }} &bull; Sem coordenadas: {{ suggestion_meta.get('without_coordinates', 0) }}
             </p>
         </div>
     </div>
@@ -300,17 +260,9 @@
 
     <div class="route-layout">
         <aside class="route-sidebar">
-            <div class="flex items-start justify-between gap-2">
-                <div>
-                    <h3>Sequência de Entregas</h3>
-                    <p class="text-sm text-slate-muted">Clique em uma linha para focar o ponto correspondente no mapa.</p>
-                </div>
-                {% if route_orders %}
-                <button type="button" id="copyGoogleRoute" class="route-copy-button" aria-label="Copiar rota para o Google Maps" title="Copiar rota para o Google Maps">
-                    <i class="fas fa-link text-xs"></i>
-                    <span>Copiar rota</span>
-                </button>
-                {% endif %}
+            <div>
+                <h3>Sequência de Entregas</h3>
+                <p class="text-sm text-slate-muted">Clique em uma linha para focar o ponto correspondente no mapa.</p>
             </div>
             {% if route_orders %}
             <div class="space-y-2">
@@ -332,7 +284,7 @@
                                     <div class="text-xs text-slate-muted">Original: {{ order.sequencia }}</div>
                                     {% endif %}
                                     {% if order.suggestion_source == 'missing_coordinates' %}
-                                    <div class="text-xs text-slate-muted">Sem coordenadas — mantido no final</div>
+                                    <div class="text-xs text-slate-muted">Sem coordenadas ÔÇö mantido no final</div>
                                     {% endif %}
                                 {% else %}
                                     {{ order.sequencia or loop.index }}
@@ -359,7 +311,7 @@
             {% endif %}
         </aside>
         <div class="map-panel">
-            <div class="map-status" id="mapStatus">Preparando mapa da rota…</div>
+            <div class="map-status" id="mapStatus">Preparando mapa da rotaÔÇª</div>
             <div id="lotRouteMap"></div>
         </div>
     </div>
@@ -431,15 +383,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const mapEl = document.getElementById('lotRouteMap');
     const totalKmEl = document.getElementById('routeTotalKm');
     const isSuggestionView = {{ is_suggestion_view | tojson }};
-    const copyRouteButton = document.getElementById('copyGoogleRoute');
-    const GOOGLE_MAPS_MAX_WAYPOINTS = 23;
-    let copyRouteResetHandle = null;
-
-    mapWaypoints.forEach(stop => ensureStopLatLng(stop));
-
-    if (copyRouteButton) {
-        copyRouteButton.addEventListener('click', handleCopyGoogleRouteClick);
-    }
 
     if (!mapEl) {
         return;
@@ -505,174 +448,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return total;
     }
 
-    function toFiniteNumber(value) {
-        if (typeof value === 'number') {
-            return Number.isFinite(value) ? value : null;
-        }
-        if (typeof value === 'string') {
-            const normalized = value.replace(',', '.').trim();
-            if (!normalized) {
-                return null;
-            }
-            const parsed = Number(normalized);
-            return Number.isFinite(parsed) ? parsed : null;
-        }
-        return null;
-    }
-
-    function ensureStopLatLng(stop) {
-        if (!stop) {
-            return null;
-        }
-        if (Array.isArray(stop._resolvedLatLng) && stop._resolvedLatLng.length === 2) {
-            const [storedLat, storedLon] = stop._resolvedLatLng;
-            if (Number.isFinite(storedLat) && Number.isFinite(storedLon)) {
-                return stop._resolvedLatLng;
-            }
-        }
-        const lat = toFiniteNumber(stop.latitude);
-        const lon = toFiniteNumber(stop.longitude);
-        if (lat !== null && lon !== null) {
-            const pair = [lat, lon];
-            stop._resolvedLatLng = pair;
-            return pair;
-        }
-        return null;
-    }
-
-    function buildStopQueryForMaps(stop) {
-        if (!stop) {
-            return null;
-        }
-        const cidadeValue = typeof stop.cidade === 'string' ? stop.cidade.trim() : '';
-        const estadoValue = typeof stop.estado === 'string' ? stop.estado.trim() : '';
-        if (!cidadeValue || !estadoValue) {
-            return null;
-        }
-        const estado = estadoValue.toUpperCase();
-        return `${cidadeValue} - ${estado}`;
-    }
-
-    function buildGoogleMapsRouteLink() {
-        const stopQueries = mapWaypoints
-            .map(stop => ({ stop, query: buildStopQueryForMaps(stop) }))
-            .filter(item => Boolean(item.query));
-
-        if (!stopQueries.length) {
-            throw new Error('Não há pontos suficientes para gerar o link do Google Maps.');
-        }
-
-        if (stopQueries.length !== mapWaypoints.length) {
-            throw new Error('Preencha cidade e UF em todas as paradas para copiar a rota.');
-        }
-
-        if (stopQueries.length === 1) {
-            const searchUrl = new URL('https://www.google.com/maps/search/');
-            searchUrl.searchParams.set('api', '1');
-            searchUrl.searchParams.set('query', stopQueries[0].query);
-            return { url: searchUrl.toString(), truncated: false };
-        }
-
-        const origin = stopQueries[0].query;
-        const destination = stopQueries[stopQueries.length - 1].query;
-        const waypointQueries = stopQueries.slice(1, -1).map(item => item.query);
-        const truncatedWaypoints = waypointQueries.length > GOOGLE_MAPS_MAX_WAYPOINTS
-            ? waypointQueries.slice(0, GOOGLE_MAPS_MAX_WAYPOINTS)
-            : waypointQueries;
-        const truncated = truncatedWaypoints.length !== waypointQueries.length;
-
-        const dirUrl = new URL('https://www.google.com/maps/dir/');
-        dirUrl.searchParams.set('api', '1');
-        dirUrl.searchParams.set('travelmode', 'driving');
-        dirUrl.searchParams.set('origin', origin);
-        dirUrl.searchParams.set('destination', destination);
-        if (truncatedWaypoints.length) {
-            dirUrl.searchParams.set('waypoints', truncatedWaypoints.join('|'));
-        }
-
-        return { url: dirUrl.toString(), truncated };
-    }
-
-    async function copyTextToClipboard(text) {
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-            try {
-                await navigator.clipboard.writeText(text);
-                return true;
-            } catch (error) {
-                console.warn('Falha ao usar navigator.clipboard, tentando fallback.', error);
-            }
-        }
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.setAttribute('readonly', '');
-        textArea.style.position = 'fixed';
-        textArea.style.top = '-1000px';
-        textArea.style.opacity = '0';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        let successful = false;
-        try {
-            successful = document.execCommand('copy');
-        } catch (error) {
-            console.error('Fallback de cópia falhou.', error);
-        } finally {
-            document.body.removeChild(textArea);
-        }
-        return successful;
-    }
-
-    async function handleCopyGoogleRouteClick(event) {
-        event.preventDefault();
-        if (!copyRouteButton) {
-            return;
-        }
-        if (!copyRouteButton.dataset.originalHtml) {
-            copyRouteButton.dataset.originalHtml = copyRouteButton.innerHTML;
-        }
-        if (copyRouteResetHandle) {
-            clearTimeout(copyRouteResetHandle);
-            copyRouteResetHandle = null;
-        }
-        copyRouteButton.disabled = true;
-        const defaultTitle = 'Copiar rota para o Google Maps';
-        try {
-            const { url, truncated } = buildGoogleMapsRouteLink();
-            const copied = await copyTextToClipboard(url);
-            if (!copied) {
-                throw new Error('Não foi possível copiar o link da rota.');
-            }
-            copyRouteButton.innerHTML = '<i class="fas fa-check text-xs"></i><span>Copiado!</span>';
-            copyRouteButton.title = truncated
-                ? 'Link copiado. O Google Maps aceita até 25 pontos; excedentes foram ignorados.'
-                : 'Link copiado para a área de transferência.';
-            copyRouteButton.disabled = false;
-            if (truncated) {
-                console.warn('Link do Google Maps truncado: limite de 25 pontos atingido.');
-            }
-            copyRouteResetHandle = window.setTimeout(() => {
-                copyRouteButton.innerHTML = copyRouteButton.dataset.originalHtml;
-                copyRouteButton.title = defaultTitle;
-                copyRouteResetHandle = null;
-            }, 2200);
-        } catch (error) {
-            console.error('Erro ao gerar link do Google Maps:', error);
-            const message = error instanceof Error ? error.message : 'Erro ao gerar link da rota.';
-            copyRouteButton.innerHTML = '<i class="fas fa-exclamation-triangle text-xs"></i><span>Erro</span>';
-            copyRouteButton.title = message;
-            copyRouteButton.disabled = false;
-            copyRouteResetHandle = window.setTimeout(() => {
-                copyRouteButton.innerHTML = copyRouteButton.dataset.originalHtml;
-                copyRouteButton.title = defaultTitle;
-                copyRouteResetHandle = null;
-            }, 2600);
-        }
-    }
-
     function setRouteKmValue(value) {
         if (!totalKmEl) return;
         if (value === null || typeof value === 'undefined' || !Number.isFinite(Number(value))) {
-            totalKmEl.textContent = '—';
+            totalKmEl.textContent = 'ÔÇö';
             return;
         }
         const normalized = Number(value);
@@ -697,7 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
         parts.push('Brasil');
         const query = encodeURIComponent(parts.join(', '));
         const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${query}&email=contato%40siga.app`;
-        statusEl.textContent = `Localizando ${parts.slice(0, 2).join(' / ')}…`;
+        statusEl.textContent = `Localizando ${parts.slice(0, 2).join(' / ')}ÔÇª`;
         const response = await fetch(url);
         if (!response.ok) {
             return null;
@@ -759,7 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const combined = [points[0]];
         let totalDistance = 0;
         for (let i = 0; i < points.length - 1; i++) {
-            statusEl.textContent = `Calculando rota entre a parada ${i + 1} e ${i + 2}…`;
+            statusEl.textContent = `Calculando rota entre a parada ${i + 1} e ${i + 2}ÔÇª`;
             let segmentPoints = [points[i + 1]];
             try {
                 const segment = await fetchRoadSegment(points[i], points[i + 1]);
@@ -833,7 +612,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!coordinates) {
                     continue;
                 }
-                stop._resolvedLatLng = [coordinates.lat, coordinates.lon];
                 const markerClasses = ['route-marker'];
                 if (stop.marker_type && stop.marker_type !== 'order') {
                     markerClasses.push(`route-marker--${stop.marker_type}`);

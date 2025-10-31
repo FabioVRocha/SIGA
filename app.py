@@ -61,6 +61,35 @@ ORDER_SITUATION_LABELS = {
     option['code']: option['label'] for option in ORDER_SITUATION_OPTIONS
 }
 
+TECHNICAL_ASSISTANCE_STATUS_LABELS = {
+    'A': 'Aberta',
+    'AB': 'Aberta',
+    'AT': 'Atendida',
+    'F': 'Finalizada',
+    'FI': 'Finalizada',
+    'C': 'Cancelada',
+    'CA': 'Cancelada',
+    'P': 'Pendente',
+    'PE': 'Pendente',
+    'PT': 'Pendente',
+    'E': 'Em andamento',
+    'EM': 'Em andamento',
+    'S': 'Suspensa',
+}
+
+TECHNICAL_ASSISTANCE_SITUATION_LABELS = {
+    'A': 'Aberta',
+    'AT': 'Atendida',
+    'AP': 'Aprovada',
+    'F': 'Finalizada',
+    'C': 'Cancelada',
+    'CA': 'Cancelada',
+    'P': 'Pendente',
+    'E': 'Em andamento',
+    'S': 'Suspensa',
+    'NA': 'Não Aprovada',
+}
+
 SEPARATION_STAGE_OPTIONS = [
     {'code': 'zero', 'label': 'Igual a zero'},
     {'code': 'partial', 'label': 'Parcial'},
@@ -79,6 +108,12 @@ AVERAGE_SPEED_KMH = 60
 GEOCODE_CACHE = {}
 MAX_BRUTE_FORCE_ORDERS = 8
 INSECURE_SSL_CONTEXT = ssl._create_unverified_context()
+
+BRAZIL_STATE_CODES = (
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
+    'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
+    'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+)
 
 
 def route_sequence_sort_value(raw_value):
@@ -669,6 +704,29 @@ def format_decimal_br(value, decimals=2):
 
 app.jinja_env.filters["format_currency_brl"] = format_currency_brl
 app.jinja_env.filters["format_decimal_br"] = format_decimal_br
+
+def normalize_lookup_code(value):
+    """Normaliza códigos alfanuméricos para comparação consistente."""
+    if value is None:
+        return ''
+    return str(value).strip().upper()
+
+
+def get_technical_assistance_status_label(value):
+    """Retorna a descrição amigável do status da assistência técnica."""
+    normalized = normalize_lookup_code(value)
+    if not normalized:
+        return 'Não Informado'
+    return TECHNICAL_ASSISTANCE_STATUS_LABELS.get(normalized, normalized.title())
+
+
+def get_technical_assistance_situation_label(value):
+    """Retorna a descrição amigável da situação da assistência técnica."""
+    normalized = normalize_lookup_code(value)
+    if not normalized:
+        return 'Não Informada'
+    return TECHNICAL_ASSISTANCE_SITUATION_LABELS.get(normalized, normalized.title())
+
 
 def count_business_days(year, months=None):
     """Calcula o número de dias úteis (segunda a sexta) para o ano e meses informados."""
@@ -4104,6 +4162,450 @@ def fetch_sales_orders(filters):
     return orders, error_message
 
 
+def fetch_technical_assistance(filters):
+    """
+    Busca as assistências técnicas com filtros opcionais.
+    """
+    records = []
+    error_message = None
+    conn = get_erp_db_connection()
+
+    if not conn:
+        return records, "Não foi possível conectar ao banco de dados do ERP."
+
+    cur = None
+    try:
+        cur = conn.cursor()
+        query = """
+            SELECT
+                a.assistec,
+                a.asscliente,
+                COALESCE(e.empnome, '') AS cliente_nome,
+                COALESCE(cid.cidnome, '') AS cidade_nome,
+                COALESCE(cid.estado, '') AS estado_sigla,
+                a.assrepres,
+                COALESCE(v.vennome, '') AS representante_nome,
+                COALESCE(resp.responsavel_nome, '') AS responsavel_nome,
+                a.assdata,
+                a.assstatus,
+                a.asssitua,
+                COALESCE(a.assobs1, '') AS observacao,
+                COALESCE(a.assnurep, '') AS numero_reparo,
+                COALESCE(a.asstipo, '') AS tipo,
+                a.assdtalt,
+                a.asshralt,
+                COALESCE(a.assusualt, '') AS usuario_alteracao,
+                COALESCE(SUM(i.aspquanti), 0) AS quantidade_pecas,
+                COALESCE(SUM(i.asptotal), 0) AS valor_total,
+                COUNT(DISTINCT i.aspseq) AS total_itens
+            FROM assistec a
+            LEFT JOIN assiste1 i ON i.assistec = a.assistec
+            LEFT JOIN empresa e ON e.empresa = a.asscliente
+            LEFT JOIN cidade cid ON cid.cidade = e.empcidade
+            LEFT JOIN vendedor v ON v.vendedor = a.assrepres
+            LEFT JOIN LATERAL (
+                SELECT
+                    COALESCE(TRIM(tinsp.tinspdesc::text), '') AS responsavel_nome
+                FROM assdadt ad
+                LEFT JOIN tinspte1 tinsp ON COALESCE(TRIM(ad.asdtcleg::text), '') = COALESCE(TRIM(tinsp.tinspdesc::text), '')
+                WHERE CAST(ad.asdtcod AS TEXT) = CAST(a.assistec AS TEXT)
+                ORDER BY ad.asdtcod
+                LIMIT 1
+            ) resp ON TRUE
+            WHERE 1 = 1
+        """
+        params = []
+
+        start_date = filters.get('start_date')
+        if start_date:
+            query += " AND a.assdata >= %s"
+            params.append(start_date)
+
+        end_date = filters.get('end_date')
+        if end_date:
+            query += " AND a.assdata <= %s"
+            params.append(end_date)
+
+        statuses = filters.get('statuses') or []
+        normalized_statuses = [
+            normalize_lookup_code(value) for value in statuses if value is not None
+        ]
+        if normalized_statuses:
+            placeholders = ', '.join(['%s'] * len(normalized_statuses))
+            query += f" AND COALESCE(TRIM(UPPER(a.assstatus::text)), '') IN ({placeholders})"
+            params.extend(normalized_statuses)
+
+        code_filter = (filters.get('assistance_code') or '').strip()
+        if code_filter:
+            query += " AND CAST(a.assistec AS TEXT) ILIKE %s"
+            params.append(f"%{code_filter}%")
+
+        customer_filter = (filters.get('customer') or '').strip()
+        if customer_filter:
+            like_pattern = f"%{customer_filter}%"
+            query += """
+                AND (
+                    COALESCE(e.empnome, '') ILIKE %s
+                    OR COALESCE(CAST(a.asscliente AS TEXT), '') ILIKE %s
+                )
+            """
+            params.extend([like_pattern, like_pattern])
+
+        representative_filter = (filters.get('representative') or '').strip()
+        if representative_filter:
+            like_pattern = f"%{representative_filter}%"
+            query += """
+                AND (
+                    COALESCE(v.vennome, '') ILIKE %s
+                    OR COALESCE(CAST(a.assrepres AS TEXT), '') ILIKE %s
+                )
+            """
+            params.extend([like_pattern, like_pattern])
+
+        responsavel_filter = (filters.get('responsavel') or '').strip()
+        if responsavel_filter:
+            like_pattern = f"%{responsavel_filter}%"
+            query += """
+                AND COALESCE(resp.responsavel_nome, '') ILIKE %s
+            """
+            params.append(like_pattern)
+
+        query += """
+            GROUP BY
+                a.assistec,
+                a.asscliente,
+                e.empnome,
+                cid.cidnome,
+                cid.estado,
+                a.assrepres,
+                v.vennome,
+                a.assdata,
+                a.assstatus,
+                a.asssitua,
+                a.assobs1,
+                a.assnurep,
+                a.asstipo,
+                a.assdtalt,
+                a.asshralt,
+                a.assusualt,
+                resp.responsavel_nome
+        """
+
+        sort_by = filters.get('sort_by', 'assdata')
+        sort_order = filters.get('sort_order', 'desc')
+        sort_column_map = {
+            'assistec': 'a.assistec',
+            'assdata': 'a.assdata',
+            'cliente_nome': 'cliente_nome',
+            'cidade_estado': 'cidade_nome',
+            'representante_nome': 'representante_nome',
+            'responsavel_nome': 'responsavel_nome',
+            'status_label': 'a.assstatus',
+            'situacao_label': 'a.asssitua',
+            'quantidade_pecas': 'quantidade_pecas',
+            'valor_total': 'valor_total',
+            'ultima_alteracao_display': 'a.assdtalt'
+        }
+        sort_column = sort_column_map.get(sort_by, 'a.assdata')
+        sort_direction = 'ASC' if sort_order == 'asc' else 'DESC'
+
+        query += f" ORDER BY {sort_column} {sort_direction}, a.assistec DESC"
+
+        cur.execute(query, tuple(params))
+        column_names = [desc[0] for desc in cur.description]
+
+        for row in cur.fetchall():
+            record = dict(zip(column_names, row))
+            record['status_label'] = get_technical_assistance_status_label(record.get('assstatus'))
+            record['situacao_label'] = get_technical_assistance_situation_label(record.get('asssitua'))
+            record['responsavel_nome'] = (record.get('responsavel_nome') or '').strip()
+
+            try:
+                record['quantidade_pecas'] = Decimal(record.get('quantidade_pecas') or 0)
+            except (TypeError, InvalidOperation):
+                record['quantidade_pecas'] = Decimal('0')
+
+            try:
+                record['valor_total'] = Decimal(record.get('valor_total') or 0)
+            except (TypeError, InvalidOperation):
+                record['valor_total'] = Decimal('0')
+
+            total_itens_raw = record.get('total_itens') or 0
+            try:
+                record['total_itens'] = int(total_itens_raw)
+            except (TypeError, ValueError):
+                record['total_itens'] = 0
+
+            ultima_data = record.get('assdtalt')
+            ultima_hora = (record.get('asshralt') or '').strip()
+            if ultima_data and ultima_hora:
+                record['ultima_alteracao_display'] = f"{ultima_data.strftime('%d/%m/%Y')} {ultima_hora}"
+            elif ultima_data:
+                record['ultima_alteracao_display'] = ultima_data.strftime('%d/%m/%Y')
+            else:
+                record['ultima_alteracao_display'] = ''
+
+            cidade = (record.get('cidade_nome') or '').strip()
+            estado = (record.get('estado_sigla') or '').strip()
+            if cidade and estado:
+                record['cidade_estado'] = f"{cidade}/{estado}"
+            else:
+                record['cidade_estado'] = cidade or estado
+
+            records.append(record)
+    except UndefinedColumn as error:
+        error_message = f"Colunas necessárias para assistência técnica não foram encontradas: {error}"
+    except (Exception, Error) as error:
+        error_message = f"Erro ao buscar assistências técnicas: {error}"
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    return records, error_message
+
+
+def fetch_technical_assistance_details(assistance_code):
+    """
+    Recupera os detalhes (cabeçalho e itens) de uma assistência técnica específica.
+    """
+    code_value = str(assistance_code or '').strip()
+    if not code_value:
+        return None, {'message': 'Assistência inválida.', 'status': 400}
+
+    conn = get_erp_db_connection()
+    if not conn:
+        return None, {'message': 'Não foi possível conectar ao banco de dados do ERP.', 'status': 500}
+
+    header_data = None
+    items = []
+
+    try:
+        header_cur = conn.cursor()
+        header_cur.execute(
+            """
+            SELECT
+                CAST(a.assistec AS TEXT) AS assistencia,
+                COALESCE(e.empnome, '') AS cliente_nome,
+                COALESCE(cid.cidnome, '') AS cidade_nome,
+                COALESCE(cid.estado, '') AS estado_sigla,
+                a.assdtalt,
+                COALESCE(a.asslcacod::text, '') AS lote_carga_codigo,
+                COALESCE(lc.lcades, '') AS lote_carga_descricao
+            FROM assistec a
+            LEFT JOIN empresa e ON e.empresa = a.asscliente
+            LEFT JOIN cidade cid ON cid.cidade = e.empcidade
+            LEFT JOIN lotecar lc ON lc.lcacod = a.asslcacod
+            WHERE CAST(a.assistec AS TEXT) = %s
+            """,
+            (code_value,),
+        )
+        header_row = header_cur.fetchone()
+        header_cur.close()
+
+        if not header_row:
+            return None, {'message': 'Assistência não encontrada.', 'status': 404}
+
+        (
+            assistance_id,
+            cliente_nome,
+            cidade_nome,
+            estado_sigla,
+            data_atualizacao,
+            lote_carga_codigo,
+            lote_carga_descricao,
+        ) = header_row
+
+        data_pedido_display = ''
+        if isinstance(data_atualizacao, (datetime.date, datetime.datetime)):
+            data_pedido_display = data_atualizacao.strftime('%d/%m/%Y')
+        elif data_atualizacao:
+            data_pedido_display = str(data_atualizacao)
+
+        lote_carga_codigo = (lote_carga_codigo or '').strip()
+        lote_carga_descricao = (lote_carga_descricao or '').strip()
+
+        lote_carga_display = ''
+        if lote_carga_codigo:
+            lote_carga_display = lote_carga_codigo
+            if lote_carga_descricao:
+                lote_carga_display = f"{lote_carga_display} - {lote_carga_descricao}"
+        elif lote_carga_descricao:
+            lote_carga_display = lote_carga_descricao
+
+        lote_producao_display = ''
+        lot_cur = conn.cursor()
+        lot_cur.execute(
+            """
+            WITH production_lots AS (
+                SELECT DISTINCT
+                    COALESCE(lp.lotcod::text, '') AS lotcod,
+                    COALESCE(lp.lotdes, '') AS lotdes
+                FROM acaorde4 ao
+                JOIN ordem o ON o.ordem = ao.acaoorde
+                LEFT JOIN loteprod lp ON lp.lotcod = o.lotcod
+                WHERE CAST(ao.acaorasco AS TEXT) = %s
+            )
+            SELECT lotcod, lotdes
+            FROM production_lots
+            ORDER BY lotcod
+            """,
+            (code_value,),
+        )
+        production_rows = lot_cur.fetchall()
+        lot_cur.close()
+
+        production_lots = []
+        for lotcod, lotdes in production_rows:
+            code = (lotcod or '').strip()
+            description = (lotdes or '').strip()
+            if code and description:
+                production_lots.append(f"{code} - {description}")
+            elif code:
+                production_lots.append(code)
+            elif description:
+                production_lots.append(description)
+        if production_lots:
+            lote_producao_display = '; '.join(production_lots)
+
+        header_data = {
+            'assistencia': (assistance_id or '').strip(),
+            'cliente': (cliente_nome or '').strip(),
+            'cidade': (cidade_nome or '').strip(),
+            'uf': (estado_sigla or '').strip(),
+            'data_pedido': data_pedido_display,
+            'lote_producao': lote_producao_display,
+            'lote_carga': lote_carga_display,
+        }
+
+        items_cur = conn.cursor()
+        items_cur.execute(
+            """
+            SELECT
+                COALESCE(TRIM(i.aspproduto::text), '') AS codigo_produto,
+                COALESCE(TRIM(i.aspseq::text), '') AS sequencia,
+                COALESCE(prod.pronome::text, '') AS produto_nome,
+                COALESCE(i.aspquanti, 0) AS quantidade,
+                COALESCE(i.aspvalor, 0) AS valor_unitario,
+                COALESCE(i.asptotal, 0) AS valor_total
+            FROM assiste1 i
+            LEFT JOIN produto prod ON prod.produto = i.aspproduto
+            WHERE CAST(i.assistec AS TEXT) = %s
+            ORDER BY
+                CASE
+                    WHEN TRIM(i.aspseq::text) ~ '^[0-9]+$' THEN LPAD(TRIM(i.aspseq::text), 10, '0')
+                    ELSE TRIM(i.aspseq::text)
+                END,
+                COALESCE(TRIM(i.aspproduto::text), '')
+            """,
+            (code_value,),
+        )
+        item_rows = items_cur.fetchall()
+        items_cur.close()
+
+        total_quantidade = Decimal('0')
+        total_valor = Decimal('0')
+        for (
+            codigo_produto,
+            sequencia,
+            produto_nome,
+            quantidade,
+            valor_unitario,
+            valor_total,
+        ) in item_rows:
+            try:
+                quantidade_dec = Decimal(str(quantidade or 0))
+            except (TypeError, InvalidOperation, ValueError):
+                quantidade_dec = Decimal('0')
+            try:
+                valor_unitario_dec = Decimal(str(valor_unitario or 0))
+            except (TypeError, InvalidOperation, ValueError):
+                valor_unitario_dec = Decimal('0')
+            try:
+                valor_total_dec = Decimal(str(valor_total or 0))
+            except (TypeError, InvalidOperation, ValueError):
+                valor_total_dec = Decimal('0')
+
+            items.append(
+                {
+                    'codigo_produto': codigo_produto,
+                    'sequencia': sequencia,
+                    'produto': produto_nome,
+                    'quantidade': float(quantidade_dec),
+                    'valor_unitario': float(valor_unitario_dec),
+                    'valor_total': float(valor_total_dec),
+                }
+            )
+
+            total_quantidade += quantidade_dec
+            total_valor += valor_total_dec
+
+        totals_payload = {
+            'quantidade_total': float(total_quantidade),
+            'valor_total': float(total_valor),
+        }
+
+        return {'header': header_data, 'items': items, 'totals': totals_payload}, None
+    except (Exception, Error) as error:
+        return None, {'message': f'Erro ao carregar detalhes da assistência: {error}', 'status': 500}
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_technical_assistance_status_options():
+    """Retorna a lista de status disponíveis para assistências técnicas."""
+    options = []
+    conn = get_erp_db_connection()
+    if not conn:
+        return options
+
+    cur = None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT COALESCE(TRIM(a.assstatus::text), '')
+            FROM assistec a
+            ORDER BY 1
+            """
+        )
+        seen = set()
+        for (raw_code,) in cur.fetchall():
+            normalized = normalize_lookup_code(raw_code)
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            options.append(
+                {
+                    'code': normalized,
+                    'label': get_technical_assistance_status_label(normalized),
+                }
+            )
+    except UndefinedColumn:
+        pass
+    except (Exception, Error) as error:
+        print(f"Erro ao buscar status de assistência técnica: {error}")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    if not options:
+        seen = set()
+        for code, label in TECHNICAL_ASSISTANCE_STATUS_LABELS.items():
+            normalized = normalize_lookup_code(code)
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            options.append({'code': normalized, 'label': label})
+
+    options.sort(key=lambda item: item['label'])
+    return options
+
+
 def get_order_header_data(conn, pedido_value):
     """
     Shared helper that retrieves the header information for order detail pop-ups.
@@ -5105,6 +5607,32 @@ def load_lot_route_planner():
 
         filtered_orders = [order for order in filtered_orders if order_has_only_selected_lots(order)]
 
+    def decimal_from(value):
+        if isinstance(value, Decimal):
+            return value
+        if value in (None, ''):
+            return Decimal(0)
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError):
+            return Decimal(0)
+
+    state_distribution = {uf: Decimal(0) for uf in BRAZIL_STATE_CODES}
+    for order in filtered_orders:
+        state_code = clean_string(order.get('estado')).upper()
+        if not state_code or state_code not in state_distribution:
+            continue
+        separado_value = decimal_from(order.get('separado'))
+        carregado_value = decimal_from(order.get('carregado'))
+        state_distribution[state_code] += separado_value - carregado_value
+
+    distribution_report_payload = {}
+    for uf, quantity in state_distribution.items():
+        try:
+            distribution_report_payload[uf] = float(quantity)
+        except (InvalidOperation, ValueError, TypeError):
+            distribution_report_payload[uf] = 0.0
+
     lot_display_map = {}
     lot_codes_in_order = []
     code_group_map = {}
@@ -5277,6 +5805,7 @@ def load_lot_route_planner():
         separation_stages=separation_stage_param,
         separation_stage_options=SEPARATION_STAGE_OPTIONS,
         period_display=period_display,
+        distribution_report_data=distribution_report_payload,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado'),
     )
@@ -5705,6 +6234,139 @@ def sales_orders_list():
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
+
+
+@app.route('/technical_assistance_list')
+@login_required
+def technical_assistance_list():
+    today = datetime.date.today()
+    first_day_of_month = today.replace(day=1)
+    last_day_of_month = first_day_of_month.replace(
+        day=calendar.monthrange(today.year, today.month)[1]
+    )
+
+    start_date_param = (request.args.get('start_date') or '').strip()
+    end_date_param = (request.args.get('end_date') or '').strip()
+
+    def parse_date(value):
+        if not value:
+            return None
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    start_date = parse_date(start_date_param)
+    end_date = parse_date(end_date_param)
+
+    if start_date_param and start_date is None:
+        flash('Data inicial inválida. Ajuste o filtro e tente novamente.', 'warning')
+        start_date_param = ''
+    if end_date_param and end_date is None:
+        flash('Data final inválida. Ajuste o filtro e tente novamente.', 'warning')
+        end_date_param = ''
+
+    if not start_date_param and not end_date_param:
+        start_date_param = first_day_of_month.strftime('%Y-%m-%d')
+        end_date_param = last_day_of_month.strftime('%Y-%m-%d')
+        start_date = first_day_of_month
+        end_date = last_day_of_month
+
+    selected_statuses = [
+        normalize_lookup_code(value)
+        for value in request.args.getlist('statuses')
+        if value is not None
+    ]
+    selected_statuses = list(dict.fromkeys(selected_statuses))
+
+    assistance_code = (request.args.get('assistance_code') or '').strip()
+    customer_filter = (request.args.get('customer') or '').strip()
+    representative_filter = (request.args.get('representative') or '').strip()
+    responsavel_filter = (request.args.get('responsavel') or '').strip()
+    
+    sort_by = (request.args.get('sort_by') or 'assdata').strip()
+    sort_order = (request.args.get('sort_order') or 'desc').strip().lower()
+    if sort_order not in ['asc', 'desc']:
+        sort_order = 'desc'
+
+    filters = {
+        'start_date': start_date,
+        'end_date': end_date,
+        'statuses': selected_statuses,
+        'assistance_code': assistance_code,
+        'customer': customer_filter,
+        'representative': representative_filter,
+        'responsavel': responsavel_filter,
+        'sort_by': sort_by,
+        'sort_order': sort_order,
+    }
+
+    assistance_records, error_message = fetch_technical_assistance(filters)
+    if error_message:
+        flash(error_message, 'danger')
+
+    total_pecas = Decimal('0')
+    valor_total = Decimal('0')
+    for record in assistance_records:
+        quantidade = record.get('quantidade_pecas')
+        if isinstance(quantidade, Decimal):
+            total_pecas += quantidade
+        elif quantidade is not None:
+            try:
+                total_pecas += Decimal(quantidade)
+            except (TypeError, InvalidOperation):
+                pass
+
+        valor = record.get('valor_total')
+        if isinstance(valor, Decimal):
+            valor_total += valor
+        elif valor is not None:
+            try:
+                valor_total += Decimal(valor)
+            except (TypeError, InvalidOperation):
+                pass
+
+    totals = {
+        'total_registros': len(assistance_records),
+        'total_pecas': total_pecas,
+        'valor_total': valor_total,
+    }
+
+    status_options = get_technical_assistance_status_options()
+
+    active_filters = {
+        'start_date': start_date_param,
+        'end_date': end_date_param,
+        'statuses': selected_statuses,
+        'assistance_code': assistance_code,
+        'customer': customer_filter,
+        'representative': representative_filter,
+        'responsavel': responsavel_filter,
+    }
+
+    return render_template(
+        'technical_assistance_list.html',
+        page_title="Assistência Técnica",
+        assistance_records=assistance_records,
+        totals=totals,
+        status_options=status_options,
+        filters=active_filters,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/technical_assistance/<path:assistance_identifier>/details')
+@login_required
+def technical_assistance_details(assistance_identifier):
+    details, error = fetch_technical_assistance_details(assistance_identifier)
+    if error:
+        status_code = error.get('status', 500)
+        return jsonify({'error': error.get('message', 'Erro ao carregar detalhes da assistência.')}), status_code
+    return jsonify(details)
+
 
 @app.route('/sales_returns_list')
 @login_required
