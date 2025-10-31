@@ -5403,7 +5403,7 @@ def load_lot_route_planner():
             return ''
         return str(value).strip()
 
-    def clean_list(values):
+    def clean_list(values, allow_blank=False):
         if not values:
             return []
         if isinstance(values, str):
@@ -5418,6 +5418,14 @@ def load_lot_route_planner():
             text = clean_string(value)
             if text:
                 cleaned.append(text)
+            elif allow_blank:
+                if value is None:
+                    continue
+                if isinstance(value, str):
+                    if value.strip() == '':
+                        cleaned.append('')
+                elif text == '':
+                    cleaned.append('')
         return cleaned
 
     def deduplicate_preserve_order(items):
@@ -5473,7 +5481,7 @@ def load_lot_route_planner():
     if not situation_param and not ignore_saved_defaults:
         saved_situations = [
             code.upper()
-            for code in deduplicate_preserve_order(clean_list(saved_filters.get('situations')))
+            for code in deduplicate_preserve_order(clean_list(saved_filters.get('situations'), allow_blank=True))
             if code.upper() in ORDER_SITUATION_LABELS
         ]
         situation_param = saved_situations
@@ -5636,6 +5644,7 @@ def load_lot_route_planner():
     lot_display_map = {}
     lot_codes_in_order = []
     code_group_map = {}
+    group_display_map = {}
     lot_groups_in_order = []
     for order in filtered_orders:
         for entry in extract_production_lots(order.get('production_lots_display', '')):
@@ -5646,6 +5655,12 @@ def load_lot_route_planner():
                 lot_codes_in_order.append(code)
             if code and group_key:
                 code_group_map[code] = group_key
+                if group_key not in group_display_map:
+                    raw_description = entry.get('description') or ''
+                    display_label = raw_description[:9].strip() if raw_description else ''
+                    if not display_label:
+                        display_label = (entry.get('label') or '')[:9].strip()
+                    group_display_map[group_key] = display_label or group_key.upper()
             if group_key and group_key not in lot_groups_in_order:
                 lot_groups_in_order.append(group_key)
 
@@ -5772,9 +5787,57 @@ def load_lot_route_planner():
         }
         return jsonify(payload)
 
+    legend_entries = [
+        {
+            'code': code,
+            'label': lot_display_map.get(code, code),
+            'color': lot_color_map.get(code),
+            'group_key': code_group_map.get(code, ''),
+        }
+        for code in sorted(lot_codes_in_order)
+    ]
+    grouped_entries = {}
+    for entry in legend_entries:
+        group_key = entry['group_key'] or ''
+        grouped_entries.setdefault(group_key, []).append(entry)
+    lot_color_legend_groups = []
+    for group_key in lot_groups_in_order:
+        items = grouped_entries.pop(group_key, [])
+        if not items:
+            continue
+        items.sort(key=lambda item: item['code'])
+        lot_color_legend_groups.append(
+            {
+                'key': group_key,
+                'label': group_display_map.get(group_key) or group_key.upper(),
+                'items': items,
+            }
+        )
+    ungrouped_items = grouped_entries.pop('', [])
+    if ungrouped_items:
+        ungrouped_items.sort(key=lambda item: item['code'])
+        lot_color_legend_groups.append(
+            {
+                'key': '',
+                'label': '',
+                'items': ungrouped_items,
+            }
+        )
+    for leftover_key in sorted(grouped_entries.keys()):
+        items = grouped_entries[leftover_key]
+        if not items:
+            continue
+        items.sort(key=lambda item: item['code'])
+        lot_color_legend_groups.append(
+            {
+                'key': leftover_key,
+                'label': group_display_map.get(leftover_key) or leftover_key.upper(),
+                'items': items,
+            }
+        )
     lot_color_legend = [
-        {'code': code, 'label': lot_display_map.get(code, code), 'color': lot_color_map.get(code)}
-        for code in lot_codes_in_order
+        {'code': entry['code'], 'label': entry['label'], 'color': entry['color']}
+        for entry in legend_entries
     ]
 
     def format_period(value):
@@ -5801,6 +5864,7 @@ def load_lot_route_planner():
         situation_options=ORDER_SITUATION_OPTIONS,
         production_lot_colors=lot_color_map,
         lot_color_legend=lot_color_legend,
+        lot_color_legend_groups=lot_color_legend_groups,
         stage_border_colors=stage_border_colors,
         separation_stages=separation_stage_param,
         separation_stage_options=SEPARATION_STAGE_OPTIONS,
@@ -5825,7 +5889,7 @@ def save_load_lot_route_filters():
             return ''
         return str(value).strip()
 
-    def clean_list(values):
+    def clean_list(values, allow_blank=False):
         if not values:
             return []
         if isinstance(values, str):
@@ -5840,6 +5904,14 @@ def save_load_lot_route_filters():
             text = clean_string(value)
             if text:
                 cleaned.append(text)
+            elif allow_blank:
+                if value is None:
+                    continue
+                if isinstance(value, str):
+                    if value.strip() == '':
+                        cleaned.append('')
+                elif text == '':
+                    cleaned.append('')
         return cleaned
 
     def deduplicate_preserve_order(items):
@@ -5886,7 +5958,7 @@ def save_load_lot_route_filters():
     allowed_situation_codes = set(ORDER_SITUATION_LABELS.keys())
     situations = [
         code.upper()
-        for code in deduplicate_preserve_order(clean_list(payload.get('situations')))
+        for code in deduplicate_preserve_order(clean_list(payload.get('situations'), allow_blank=True))
         if code.upper() in allowed_situation_codes
     ]
     sanitized_filters['situations'] = situations

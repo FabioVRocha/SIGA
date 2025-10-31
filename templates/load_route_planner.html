@@ -397,10 +397,33 @@
     }
     .legend-group {
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
         gap: 0.5rem;
         font-size: 0.8rem;
         color: var(--clr-dark-blue);
+    }
+    .legend-title {
+        font-weight: 600;
+        font-size: 0.85rem;
+        line-height: 1.25;
+    }
+    .legend-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .legend-lot-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .legend-lot-group-title {
+        font-weight: 500;
+        font-size: 0.75rem;
+        color: rgba(71, 85, 105, 0.95);
+    }
+    .legend-lot-group .legend-items {
+        margin-top: 0.25rem;
     }
     .legend-item {
         display: inline-flex;
@@ -934,33 +957,46 @@
         </section>
         <section class="planner-legends">
             <div class="legend-group" data-legend-group="stage">
-                <strong>Estágio de separação:</strong>
-                <button type="button" class="legend-item" data-stage-filter="zero" aria-pressed="true">
-                    <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.zero }}"></span>
-                    Sem separação
-                </button>
-                <button type="button" class="legend-item" data-stage-filter="partial" aria-pressed="true">
-                    <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.partial }}"></span>
-                    Separação Parcial
-                </button>
-                <button type="button" class="legend-item" data-stage-filter="total" aria-pressed="true">
-                    <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.total }}"></span>
-                    Separação Total
-                </button>
-                <button type="button" class="legend-item" data-stage-filter="carregado" aria-pressed="true">
-                    <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.carregado }}"></span>
-                    Carregado
-                </button>
+                <span class="legend-title">Estágio de separação</span>
+                <div class="legend-items">
+                    <button type="button" class="legend-item" data-stage-filter="zero" aria-pressed="true">
+                        <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.zero }}"></span>
+                        Sem separação
+                    </button>
+                    <button type="button" class="legend-item" data-stage-filter="partial" aria-pressed="true">
+                        <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.partial }}"></span>
+                        Separação Parcial
+                    </button>
+                    <button type="button" class="legend-item" data-stage-filter="total" aria-pressed="true">
+                        <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.total }}"></span>
+                        Separação Total
+                    </button>
+                    <button type="button" class="legend-item" data-stage-filter="carregado" aria-pressed="true">
+                        <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.carregado }}"></span>
+                        Carregado
+                    </button>
+                </div>
             </div>
             <div class="legend-group" data-legend-group="lot">
-                <strong>Lotes de produção:</strong>
-                {% if lot_color_legend %}
-                    {% for item in lot_color_legend %}
-                    <button type="button" class="legend-item" data-lot-filter="{{ item.code }}" aria-pressed="true">
-                        <span class="legend-dot fill-only" style="background-color: {{ item.color }}"></span>
-                        {{ item.label }}
-                    </button>
-                    {% endfor %}
+                <span class="legend-title">Lotes de produção</span>
+                {% if lot_color_legend_groups %}
+                    <div class="legend-lot-groups">
+                        {% for group in lot_color_legend_groups %}
+                        <div class="legend-lot-group" data-lot-group="{{ group.key }}">
+                            {% if group.label %}
+                            <span class="legend-lot-group-title">{{ group.label }}</span>
+                            {% endif %}
+                            <div class="legend-items">
+                                {% for item in group.items %}
+                                <button type="button" class="legend-item" data-lot-filter="{{ item.code }}" aria-pressed="true">
+                                    <span class="legend-dot fill-only" style="background-color: {{ item.color }}"></span>
+                                    {{ item.label }}
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
                 {% else %}
                     <em>Selecione lotes de produção para diferenciar os marcadores.</em>
                 {% endif %}
@@ -2659,13 +2695,13 @@
             }
         };
 
-        const normalizeArrayValues = (values) => {
+        const normalizeArrayValues = (values, { allowEmpty = false } = {}) => {
             if (!Array.isArray(values)) {
                 return [];
             }
             return values
                 .map((value) => (value === null || value === undefined ? '' : String(value).trim()))
-                .filter((value) => value.length > 0);
+                .filter((value) => (allowEmpty ? true : value.length > 0));
         };
 
         const collectFilterPayload = () => {
@@ -2679,7 +2715,7 @@
                 missing_production_lot: (formData.get('missing_production_lot') || '').toString().trim(),
                 production_lots: normalizeArrayValues(formData.getAll('production_lots')),
                 approval_statuses: normalizeArrayValues(formData.getAll('approval_statuses')),
-                situations: normalizeArrayValues(formData.getAll('situations')),
+                situations: normalizeArrayValues(formData.getAll('situations'), { allowEmpty: true }),
                 separation_stages: normalizeArrayValues(formData.getAll('separation_stage')),
             };
         };
