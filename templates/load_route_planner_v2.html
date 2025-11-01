@@ -1,0 +1,2893 @@
+{% extends "base.html" %}
+
+{% block title %}Mapa Interativo 2{% endblock %}
+{% block page_title %}Mapa Interativo 2{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+    .planner-wrapper {
+        background-color: var(--clr-card-bg);
+        border-radius: 0.75rem;
+        border: 1px solid var(--clr-border);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+    .planner-heading h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--clr-dark-blue);
+    }
+    .planner-heading p {
+        font-size: 0.9rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-layout {
+        display: grid;
+        grid-template-columns: minmax(280px, 360px) 1fr;
+        grid-template-areas:
+            "sidebar map"
+            "sidebar legend";
+        gap: 1.5rem;
+        align-items: stretch;
+    }
+    @media (max-width: 1024px) {
+        .planner-layout {
+            grid-template-columns: 1fr;
+            grid-template-areas:
+                "sidebar"
+                "map"
+                "legend";
+        }
+    }
+    .planner-sidebar {
+        grid-area: sidebar;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        background-color: var(--clr-light-gray);
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        align-self: stretch;
+    }
+    .planner-sidebar header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    }
+    .planner-sidebar header h3 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+    }
+    .planner-sidebar header span {
+        font-size: 0.8rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-list {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 0.5rem 0;
+    }
+    .planner-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        table-layout: fixed;
+    }
+    .planner-table th.sequence-col,
+    .planner-table td.sequence-col {
+        width: 3rem;
+        text-align: center;
+    }
+    .planner-table th {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 0.3rem 0.6rem;
+        color: var(--clr-medium-gray);
+        white-space: nowrap;
+    }
+    .planner-table td {
+        padding: 0.45rem 0.6rem;
+        font-size: 0.85rem;
+        color: var(--clr-dark-blue);
+        border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+        word-break: break-word;
+    }
+    .planner-table td.sequence-col {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    .planner-order-row {
+        cursor: pointer;
+        transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .planner-order-row:hover {
+        background-color: rgba(79, 131, 204, 0.1);
+    }
+    .planner-order-row.is-selected {
+        background-color: rgba(79, 131, 204, 0.18);
+        box-shadow: inset 0 0 0 1px rgba(79, 131, 204, 0.35);
+    }
+    .planner-order-row.is-muted {
+        opacity: 0.45;
+    }
+    @media (max-width: 768px) {
+        .planner-table,
+        .planner-table thead,
+        .planner-table tbody,
+        .planner-table tr,
+        .planner-table th,
+        .planner-table td {
+            display: block;
+            width: 100%;
+        }
+        .planner-table thead {
+            display: none;
+        }
+        .planner-order-row {
+            padding: 0.65rem 0.9rem;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+        }
+        .planner-table td {
+            padding: 0.35rem 0;
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.35rem;
+            align-items: baseline;
+        }
+        .planner-table td::before {
+            content: attr(data-label);
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--clr-medium-gray);
+        }
+        .planner-table td.sequence-col {
+            grid-template-columns: 1fr;
+            justify-content: flex-start;
+        }
+        .planner-table td.sequence-col::before {
+            content: none;
+        }
+        .planner-table td.sequence-col .sequence-badge {
+            margin-bottom: 0.35rem;
+        }
+    }
+    .planner-map-panel {
+        grid-area: map;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        background-color: var(--clr-white);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        min-height: 720px;
+    }
+    .planner-map-toolbar {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: center;
+    }
+    .planner-map-toolbar .metric {
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-map-toolbar .metric strong {
+        display: block;
+        font-size: 1.05rem;
+        color: var(--clr-dark-blue);
+    }
+    .planner-map-toolbar button {
+        margin-left: auto;
+    }
+    .planner-map-container {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 520px;
+    }
+    #routePlannerMap {
+        width: 100%;
+        height: 100%;
+        min-height: 520px;
+        border-bottom-left-radius: 0.75rem;
+        border-bottom-right-radius: 0.75rem;
+    }
+    .planner-map-loading,
+    .planner-map-error {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 2rem;
+        text-align: center;
+        z-index: 20;
+    }
+    .planner-map-loading {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(226, 232, 240, 0.92));
+        color: var(--clr-text-secondary);
+    }
+    .planner-map-error {
+        background: rgba(254, 226, 226, 0.92);
+        color: #b91c1c;
+        font-weight: 600;
+    }
+    .planner-map-error-message {
+        margin: 0;
+        line-height: 1.5;
+    }
+    .planner-map-retry-button {
+        background-color: var(--clr-dark-blue);
+        color: var(--clr-white);
+        border: none;
+        border-radius: 9999px;
+        padding: 0.5rem 1.25rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+        transition: background-color 0.18s ease, transform 0.18s ease;
+    }
+    .planner-map-retry-button:hover {
+        background-color: #1e3a8a;
+    }
+    .planner-map-retry-button:focus-visible {
+        outline: 2px solid var(--clr-white);
+        outline-offset: 2px;
+    }
+    .planner-map-retry-button:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+    }
+    .planner-map-spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(148, 163, 184, 0.35);
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: planner-spin 0.9s linear infinite;
+    }
+    .planner-map-progress {
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-map-loading.hidden,
+    .planner-map-error.hidden {
+        display: none;
+    }
+    @keyframes planner-spin {
+        from {
+            transform: rotate(0deg);
+        }
+        to {
+            transform: rotate(360deg);
+        }
+    }
+    .marker-cluster-small,
+    .marker-cluster-medium,
+    .marker-cluster-large {
+        background-color: rgba(37, 99, 235, 0.85);
+        border: 2px solid rgba(30, 41, 59, 0.65);
+        color: #fff;
+    }
+    .marker-cluster div {
+        background-color: transparent;
+    }
+    .planner-popup {
+        font-size: 0.85rem;
+        color: var(--clr-dark-blue);
+        min-width: 220px;
+    }
+    .planner-popup strong {
+        font-size: 0.95rem;
+        color: var(--clr-dark-blue);
+    }
+    .planner-popup-client {
+        margin-top: 0.3rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-popup-metrics {
+        margin-top: 0.75rem;
+        display: grid;
+        gap: 0.35rem;
+    }
+    .planner-popup-metric {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        font-size: 0.78rem;
+    }
+    .planner-popup-metric span:first-child {
+        color: var(--clr-text-secondary);
+    }
+    .planner-popup-note {
+        display: block;
+        margin-top: 0.5rem;
+        font-size: 0.75rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-popup-detail-button {
+        margin-top: 0.85rem;
+        padding: 0.35rem 0.65rem;
+        font-size: 0.72rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--clr-border);
+        background-color: transparent;
+        color: var(--clr-dark-blue);
+        cursor: pointer;
+        transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .planner-popup-detail-button:hover {
+        background-color: rgba(79, 131, 204, 0.1);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+    }
+    #orderDetailModal .modal-content {
+        width: 100%;
+        max-width: 75rem;
+        max-height: 90vh;
+        overflow-y: auto;
+        border: 1px solid var(--clr-border);
+        background-color: var(--clr-card-bg);
+    }
+    #orderDetailModal .modal-footer {
+        border-top: 1px solid var(--clr-border);
+        padding-top: 1rem;
+        margin-top: 1rem;
+    }
+    .status-legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+        font-size: 0.75rem;
+        color: var(--clr-dark-blue);
+    }
+    .status-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 9999px;
+        background-color: var(--clr-light-gray);
+    }
+    .status-legend-color {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 9999px;
+    }
+    .status-legend-color.red {
+        background-color: #dc2626;
+    }
+    .status-legend-color.yellow {
+        background-color: #f59e0b;
+    }
+    .status-legend-color.green {
+        background-color: #16a34a;
+    }
+    .status-legend-color.blue {
+        background-color: #2563eb;
+    }
+    .status-kpi-red {
+        color: #dc2626;
+    }
+    .status-kpi-yellow {
+        color: #f59e0b;
+    }
+    .status-kpi-green {
+        color: #16a34a;
+    }
+    .status-kpi-blue {
+        color: #2563eb;
+    }
+    .planner-legends {
+        grid-area: legend;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem 1.25rem;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        background-color: var(--clr-light-gray);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    }
+    .legend-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--clr-dark-blue);
+    }
+    .legend-title {
+        font-weight: 600;
+        font-size: 0.85rem;
+        line-height: 1.25;
+    }
+    .legend-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .legend-lot-groups {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    @media (min-width: 1100px) {
+        .legend-lot-groups {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    .legend-lot-group-title {
+        font-weight: 500;
+        font-size: 0.75rem;
+        color: rgba(71, 85, 105, 0.95);
+    }
+    .legend-lot-group .legend-items {
+        margin-top: 0.25rem;
+    }
+    .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 999px;
+        background-color: var(--clr-white);
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+        transition: box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+    }
+    .legend-item:focus-visible {
+        outline: 2px solid rgba(37, 99, 235, 0.55);
+        outline-offset: 2px;
+    }
+    .legend-item.is-active {
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.35);
+        border-color: rgba(37, 99, 235, 0.55);
+        transform: translateY(-1px);
+    }
+    .legend-item.is-muted {
+        opacity: 0.45;
+    }
+    .legend-dot {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 50%;
+        border: 2px solid transparent;
+    }
+    .legend-dot.border-only {
+        background: transparent;
+    }
+    .legend-dot.fill-only {
+        border-color: transparent;
+    }
+    .planner-status-pill {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+    .route-modal {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(15, 23, 42, 0.55);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        z-index: 2000;
+    }
+    .route-modal.is-visible {
+        display: flex;
+    }
+    .route-modal .modal-content {
+        width: 100%;
+        max-width: 960px;
+        max-height: 90vh;
+        overflow-y: auto;
+        background-color: var(--clr-card-bg);
+        border-radius: 0.75rem;
+        border: 1px solid var(--clr-border);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    .planner-reports-container {
+        display: grid;
+        grid-template-columns: 230px 1fr;
+        gap: 1.5rem;
+    }
+    @media (max-width: 900px) {
+        .planner-reports-container {
+            grid-template-columns: 1fr;
+        }
+    }
+    .planner-reports-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .planner-report-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        align-items: flex-start;
+        width: 100%;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background-color: var(--clr-white);
+        padding: 0.8rem 1rem;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+        text-align: left;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    }
+    .planner-report-item:hover,
+    .planner-report-item:focus-visible {
+        border-color: rgba(37, 99, 235, 0.45);
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+        transform: translateY(-1px);
+        outline: none;
+    }
+    .planner-report-item.is-active {
+        border-color: rgba(37, 99, 235, 0.55);
+        background-color: rgba(37, 99, 235, 0.08);
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.22);
+    }
+    .planner-report-item-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+    }
+    .planner-report-item-subtitle {
+        font-size: 0.8rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-reports-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+    .planner-report-card {
+        display: none;
+        flex-direction: column;
+        gap: 1.25rem;
+        padding: 1.5rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background-color: var(--clr-white);
+    }
+    .planner-report-card.is-active {
+        display: flex;
+    }
+    .planner-report-card__header h4 {
+        margin: 0 0 0.4rem;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+    }
+    .planner-report-card__header p {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-report-card__body {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .planner-report-summary {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-report-summary strong {
+        font-size: 1.15rem;
+        color: var(--clr-dark-blue);
+    }
+    .distribution-map-wrapper {
+        overflow-x: auto;
+    }
+    .distribution-map {
+        width: 100%;
+        max-width: 820px;
+        height: auto;
+    }
+    .distribution-map rect {
+        fill: rgba(148, 163, 184, 0.18);
+        stroke: rgba(148, 163, 184, 0.65);
+        stroke-width: 1.5;
+        transition: fill 0.2s ease, stroke 0.2s ease;
+    }
+    .distribution-map g.has-positive rect {
+        fill: rgba(34, 197, 94, 0.2);
+        stroke: #16a34a;
+    }
+    .distribution-map g.has-negative rect {
+        fill: rgba(248, 113, 113, 0.25);
+        stroke: #dc2626;
+    }
+    .distribution-map text {
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+        text-anchor: middle;
+        fill: var(--clr-dark-blue);
+    }
+    .distribution-map text.uf-code {
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+    .distribution-map text.uf-value {
+        font-size: 0.85rem;
+        fill: var(--clr-text-secondary);
+    }
+    .multi-combobox {
+        position: relative;
+    }
+    .multi-combobox-trigger {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 0.5rem;
+        padding: 0.6rem 0.85rem;
+        font-size: 0.9rem;
+        color: var(--clr-dark-blue);
+        background-color: var(--clr-white);
+        border: 1px solid var(--clr-border);
+        border-radius: 0.65rem;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .multi-combobox-trigger:hover,
+    .multi-combobox-trigger:focus {
+        border-color: rgba(79, 131, 204, 0.55);
+        box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.2);
+        outline: none;
+    }
+    .multi-combobox-trigger span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .multi-combobox-trigger .count-pill {
+        flex-shrink: 0;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.1rem 0.5rem;
+        border-radius: 999px;
+        background-color: rgba(79, 131, 204, 0.15);
+        color: rgba(30, 64, 175, 0.85);
+    }
+    .multi-combobox-trigger i {
+        margin-left: auto;
+        font-size: 0.75rem;
+        color: var(--clr-medium-gray);
+    }
+    .multi-combobox-panel {
+        position: absolute;
+        top: calc(100% + 0.5rem);
+        left: 0;
+        right: 0;
+        display: none;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background-color: var(--clr-card-bg);
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        box-shadow: 0 12px 25px rgba(15, 23, 42, 0.28);
+        max-height: 320px;
+        z-index: 2050;
+    }
+    .multi-combobox-panel.is-open {
+        display: flex;
+    }
+    .multi-combobox-search input {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.6rem;
+        font-size: 0.85rem;
+        background-color: var(--clr-white);
+    }
+    .multi-combobox-search input:focus {
+        border-color: rgba(79, 131, 204, 0.55);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.2);
+    }
+    .multi-combobox-options {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 180px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+    }
+    .multi-combobox-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.35rem;
+        border-radius: 0.5rem;
+        transition: background-color 0.15s ease;
+    }
+    .multi-combobox-option:hover {
+        background-color: rgba(148, 163, 184, 0.18);
+    }
+    .multi-combobox-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+    .multi-combobox-footer button {
+        font-size: 0.75rem;
+    }
+    .multi-combobox-empty {
+        font-size: 0.8rem;
+        color: var(--clr-text-secondary);
+        text-align: center;
+        padding: 0.75rem 0.5rem;
+    }
+    .modal-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+    }
+    .modal-field label {
+        display: block;
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+        margin-bottom: 0.35rem;
+    }
+    .modal-field input[type="date"],
+    .modal-field select {
+        width: 100%;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.5rem;
+        padding: 0.45rem 0.75rem;
+        font-size: 0.85rem;
+        background-color: var(--clr-white);
+    }
+    .modal-options {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        max-height: 220px;
+        overflow-y: auto;
+        padding: 0.5rem;
+        border: 1px solid rgba(148, 163, 184, 0.5);
+        border-radius: 0.5rem;
+        background-color: var(--clr-white);
+    }
+    .modal-options label {
+        display: flex;
+        gap: 0.45rem;
+        align-items: center;
+        font-size: 0.85rem;
+        color: var(--clr-dark-blue);
+    }
+    .modal-actions {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    .modal-feedback {
+        font-size: 0.8rem;
+        margin-top: 0.5rem;
+        min-height: 1.2rem;
+    }
+    .modal-feedback.is-success {
+        color: #15803d;
+    }
+    .modal-feedback.is-error {
+        color: #b91c1c;
+    }
+    .marker-label {
+        font-size: 0.7rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-empty {
+        padding: 2rem 1rem;
+        text-align: center;
+        font-size: 0.9rem;
+        color: var(--clr-text-secondary);
+    }
+    .planner-marker {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        border: 4px solid #1f2937;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.8rem;
+        background-clip: padding-box;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
+        color: #fff;
+    }
+    .planner-marker .inner {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .planner-marker.is-selected {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.35);
+    }
+    .planner-marker.is-selected .inner {
+        transform: scale(1.08);
+        box-shadow: 0 8px 20px rgba(31, 58, 95, 0.35);
+    }
+    .planner-marker.is-muted .inner {
+        opacity: 0.35;
+        box-shadow: none;
+    }
+    .sequence-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.85rem;
+        height: 1.85rem;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background-color: transparent;
+        color: var(--clr-text-secondary);
+        font-size: 0.75rem;
+        font-weight: 600;
+        transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    .sequence-badge.is-active {
+        background-color: rgba(79, 131, 204, 0.2);
+        border-color: rgba(79, 131, 204, 0.45);
+        color: rgba(30, 64, 175, 0.95);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="planner-wrapper">
+    <div class="planner-heading flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+            <h2>Planejamento de Rotas</h2>
+            <p>
+                Intervalo: <strong>{{ period_display.start or '—' }}</strong>
+                até <strong>{{ period_display.end or '—' }}</strong> ·
+                {{ orders|length }} registros encontrados.
+            </p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            <button id="openPlannerFilters" class="btn-primary flex items-center gap-2 px-4 py-2 rounded-lg" type="button">
+                <i class="fas fa-filter"></i>
+                Filtrar
+            </button>
+            <button id="openPlannerReports" class="btn-secondary flex items-center gap-2 px-4 py-2 rounded-lg" type="button">
+                <i class="fas fa-file-alt"></i>
+                Relatório
+            </button>
+        </div>
+    </div>
+
+    <div class="planner-layout">
+        <aside class="planner-sidebar">
+            <header>
+                <h3>Registros</h3>
+                <span>Selecione os registros para montar a rota sugerida.</span>
+            </header>
+            <div class="planner-list">
+                {% if orders %}
+                <table class="planner-table">
+                    <thead>
+                        <tr>
+                            <th class="sequence-col">Seq</th>
+                            <th>Registro / Linha</th>
+                            <th>Cliente / Cidade</th>
+                            <th>Qtd</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in orders %}
+                        <tr class="planner-order-row" data-order-id="{{ order.unique_id or order.pedido }}" data-record-type="{{ order.record_type }}">
+                            <td class="sequence-col" data-label="Seq">
+                                <span
+                                    class="sequence-badge"
+                                    data-role="order-sequence"
+                                    data-order-id="{{ order.unique_id or order.pedido }}"
+                                >&mdash;</span>
+                            </td>
+                            <td data-label="Registro / Linha">
+                                <div class="font-semibold text-sm">{{ order.pedido }}</div>
+                                <div class="text-xs text-slate-muted">{{ order.record_type_label }}{% if order.linha %} · {{ order.linha }}{% endif %}</div>
+                            </td>
+                            <td data-label="Cliente / Cidade">
+                                <div>{{ order.cliente_nome }}</div>
+                                <div class="text-xs text-slate-muted">{{ order.cidade or '—' }}{% if order.estado %}/{{ order.estado }}{% endif %}</div>
+                            </td>
+                            <td class="text-right whitespace-nowrap" data-label="Qtd">{{ order.quantidade_total | format_decimal_br }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="planner-empty">
+                    Nenhum registro encontrado para os filtros escolhidos.
+                </div>
+                {% endif %}
+            </div>
+        </aside>
+
+        <section class="planner-map-panel">
+            <div class="planner-map-toolbar">
+                <div class="metric">
+                    <span>Registros selecionados</span>
+                    <strong id="selectedCount">0</strong>
+                </div>
+                <div class="metric">
+                    <span>Distância estimada</span>
+                    <strong id="routeDistance">—</strong>
+                </div>
+                <button id="clearRoute" class="btn-secondary px-4 py-2 rounded-lg">Limpar rota</button>
+            </div>
+            <div class="planner-map-container">
+                <div id="routePlannerMap" aria-busy="true"></div>
+                <div class="planner-map-loading hidden" id="routePlannerMapLoading" role="status" aria-live="polite">
+                    <div class="planner-map-spinner" aria-hidden="true"></div>
+                    <p id="routePlannerMapLoadingMessage">Preparando o mapa...</p>
+                    <p class="planner-map-progress hidden" id="routePlannerMapLoadingProgress"></p>
+                </div>
+                <div class="planner-map-error hidden" id="routePlannerMapError" role="alert">
+                    <p class="planner-map-error-message" id="routePlannerMapErrorMessage"></p>
+                    <button type="button" class="planner-map-retry-button" id="routePlannerMapRetry">
+                        Tentar novamente
+                    </button>
+                </div>
+            </div>
+        </section>
+        <section class="planner-legends">
+            <div class="legend-group" data-legend-group="stage">
+                <span class="legend-title">Estágio de separação</span>
+                <div class="legend-items">
+                    <button type="button" class="legend-item" data-stage-filter="zero" aria-pressed="true">
+                        <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.zero }}"></span>
+                        Sem separação
+                    </button>
+                    <button type="button" class="legend-item" data-stage-filter="partial" aria-pressed="true">
+                        <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.partial }}"></span>
+                        Separação Parcial
+                    </button>
+                    <button type="button" class="legend-item" data-stage-filter="total" aria-pressed="true">
+                        <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.total }}"></span>
+                        Separação Total
+                    </button>
+                    <button type="button" class="legend-item" data-stage-filter="carregado" aria-pressed="true">
+                        <span class="legend-dot border-only" style="border-color: {{ stage_border_colors.carregado }}"></span>
+                        Carregado
+                    </button>
+                </div>
+            </div>
+            <div class="legend-group" data-legend-group="lot">
+                <span class="legend-title">Lotes de produção</span>
+                {% if lot_color_legend_groups %}
+                    <div class="legend-lot-groups">
+                        {% for group in lot_color_legend_groups %}
+                        <div class="legend-lot-group" data-lot-group="{{ group.key }}">
+                            {% if group.label %}
+                            <span class="legend-lot-group-title">{{ group.label }}</span>
+                            {% endif %}
+                            <div class="legend-items">
+                                {% for item in group['items'] %}
+                                <button type="button" class="legend-item" data-lot-filter="{{ item.code }}" aria-pressed="true">
+                                    <span class="legend-dot fill-only" style="background-color: {{ item.color }}"></span>
+                                    {{ item.label }}
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <em>Selecione lotes de produção para diferenciar os marcadores.</em>
+                {% endif %}
+            </div>
+        </section>
+    </div>
+</section>
+
+<div id="plannerFiltersModal" class="route-modal" role="dialog" aria-modal="true" aria-labelledby="plannerFiltersTitle">
+    <div class="modal-content">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 id="plannerFiltersTitle" class="text-lg font-semibold text-dark-blue">Filtros avançados</h3>
+                <p class="text-sm text-slate-500">Ajuste os filtros e gere uma nova visualização do mapa.</p>
+            </div>
+            <button class="icon-button" id="closePlannerFilters" aria-label="Fechar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="plannerFiltersForm" action="{{ url_for('load_lot_route_planner_v2') }}" method="GET" class="space-y-6">
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label for="filterStartDate">Data inicial</label>
+                    <input type="date" id="filterStartDate" name="start_date" value="{{ filters.start_date }}">
+                </div>
+                <div class="modal-field">
+                    <label for="filterEndDate">Data final</label>
+                    <input type="date" id="filterEndDate" name="end_date" value="{{ filters.end_date }}">
+                </div>
+            </div>
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label for="productionLotsTrigger">Lotes de produção</label>
+                    <div class="multi-combobox" data-multi-combobox data-field-name="production_lots">
+                        <button type="button" class="multi-combobox-trigger" id="productionLotsTrigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span data-role="label" data-placeholder="Todos">Todos</span>
+                            <span class="count-pill" data-role="count" hidden></span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="multi-combobox-panel" role="listbox" aria-multiselectable="true">
+                            <div class="multi-combobox-search">
+                                <input type="search" placeholder="Pesquisar..." data-role="search">
+                            </div>
+                            <ul class="multi-combobox-options" data-role="options">
+                                {% for lot in production_lot_options %}
+                                <li class="multi-combobox-option" data-option-label="{{ (lot.code ~ ' ' ~ (lot.description or ''))|trim|lower }}">
+                                    <label>
+                                        <input type="checkbox" name="production_lots" value="{{ lot.code }}" {% if lot.code in filters.production_lots %}checked{% endif %}>
+                                        <span>{{ lot.code }}{% if lot.description %} - {{ lot.description }}{% endif %}</span>
+                                    </label>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            <div class="multi-combobox-empty" data-role="empty" hidden>Nenhuma opção encontrada.</div>
+                            <div class="multi-combobox-footer">
+                                <button type="button" class="btn-secondary" data-role="clear">Limpar</button>
+                                <button type="button" class="btn-secondary" data-role="select-all">Selecionar todos</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-field">
+                    <label for="missingProductionLot">Registros sem lote de produção</label>
+                    <select id="missingProductionLot" name="missing_production_lot">
+                        <option value="" {% if not filters.missing_production_lot %}selected{% endif %}>Todos</option>
+                        <option value="yes" {% if filters.missing_production_lot == 'yes' %}selected{% endif %}>Sim</option>
+                        <option value="no" {% if filters.missing_production_lot == 'no' %}selected{% endif %}>Não</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label for="documentSources">Tipo de registro</label>
+                    <select id="documentSources" name="document_sources">
+                        {% for option in document_source_options %}
+                        <option value="{{ option.value }}" {% if filters.document_sources == option.value %}selected{% endif %}>
+                            {{ option.label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label for="approvalStatusTrigger">Status</label>
+                    <div class="multi-combobox" data-multi-combobox data-field-name="approval_statuses">
+                        <button type="button" class="multi-combobox-trigger" id="approvalStatusTrigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span data-role="label" data-placeholder="Todos">Todos</span>
+                            <span class="count-pill" data-role="count" hidden></span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="multi-combobox-panel" role="listbox" aria-multiselectable="true">
+                            <div class="multi-combobox-search">
+                                <input type="search" placeholder="Pesquisar..." data-role="search">
+                            </div>
+                            <ul class="multi-combobox-options" data-role="options">
+                                {% for option in approval_status_options %}
+                                <li class="multi-combobox-option" data-option-label="{{ (option.label or option.code)|default('', true)|trim|lower }}">
+                                    <label>
+                                        <input type="checkbox" name="approval_statuses" value="{{ option.code }}" {% if option.code in filters.approval_statuses %}checked{% endif %}>
+                                        <span>{{ option.label }}</span>
+                                    </label>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            <div class="multi-combobox-empty" data-role="empty" hidden>Nenhuma opção encontrada.</div>
+                            <div class="multi-combobox-footer">
+                                <button type="button" class="btn-secondary" data-role="clear">Limpar</button>
+                                <button type="button" class="btn-secondary" data-role="select-all">Selecionar todos</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-field">
+                    <label for="situationTrigger">Situação</label>
+                    <div class="multi-combobox" data-multi-combobox data-field-name="situations">
+                        <button type="button" class="multi-combobox-trigger" id="situationTrigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span data-role="label" data-placeholder="Todos">Todos</span>
+                            <span class="count-pill" data-role="count" hidden></span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="multi-combobox-panel" role="listbox" aria-multiselectable="true">
+                            <div class="multi-combobox-search">
+                                <input type="search" placeholder="Pesquisar..." data-role="search">
+                            </div>
+                            <ul class="multi-combobox-options" data-role="options">
+                                {% for option in situation_options %}
+                                <li class="multi-combobox-option" data-option-label="{{ (option.label or 'Não Informada')|trim|lower }}">
+                                    <label>
+                                        <input type="checkbox" name="situations" value="{{ option.code }}" {% if option.code in filters.situations %}checked{% endif %}>
+                                        <span>{{ option.label or 'Não Informada' }}</span>
+                                    </label>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            <div class="multi-combobox-empty" data-role="empty" hidden>Nenhuma opção encontrada.</div>
+                            <div class="multi-combobox-footer">
+                                <button type="button" class="btn-secondary" data-role="clear">Limpar</button>
+                                <button type="button" class="btn-secondary" data-role="select-all">Selecionar todos</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-field">
+                <label for="separationStageTrigger">Separado</label>
+                <div class="multi-combobox" data-multi-combobox data-field-name="separation_stage">
+                    <button type="button" class="multi-combobox-trigger" id="separationStageTrigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span data-role="label" data-placeholder="Todos">Todos</span>
+                        <span class="count-pill" data-role="count" hidden></span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="multi-combobox-panel" role="listbox" aria-multiselectable="true">
+                        <div class="multi-combobox-search">
+                            <input type="search" placeholder="Pesquisar..." data-role="search">
+                        </div>
+                        <ul class="multi-combobox-options" data-role="options">
+                            {% for option in separation_stage_options %}
+                            <li class="multi-combobox-option" data-option-label="{{ (option.label or option.code)|trim|lower }}">
+                                <label>
+                                    <input type="checkbox" name="separation_stage" value="{{ option.code }}" {% if option.code in filters.separation_stages %}checked{% endif %}>
+                                    <span>{{ option.label }}</span>
+                                </label>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        <div class="multi-combobox-empty" data-role="empty" hidden>Nenhuma opção encontrada.</div>
+                        <div class="multi-combobox-footer">
+                            <button type="button" class="btn-secondary" data-role="clear">Limpar</button>
+                            <button type="button" class="btn-secondary" data-role="select-all">Selecionar todos</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="savePlannerFilters" class="btn-secondary px-4 py-2 rounded-lg">Salvar filtros</button>
+                <a href="{{ url_for('load_lot_route_planner_v2', reset=1) }}" class="btn-secondary text-center px-4 py-2 rounded-lg">Limpar tudo</a>
+                <button type="submit" class="btn-primary px-4 py-2 rounded-lg">Aplicar filtros</button>
+            </div>
+            <div id="plannerFiltersFeedback" class="modal-feedback" role="status" aria-live="polite"></div>
+        </form>
+    </div>
+</div>
+<div id="plannerReportsModal" class="route-modal" role="dialog" aria-modal="true" aria-labelledby="plannerReportsTitle">
+    <div class="modal-content">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 id="plannerReportsTitle" class="text-lg font-semibold text-dark-blue">Relatórios</h3>
+                <p class="text-sm text-slate-500">Visualize indicadores consolidados do centro de distribuição.</p>
+            </div>
+            <button class="icon-button" id="closePlannerReports" aria-label="Fechar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="planner-reports-container">
+            <aside class="planner-reports-sidebar" role="tablist" aria-label="Relatórios disponíveis">
+                <button type="button" class="planner-report-item is-active" data-report-target="distribution-center" role="tab" aria-selected="true" aria-controls="report-panel-distribution-center">
+                    <span class="planner-report-item-title">Centro de Distribuição</span>
+                    <span class="planner-report-item-subtitle">Saldo por UF</span>
+                </button>
+            </aside>
+            <section class="planner-reports-panel">
+                <article class="planner-report-card is-active" id="report-panel-distribution-center" data-report-panel="distribution-center" role="tabpanel" aria-hidden="false">
+                    <header class="planner-report-card__header">
+                        <h4>Centro de Distribuição</h4>
+                        <p>Quantidade disponível por UF considerando separado menos carregado para os pedidos filtrados (quando aplicável).</p>
+                        <div class="planner-report-summary">
+                            <span>Total disponível</span>
+                            <strong id="distributionCenterSummary">0</strong>
+                        </div>
+                    </header>
+                    <div class="planner-report-card__body">
+                        <div class="distribution-map-wrapper">
+                            <svg id="distributionCenterMap" class="distribution-map" viewBox="0 0 840 660" role="img" aria-labelledby="distributionCenterMapTitle">
+                                <title id="distributionCenterMapTitle">Saldo de produtos por UF</title>
+                                <g data-uf="RR" transform="translate(92, 0)">
+                                    <title>RR: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">RR</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="AP" transform="translate(184, 0)">
+                                    <title>AP: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">AP</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="AM" transform="translate(92, 72)">
+                                    <title>AM: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">AM</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="PA" transform="translate(276, 72)">
+                                    <title>PA: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">PA</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="MA" transform="translate(368, 72)">
+                                    <title>MA: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">MA</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="PI" transform="translate(460, 72)">
+                                    <title>PI: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">PI</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="CE" transform="translate(552, 72)">
+                                    <title>CE: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">CE</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="RN" transform="translate(644, 72)">
+                                    <title>RN: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">RN</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="AC" transform="translate(0, 144)">
+                                    <title>AC: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">AC</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="RO" transform="translate(92, 144)">
+                                    <title>RO: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">RO</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="TO" transform="translate(368, 144)">
+                                    <title>TO: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">TO</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="PB" transform="translate(644, 144)">
+                                    <title>PB: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">PB</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="PE" transform="translate(552, 144)">
+                                    <title>PE: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">PE</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="AL" transform="translate(552, 216)">
+                                    <title>AL: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">AL</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="SE" transform="translate(644, 216)">
+                                    <title>SE: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">SE</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="BA" transform="translate(460, 216)">
+                                    <title>BA: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">BA</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="MT" transform="translate(184, 216)">
+                                    <title>MT: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">MT</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="GO" transform="translate(276, 288)">
+                                    <title>GO: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">GO</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="DF" transform="translate(368, 288)">
+                                    <title>DF: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">DF</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="MG" transform="translate(460, 288)">
+                                    <title>MG: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">MG</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="ES" transform="translate(552, 288)">
+                                    <title>ES: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">ES</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="MS" transform="translate(184, 360)">
+                                    <title>MS: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">MS</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="SP" transform="translate(460, 360)">
+                                    <title>SP: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">SP</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="RJ" transform="translate(552, 360)">
+                                    <title>RJ: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">RJ</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="PR" transform="translate(368, 432)">
+                                    <title>PR: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">PR</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="SC" transform="translate(368, 504)">
+                                    <title>SC: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">SC</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                                <g data-uf="RS" transform="translate(368, 576)">
+                                    <title>RS: 0 itens</title>
+                                    <rect width="80" height="60" rx="12" ry="12"></rect>
+                                    <text class="uf-code" x="40" y="24">RS</text>
+                                    <text class="uf-value" x="40" y="44">0</text>
+                                </g>
+                            </svg>
+                        </div>
+                        <p class="text-xs text-slate-500">Valores negativos indicam estados com carregamento superior ao separado.</p>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</div>
+<div
+    id="orderDetailModal"
+    class="modal"
+    data-endpoint="{{ url_for('order_logistics_details', pedido='__PLACEHOLDER__') }}"
+>
+    <div class="modal-content order-detail-modal-content p-6 md:p-8 rounded-xl space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="section-heading">Detalhes do Pedido</h2>
+            <button id="closeOrderDetailModalBtn" class="close-button" aria-label="Fechar detalhes do pedido">&times;</button>
+        </div>
+        <div id="orderDetailLoading" class="py-6 text-center text-sm text-dark-blue hidden">
+            <i class="fas fa-spinner fa-spin mr-2"></i> Carregando detalhes do pedido...
+        </div>
+        <div id="orderDetailError" class="py-6 text-center text-sm text-red-600 hidden"></div>
+        <div id="orderDetailContent" class="space-y-4 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-dark-blue">
+                <div><span class="font-semibold">Pedido:</span> <span id="orderDetailPedido">--</span></div>
+                <div><span class="font-semibold">Cliente:</span> <span id="orderDetailCliente">--</span></div>
+                <div><span class="font-semibold">Cidade:</span> <span id="orderDetailCidade">--</span></div>
+                <div><span class="font-semibold">UF:</span> <span id="orderDetailUF">--</span></div>
+                <div><span class="font-semibold">Data do Pedido:</span> <span id="orderDetailDataPedido">--</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Produção:</span> <span id="orderDetailLoteProducao">--</span></div>
+                <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="orderDetailLoteCarga">--</span></div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white rounded-xl overflow-hidden">
+                    <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                        <tr class="text-xs font-medium uppercase tracking-wider">
+                            <th scope="col" class="px-4 py-3 text-left">Código do Produto</th>
+                            <th scope="col" class="px-4 py-3 text-left">Sequência</th>
+                            <th scope="col" class="px-4 py-3 text-left">Produto</th>
+                            <th scope="col" class="px-4 py-3 text-right">Reservado</th>
+                            <th scope="col" class="px-4 py-3 text-right">Separado</th>
+                            <th scope="col" class="px-4 py-3 text-right">Carregado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orderDetailTableBody" class="text-sm text-dark-blue"></tbody>
+                </table>
+            </div>
+            <div id="orderDetailEmptyState" class="hidden text-sm text-center text-slate-muted">
+                Nenhum item encontrado para este pedido.
+            </div>
+        </div>
+        <div class="modal-footer">
+            <div class="status-legend">
+                <div class="status-legend-item">
+                    <span class="status-legend-color red"></span>
+                    <span>Vermelho = Nada Separado</span>
+                </div>
+                <div class="status-legend-item">
+                    <span class="status-legend-color yellow"></span>
+                    <span>Amarelo = Parcialmente Separado</span>
+                </div>
+                <div class="status-legend-item">
+                    <span class="status-legend-color green"></span>
+                    <span>Verde = Totalmente Separado</span>
+                </div>
+                <div class="status-legend-item">
+                    <span class="status-legend-color blue"></span>
+                    <span>Azul = Totalmente Carregado</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    window.__MAP_INITIAL_ORDERS__ = {{ map_orders_payload | tojson | safe }};
+    window.__MAP_INITIAL_SUMMARY__ = {{ map_orders_summary | tojson | safe }};
+</script>
+<script>
+    function normalizeText(value) {
+        if (!value) {
+            return '';
+        }
+        const text = value.toString();
+        let normalized = text.toLowerCase();
+        if (typeof normalized.normalize === 'function') {
+            normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+        return normalized;
+    }
+
+    function setupMultiComboboxes() {
+        const containers = Array.from(document.querySelectorAll('[data-multi-combobox]'));
+        if (!containers.length) {
+            return;
+        }
+
+        const instances = [];
+
+        function closeAll(exceptContainer) {
+            instances.forEach(instance => {
+                if (!exceptContainer || instance.container !== exceptContainer) {
+                    instance.close();
+                }
+            });
+        }
+
+        containers.forEach(container => {
+            const trigger = container.querySelector('.multi-combobox-trigger');
+            const panel = container.querySelector('.multi-combobox-panel');
+            if (!trigger || !panel) {
+                return;
+            }
+
+            const labelNode = trigger.querySelector('[data-role="label"]');
+            const countNode = trigger.querySelector('[data-role="count"]');
+            const placeholder = (labelNode && labelNode.dataset.placeholder) || 'Selecione';
+            const searchInput = panel.querySelector('[data-role="search"]');
+            const optionsList = panel.querySelector('[data-role="options"]');
+            const optionItems = optionsList ? Array.from(optionsList.querySelectorAll('.multi-combobox-option')) : [];
+            const emptyState = panel.querySelector('[data-role="empty"]');
+            const selectAllBtn = panel.querySelector('[data-role="select-all"]');
+            const clearBtn = panel.querySelector('[data-role="clear"]');
+
+            const checkboxes = optionItems
+                .map(item => item.querySelector('input[type="checkbox"]'))
+                .filter(Boolean);
+
+            optionItems.forEach(item => {
+                const raw = item.dataset.optionLabel || item.textContent;
+                item.dataset.searchValue = normalizeText(raw);
+            });
+
+            function updateLabel() {
+                const selected = checkboxes.filter(cb => cb.checked);
+                if (!selected.length) {
+                    if (labelNode) {
+                        labelNode.textContent = placeholder;
+                    }
+                    if (countNode) {
+                        countNode.hidden = true;
+                        countNode.textContent = '';
+                    }
+                    return;
+                }
+
+                const selectedLabels = selected.slice(0, 2).map(cb => {
+                    const textNode = cb.closest('label')?.querySelector('span');
+                    return textNode ? textNode.textContent.trim() : cb.value;
+                });
+
+                if (labelNode) {
+                    labelNode.textContent = selected.length <= 2
+                        ? selectedLabels.join(', ')
+                        : `${selected.length} selecionados`;
+                }
+                if (countNode) {
+                    countNode.hidden = false;
+                    countNode.textContent = selected.length;
+                }
+            }
+
+            function filterOptions(queryValue) {
+                const normalizedQuery = normalizeText(queryValue);
+                let visibleCount = 0;
+                optionItems.forEach(item => {
+                    const matches = !normalizedQuery || (item.dataset.searchValue || '').includes(normalizedQuery);
+                    item.hidden = !matches;
+                    if (matches) {
+                        visibleCount += 1;
+                    }
+                });
+                if (emptyState) {
+                    emptyState.hidden = visibleCount > 0;
+                }
+            }
+
+            checkboxes.forEach(cb => cb.addEventListener('change', updateLabel));
+
+            if (searchInput) {
+                searchInput.addEventListener('input', () => filterOptions(searchInput.value));
+            }
+
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', () => {
+                    checkboxes.forEach(cb => {
+                        if (!cb.disabled) {
+                            cb.checked = true;
+                        }
+                    });
+                    updateLabel();
+                });
+            }
+
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    checkboxes.forEach(cb => {
+                        if (!cb.disabled) {
+                            cb.checked = false;
+                        }
+                    });
+                    updateLabel();
+                });
+            }
+
+            function openPanel() {
+                closeAll(container);
+                panel.classList.add('is-open');
+                trigger.setAttribute('aria-expanded', 'true');
+                if (searchInput) {
+                    searchInput.value = '';
+                    filterOptions('');
+                    window.requestAnimationFrame(() => searchInput.focus());
+                }
+            }
+
+            function closePanel() {
+                if (!panel.classList.contains('is-open')) {
+                    return;
+                }
+                panel.classList.remove('is-open');
+                trigger.setAttribute('aria-expanded', 'false');
+                if (searchInput) {
+                    searchInput.value = '';
+                    filterOptions('');
+                }
+            }
+
+            trigger.addEventListener('click', (event) => {
+                event.preventDefault();
+                if (panel.classList.contains('is-open')) {
+                    closePanel();
+                } else {
+                    openPanel();
+                }
+            });
+
+            instances.push({
+                container,
+                close: closePanel
+            });
+
+            updateLabel();
+            filterOptions('');
+        });
+
+        document.addEventListener('click', (event) => {
+            instances.forEach(instance => {
+                if (!instance.container.contains(event.target)) {
+                    instance.close();
+                }
+            });
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                instances.forEach(instance => instance.close());
+            }
+        });
+    }
+
+    let plannerOrders = [];
+    const preloadedMapOrders = Array.isArray(window.__MAP_INITIAL_ORDERS__) ? window.__MAP_INITIAL_ORDERS__ : [];
+    const preloadedMapSummary = (window.__MAP_INITIAL_SUMMARY__ && typeof window.__MAP_INITIAL_SUMMARY__ === 'object')
+        ? window.__MAP_INITIAL_SUMMARY__
+        : null;
+    let hasConsumedPreloadedOrders = false;
+    const mapDataUrl = (() => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('map_data', '1');
+        return url.toString();
+    })();
+    const borderColors = {{ stage_border_colors | tojson }};
+    const distributionReportData = {{ (distribution_report_data or {}) | tojson | safe }};
+
+    function getOrderKey(order) {
+        if (!order) {
+            return '';
+        }
+        if (order.unique_id !== undefined && order.unique_id !== null && order.unique_id !== '') {
+            return String(order.unique_id);
+        }
+        if (order.pedido !== undefined && order.pedido !== null) {
+            return String(order.pedido);
+        }
+        return '';
+    }
+
+    function isAssistanceRecord(order) {
+        if (!order) {
+            return false;
+        }
+        const type = (order.record_type || '').toString().toLowerCase();
+        return type === 'assistencia_tecnica';
+    }
+
+    const detailModal = document.getElementById('orderDetailModal');
+    const closeDetailModalBtn = document.getElementById('closeOrderDetailModalBtn');
+    const detailLoading = document.getElementById('orderDetailLoading');
+    const detailError = document.getElementById('orderDetailError');
+    const detailContent = document.getElementById('orderDetailContent');
+    const detailTableBody = document.getElementById('orderDetailTableBody');
+    const detailEmptyState = document.getElementById('orderDetailEmptyState');
+    const detailEndpointTemplate = detailModal ? detailModal.dataset.endpoint || '' : '';
+    const detailFields = {
+        pedido: document.getElementById('orderDetailPedido'),
+        cliente: document.getElementById('orderDetailCliente'),
+        cidade: document.getElementById('orderDetailCidade'),
+        uf: document.getElementById('orderDetailUF'),
+        dataPedido: document.getElementById('orderDetailDataPedido'),
+        loteProducao: document.getElementById('orderDetailLoteProducao'),
+        loteCarga: document.getElementById('orderDetailLoteCarga'),
+    };
+
+    const numberFormatter = new Intl.NumberFormat('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+
+    let map;
+    let markerLayerGroup = null;
+
+    const ordersById = new Map();
+
+    const markersById = new Map();
+    let routeLine = null;
+    const selectedOrderIds = [];
+    const activeStageFilters = new Set();
+    const activeLotFilters = new Set();
+    let stageLegendButtons = [];
+    let lotLegendButtons = [];
+
+    const mapLoadingOverlay = document.getElementById('routePlannerMapLoading');
+    const mapLoadingMessage = document.getElementById('routePlannerMapLoadingMessage');
+    const mapLoadingProgress = document.getElementById('routePlannerMapLoadingProgress');
+    const mapLoadingError = document.getElementById('routePlannerMapError');
+    const mapLoadingErrorMessage = document.getElementById('routePlannerMapErrorMessage');
+    const mapLoadingRetryButton = document.getElementById('routePlannerMapRetry');
+
+    function escapeHtml(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return String(value).replace(/[&<>"']/g, (char) => {
+            const entities = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;',
+            };
+            return entities[char] || char;
+        });
+    }
+
+    const safeText = (value, fallback = 'N/A') => {
+        if (value === null || value === undefined) {
+            return fallback;
+        }
+        const trimmed = String(value).trim();
+        return trimmed === '' ? fallback : trimmed;
+    };
+
+    const setFieldText = (element, value) => {
+        if (!element) {
+            return;
+        }
+        element.textContent = safeText(value, '--');
+    };
+
+    const setFieldList = (element, value) => {
+        if (!element) {
+            return;
+        }
+        element.textContent = '';
+        const values = Array.isArray(value)
+            ? value
+            : String(value || '')
+                  .split(';')
+                  .map((item) => item.trim())
+                  .filter((item) => item.length > 0);
+        if (!values.length) {
+            element.textContent = '--';
+            return;
+        }
+        values.forEach((item, index) => {
+            if (index > 0) {
+                element.appendChild(document.createElement('br'));
+            }
+            element.appendChild(document.createTextNode(item));
+        });
+    };
+
+    const formatNumber = (value) => {
+        const numericValue = Number(value);
+        if (Number.isNaN(numericValue)) {
+            return numberFormatter.format(0);
+        }
+        return numberFormatter.format(numericValue);
+    };
+
+    const formatPopupQuantity = (value) => {
+        const numericValue = Number(value);
+        if (Number.isNaN(numericValue)) {
+            return '--';
+        }
+        return numberFormatter.format(numericValue);
+    };
+
+    const getStatusClass = (status) => {
+        if (status === null || status === undefined) {
+            return 'status-kpi-red';
+        }
+        const mapping = {
+            0: 'status-kpi-red',
+            1: 'status-kpi-yellow',
+            2: 'status-kpi-green',
+            3: 'status-kpi-blue',
+        };
+        return mapping[status] || 'status-kpi-red';
+    };
+
+    function showMapLoading(message) {
+        if (mapLoadingError) {
+            mapLoadingError.classList.add('hidden');
+        }
+        if (mapLoadingErrorMessage) {
+            mapLoadingErrorMessage.textContent = '';
+        }
+        if (mapLoadingRetryButton) {
+            mapLoadingRetryButton.disabled = true;
+        }
+        if (mapLoadingOverlay) {
+            mapLoadingOverlay.classList.remove('hidden');
+        }
+        if (mapLoadingMessage) {
+            mapLoadingMessage.textContent = message || 'Carregando mapa...';
+        }
+        if (mapLoadingProgress) {
+            mapLoadingProgress.textContent = '';
+            mapLoadingProgress.classList.add('hidden');
+        }
+    }
+
+    function updateMapLoadingProgress(current, total) {
+        if (!mapLoadingProgress) {
+            return;
+        }
+        if (!total || total <= 0) {
+            mapLoadingProgress.textContent = '';
+            mapLoadingProgress.classList.add('hidden');
+            return;
+        }
+        const percent = Math.min(100, Math.round((current / total) * 100));
+        mapLoadingProgress.textContent = `Processando ${current} de ${total} registros (${percent}%)`;
+        mapLoadingProgress.classList.remove('hidden');
+    }
+
+    function showMapLoadingError(message) {
+        const finalMessage = message || 'Nao foi possivel carregar o mapa.';
+        if (mapLoadingOverlay) {
+            mapLoadingOverlay.classList.add('hidden');
+        }
+        if (mapLoadingErrorMessage) {
+            mapLoadingErrorMessage.textContent = finalMessage;
+        } else if (mapLoadingError) {
+            mapLoadingError.textContent = finalMessage;
+        }
+        if (mapLoadingRetryButton) {
+            mapLoadingRetryButton.disabled = false;
+        }
+        if (mapLoadingError) {
+            mapLoadingError.classList.remove('hidden');
+        }
+    }
+
+    function hideMapLoading() {
+        if (mapLoadingOverlay) {
+            mapLoadingOverlay.classList.add('hidden');
+        }
+        if (mapLoadingProgress) {
+            mapLoadingProgress.textContent = '';
+            mapLoadingProgress.classList.add('hidden');
+        }
+        if (mapLoadingError) {
+            mapLoadingError.classList.add('hidden');
+        }
+        if (mapLoadingRetryButton) {
+            mapLoadingRetryButton.disabled = false;
+        }
+    }
+
+    function setPlannerOrders(orderList) {
+        plannerOrders = Array.isArray(orderList) ? orderList : [];
+        ordersById.clear();
+        plannerOrders.forEach(order => {
+            const key = getOrderKey(order);
+            if (key) {
+                ordersById.set(key, order);
+            }
+        });
+        for (let index = selectedOrderIds.length - 1; index >= 0; index -= 1) {
+            const id = selectedOrderIds[index];
+            if (!ordersById.has(id)) {
+                selectedOrderIds.splice(index, 1);
+            }
+        }
+    }
+
+    function buildPopupContent(order) {
+        if (!order) {
+            return '<div class="planner-popup">Registro não encontrado.</div>';
+        }
+        const uniqueId = escapeHtml(getOrderKey(order));
+        const documentId = order.document_id !== undefined && order.document_id !== null
+            ? String(order.document_id)
+            : (order.pedido !== undefined && order.pedido !== null ? String(order.pedido) : '');
+        const pedidoDisplay = escapeHtml(order.pedido !== undefined && order.pedido !== null ? String(order.pedido) : '--');
+        const cliente = escapeHtml(order.cliente || 'Cliente não informado');
+        const reservado = formatPopupQuantity(order.reservado);
+        const separado = formatPopupQuantity(order.separado);
+        const carregado = formatPopupQuantity(order.carregado);
+        const typeLabel = escapeHtml(order.record_type_label || 'Registro');
+        const recordType = (order.record_type || '').toString();
+        const canShowDetails = order.can_show_details !== false && !isAssistanceRecord(order);
+        const detailButtonHtml = canShowDetails
+            ? `<button type="button" class="planner-popup-detail-button" data-unique-id="${uniqueId}" data-record-type="${escapeHtml(recordType)}" data-document-id="${escapeHtml(documentId || '')}">Ver detalhes</button>`
+            : '<span class="planner-popup-note">Detalhes disponíveis apenas para pedidos.</span>';
+        return `
+            <div class="planner-popup">
+                <strong>${typeLabel} ${pedidoDisplay}</strong>
+                <div class="planner-popup-client">${cliente}</div>
+                <div class="planner-popup-metrics">
+                    <div class="planner-popup-metric"><span>Reservado</span><span>${reservado}</span></div>
+                    <div class="planner-popup-metric"><span>Separado</span><span>${separado}</span></div>
+                    <div class="planner-popup-metric"><span>Carregado</span><span>${carregado}</span></div>
+                </div>
+                ${detailButtonHtml}
+            </div>
+        `.trim();
+    }
+
+    function showDetailLoading() {
+        if (detailLoading) {
+            detailLoading.classList.remove('hidden');
+        }
+        if (detailError) {
+            detailError.classList.add('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.add('hidden');
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+    }
+
+    function showDetailError(message) {
+        if (detailLoading) {
+            detailLoading.classList.add('hidden');
+        }
+        if (detailError) {
+            detailError.textContent = message || 'Não foi possível carregar os detalhes do pedido.';
+            detailError.classList.remove('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.add('hidden');
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+    }
+
+    function showDetailContent() {
+        if (detailLoading) {
+            detailLoading.classList.add('hidden');
+        }
+        if (detailError) {
+            detailError.classList.add('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.remove('hidden');
+        }
+    }
+
+    function resetDetailFields() {
+        Object.values(detailFields).forEach((element) => {
+            if (element) {
+                element.textContent = '--';
+            }
+        });
+        if (detailTableBody) {
+            detailTableBody.innerHTML = '';
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+    }
+
+    function renderItems(items) {
+        if (!detailTableBody) {
+            return;
+        }
+        detailTableBody.innerHTML = '';
+        if (!Array.isArray(items) || items.length === 0) {
+            if (detailEmptyState) {
+                detailEmptyState.classList.remove('hidden');
+            }
+            return;
+        }
+        if (detailEmptyState) {
+            detailEmptyState.classList.add('hidden');
+        }
+        items.forEach((item) => {
+            const row = document.createElement('tr');
+            row.className = 'hover-row text-sm text-dark-blue';
+
+            const codeCell = document.createElement('td');
+            codeCell.className = `py-3 px-4 whitespace-nowrap font-semibold ${getStatusClass(item.kpi_status)}`;
+            codeCell.textContent = safeText(item.codigo_produto);
+
+            const sequenceCell = document.createElement('td');
+            sequenceCell.className = 'py-3 px-4 whitespace-nowrap';
+            sequenceCell.textContent = safeText(item.sequencia);
+
+            const productCell = document.createElement('td');
+            productCell.className = 'py-3 px-4 whitespace-nowrap';
+            productCell.textContent = safeText(item.produto);
+
+            const reservadoCell = document.createElement('td');
+            reservadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            reservadoCell.textContent = formatNumber(item.reservado);
+
+            const separadoCell = document.createElement('td');
+            separadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            separadoCell.textContent = formatNumber(item.separado);
+
+            const carregadoCell = document.createElement('td');
+            carregadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            carregadoCell.textContent = formatNumber(item.carregado);
+
+            row.appendChild(codeCell);
+            row.appendChild(sequenceCell);
+            row.appendChild(productCell);
+            row.appendChild(reservadoCell);
+            row.appendChild(separadoCell);
+            row.appendChild(carregadoCell);
+
+            detailTableBody.appendChild(row);
+        });
+    }
+
+    function populateDetailModal(data) {
+        if (!data) {
+            showDetailError('Não foi possível carregar os detalhes do pedido.');
+            return;
+        }
+        const header = data.header || {};
+        setFieldText(detailFields.pedido, header.pedido);
+        setFieldText(detailFields.cliente, header.cliente);
+        setFieldText(detailFields.cidade, header.cidade);
+        setFieldText(detailFields.uf, header.uf);
+        setFieldText(detailFields.dataPedido, header.data_pedido);
+        setFieldList(detailFields.loteProducao, header.lote_producao);
+        setFieldText(detailFields.loteCarga, header.lote_carga);
+        renderItems(Array.isArray(data.items) ? data.items : []);
+        showDetailContent();
+    }
+
+    function getDetailUrl(pedido) {
+        if (!detailEndpointTemplate || !pedido) {
+            return '';
+        }
+        return detailEndpointTemplate.replace('__PLACEHOLDER__', encodeURIComponent(pedido));
+    }
+
+    function openDetailModal() {
+        if (detailModal) {
+            detailModal.style.display = 'flex';
+        }
+    }
+
+    function closeDetailModal() {
+        if (detailModal) {
+            detailModal.style.display = 'none';
+        }
+        resetDetailFields();
+        if (detailLoading) {
+            detailLoading.classList.add('hidden');
+        }
+        if (detailError) {
+            detailError.classList.add('hidden');
+        }
+        if (detailContent) {
+            detailContent.classList.add('hidden');
+        }
+    }
+
+    async function openOrderDetails(pedido) {
+        if (!pedido) {
+            return;
+        }
+        openDetailModal();
+        resetDetailFields();
+        showDetailLoading();
+        const detailUrl = getDetailUrl(pedido);
+        if (!detailUrl) {
+            showDetailError('Endpoint de detalhes não configurado.');
+            return;
+        }
+        try {
+            const response = await fetch(detailUrl, {
+                headers: {
+                    Accept: 'application/json',
+                },
+            });
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (parseError) {
+                console.error('Erro ao interpretar a resposta dos detalhes do pedido:', parseError);
+            }
+            if (!response.ok || !payload) {
+                const message = payload && payload.error
+                    ? payload.error
+                    : 'Não foi possível carregar os detalhes do pedido.';
+                showDetailError(message);
+                return;
+            }
+            populateDetailModal(payload);
+        } catch (fetchError) {
+            console.error('Erro ao buscar detalhes do pedido:', fetchError);
+            showDetailError('Não foi possível carregar os detalhes do pedido.');
+        }
+    }
+
+    const defaultView = [-14.2350, -51.9253];
+
+    function haversineDistance(start, end) {
+        const toRad = (value) => (value * Math.PI) / 180;
+        const R = 6371;
+        const dLat = toRad(end[0] - start[0]);
+        const dLon = toRad(end[1] - start[1]);
+        const lat1 = toRad(start[0]);
+        const lat2 = toRad(end[0]);
+        const a = Math.sin(dLat / 2) ** 2 + Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+    }
+
+    function calculateLinearDistance(points) {
+        if (points.length < 2) return 0;
+        let total = 0;
+        for (let i = 1; i < points.length; i += 1) {
+            total += haversineDistance(points[i - 1], points[i]);
+        }
+        return total;
+    }
+
+    function getStageKey(order) {
+        if (order.kpi_status === 1) return 'partial';
+        if (order.kpi_status === 2) return 'total';
+        if (order.kpi_status === 3) return 'carregado';
+        return 'zero';
+    }
+
+    function doesOrderMatchLegendFilters(order) {
+        const hasStageFilter = activeStageFilters.size > 0;
+        const hasLotFilter = activeLotFilters.size > 0;
+        if (!order) {
+            return !(hasStageFilter || hasLotFilter);
+        }
+        const stageKey = order.stage_key || getStageKey(order);
+        if (hasStageFilter && !activeStageFilters.has(stageKey)) {
+            return false;
+        }
+        const lotCode = (order.primary_lot_code || '').trim();
+        if (hasLotFilter && (!lotCode || !activeLotFilters.has(lotCode))) {
+            return false;
+        }
+        return true;
+    }
+
+    function shouldDimOrder(order, isSelected) {
+        if (isSelected) {
+            return false;
+        }
+        return !doesOrderMatchLegendFilters(order);
+    }
+
+    function formatQuantity(value) {
+        const normalized = Number(value || 0);
+        if (!Number.isFinite(normalized)) {
+            return '?';
+        }
+        if (normalized >= 1000) {
+            return Math.round(normalized / 100) / 10 + 'k';
+        }
+        return Math.round(normalized).toString();
+    }
+
+    function createMarkerIcon(order, isSelected, isDimmed) {
+        if (!order) {
+            return L.divIcon({ className: '' });
+        }
+        const stageKey = order.stage_key || getStageKey(order);
+        const borderColor = order.marker_border || borderColors[stageKey] || '#1f2937';
+        const fillColor = order.marker_fill || '#1f3a5f';
+        const quantityLabel = formatQuantity(order.quantidade_total);
+        const classes = ['planner-marker'];
+        if (isSelected) {
+            classes.push('is-selected');
+        }
+        if (isDimmed) {
+            classes.push('is-muted');
+        }
+        const markerHtml = `
+            <div class="${classes.join(' ')}" style="border-color: ${borderColor};">
+                <div class="inner" style="background-color: ${fillColor};">${quantityLabel}</div>
+            </div>
+        `.trim();
+        return L.divIcon({
+            html: markerHtml,
+            className: '',
+            iconSize: [46, 46],
+            iconAnchor: [23, 23]
+        });
+    }
+
+    function ensureMarkerLayer() {
+        if (!map) {
+            return null;
+        }
+        if (!markerLayerGroup) {
+            markerLayerGroup = L.featureGroup();
+            markerLayerGroup.addTo(map);
+        }
+        return markerLayerGroup;
+    }
+
+    function mountMarkers() {
+        if (!map) {
+            return;
+        }
+        const layer = ensureMarkerLayer();
+        if (!layer) {
+            return;
+        }
+        markersById.clear();
+        layer.clearLayers();
+        if (mapLoadingError) {
+            mapLoadingError.classList.add('hidden');
+        }
+        if (!plannerOrders.length) {
+            hideMapLoading();
+            map.setView(defaultView, 4);
+            return;
+        }
+
+        const total = plannerOrders.length;
+        const chunkSize = total > 1200 ? 220 : 400;
+        let index = 0;
+        let bounds = null;
+
+        showMapLoading('Processando registros para o mapa...');
+        updateMapLoadingProgress(0, total);
+
+        const processChunk = () => {
+            const chunkMarkers = [];
+            let processedInChunk = 0;
+            while (index < total && processedInChunk < chunkSize) {
+                const order = plannerOrders[index];
+                index += 1;
+                processedInChunk += 1;
+                const markerKey = getOrderKey(order);
+                if (!order || !markerKey || !order.latitude || !order.longitude) {
+                    continue;
+                }
+                const marker = L.marker([order.latitude, order.longitude], { icon: createMarkerIcon(order, false, shouldDimOrder(order, false)) });
+                marker.bindPopup(buildPopupContent(order));
+                marker.on('click', () => toggleOrderSelection(markerKey));
+                markersById.set(markerKey, marker);
+                chunkMarkers.push(marker);
+                const point = L.latLng(order.latitude, order.longitude);
+                if (!bounds) {
+                    bounds = L.latLngBounds(point, point);
+                } else {
+                    bounds.extend(point);
+                }
+            }
+
+            if (chunkMarkers.length) {
+                if (typeof layer.addLayers === 'function') {
+                    layer.addLayers(chunkMarkers);
+                } else {
+                    chunkMarkers.forEach(marker => layer.addLayer(marker));
+                }
+            }
+
+            updateMapLoadingProgress(Math.min(index, total), total);
+
+            if (index < total) {
+                window.requestAnimationFrame(processChunk);
+            } else {
+                if (bounds) {
+                    map.fitBounds(bounds, { padding: [30, 30] });
+                } else {
+                    map.setView(defaultView, 4);
+                }
+                hideMapLoading();
+                refreshLegendAppearance();
+                applyLegendFilters();
+            }
+        };
+
+        window.requestAnimationFrame(processChunk);
+    }
+
+    async function loadPlannerOrders({ forceFetch = false } = {}) {
+        if (!forceFetch && preloadedMapOrders.length && !hasConsumedPreloadedOrders) {
+            setPlannerOrders(preloadedMapOrders);
+            mountMarkers();
+            updateSelectionSummary();
+            hideMapLoading();
+            hasConsumedPreloadedOrders = true;
+            if (Array.isArray(window.__MAP_INITIAL_ORDERS__)) {
+                window.__MAP_INITIAL_ORDERS__ = [];
+            }
+            if (mapLoadingRetryButton) {
+                mapLoadingRetryButton.disabled = false;
+            }
+            return;
+        }
+
+        if (!mapDataUrl) {
+            hideMapLoading();
+            showMapLoadingError('Fonte de dados do mapa não disponível.');
+            if (mapLoadingRetryButton) {
+                mapLoadingRetryButton.disabled = false;
+            }
+            return;
+        }
+
+        showMapLoading('Carregando registros no mapa...');
+        try {
+            const response = await fetch(mapDataUrl, {
+                headers: {
+                    Accept: 'application/json'
+                },
+                credentials: 'same-origin'
+            });
+            if (!response.ok) {
+                throw new Error(`Resposta inesperada: ${response.status}`);
+            }
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+            if (!contentType.includes('application/json')) {
+                throw new Error('Resposta sem JSON');
+            }
+            const result = await response.json();
+            const orders = Array.isArray(result.orders) ? result.orders : [];
+            setPlannerOrders(orders);
+            mountMarkers();
+            updateSelectionSummary();
+            hasConsumedPreloadedOrders = true;
+        } catch (error) {
+            console.error('Erro ao carregar registros do mapa:', error);
+            showMapLoadingError('Nao foi possivel carregar os registros do mapa.');
+        } finally {
+            if (mapLoadingRetryButton) {
+                mapLoadingRetryButton.disabled = false;
+            }
+        }
+    }
+
+    if (mapLoadingRetryButton) {
+        mapLoadingRetryButton.addEventListener('click', () => {
+            if (mapLoadingRetryButton.disabled) {
+                return;
+            }
+            mapLoadingRetryButton.disabled = true;
+            loadPlannerOrders({ forceFetch: true });
+        });
+    }
+
+    function refreshMarker(orderId) {
+        const marker = markersById.get(orderId);
+        if (!marker) return;
+        const order = ordersById.get(orderId);
+        const isSelected = selectedOrderIds.includes(orderId);
+        marker.setIcon(createMarkerIcon(order, isSelected, shouldDimOrder(order, isSelected)));
+    }
+
+    function refreshLegendAppearance() {
+        const stageHasFilter = activeStageFilters.size > 0;
+        stageLegendButtons.forEach((button) => {
+            if (!button) {
+                return;
+            }
+            const value = button.dataset.stageFilter;
+            const isActive = !stageHasFilter || activeStageFilters.has(value);
+            button.classList.toggle('is-active', isActive);
+            button.classList.toggle('is-muted', stageHasFilter && !activeStageFilters.has(value));
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+        const lotHasFilter = activeLotFilters.size > 0;
+        lotLegendButtons.forEach((button) => {
+            if (!button) {
+                return;
+            }
+            const value = button.dataset.lotFilter;
+            const isActive = !lotHasFilter || activeLotFilters.has(value);
+            button.classList.toggle('is-active', isActive);
+            button.classList.toggle('is-muted', lotHasFilter && !activeLotFilters.has(value));
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    }
+
+    function applyLegendFilters() {
+        const hasAnyFilter = activeStageFilters.size > 0 || activeLotFilters.size > 0;
+        markersById.forEach((marker, orderId) => {
+            const order = ordersById.get(orderId);
+            const isSelected = selectedOrderIds.includes(orderId);
+            marker.setIcon(createMarkerIcon(order, isSelected, shouldDimOrder(order, isSelected)));
+        });
+        document.querySelectorAll('.planner-order-row').forEach((row) => {
+            const orderId = row.dataset.orderId;
+            const order = ordersById.get(orderId);
+            const isSelected = selectedOrderIds.includes(orderId);
+            const dimmed = shouldDimOrder(order, isSelected);
+            row.classList.toggle('is-muted', dimmed && (order || hasAnyFilter));
+        });
+    }
+
+    function updateSelectionSummary() {
+        document.getElementById('selectedCount').textContent = selectedOrderIds.length;
+        document.querySelectorAll('[data-role="order-sequence"]').forEach(badge => {
+            const orderId = badge.dataset.orderId;
+            const idx = selectedOrderIds.indexOf(orderId);
+            if (idx === -1) {
+                badge.textContent = '—';
+                badge.classList.remove('is-active');
+            } else {
+                badge.textContent = idx + 1;
+                badge.classList.add('is-active');
+            }
+        });
+    }
+
+    function updateRouteLine() {
+        if (!map) {
+            return;
+        }
+        if (routeLine) {
+            map.removeLayer(routeLine);
+            routeLine = null;
+        }
+        const coords = selectedOrderIds
+            .map(id => ordersById.get(id))
+            .filter(order => order && order.latitude && order.longitude)
+            .map(order => [order.latitude, order.longitude]);
+        if (coords.length >= 2) {
+            routeLine = L.polyline(coords, { color: '#1d4ed8', weight: 4, opacity: 0.85 }).addTo(map);
+            map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+            const distance = calculateLinearDistance(coords);
+            document.getElementById('routeDistance').textContent = `${distance.toFixed(1)} km`;
+        } else {
+            document.getElementById('routeDistance').textContent = '—';
+        }
+    }
+
+    function syncTableRows() {
+        document.querySelectorAll('.planner-order-row').forEach(row => {
+            const orderId = row.dataset.orderId;
+            row.classList.toggle('is-selected', selectedOrderIds.includes(orderId));
+        });
+    }
+
+    // Limit the order list to 12 visible rows before enabling scroll.
+    function enforceOrderListHeight() {
+        const plannerList = document.querySelector('.planner-list');
+        if (!plannerList) {
+            return;
+        }
+        const rows = plannerList.querySelectorAll('.planner-table tbody tr');
+        plannerList.style.removeProperty('max-height');
+        if (rows.length <= 12) {
+            return;
+        }
+        const twelfthRow = rows[11];
+        const listRect = plannerList.getBoundingClientRect();
+        const rowRect = twelfthRow.getBoundingClientRect();
+        const paddingBottom = parseFloat(window.getComputedStyle(plannerList).paddingBottom) || 0;
+        const maxHeight = Math.ceil(rowRect.bottom - listRect.top + paddingBottom);
+        plannerList.style.maxHeight = `${maxHeight}px`;
+    }
+
+    function toggleOrderSelection(orderId) {
+        const normalizedId = String(orderId);
+        const idx = selectedOrderIds.indexOf(normalizedId);
+        if (idx === -1) {
+            selectedOrderIds.push(normalizedId);
+        } else {
+            selectedOrderIds.splice(idx, 1);
+        }
+        refreshMarker(normalizedId);
+        updateSelectionSummary();
+        updateRouteLine();
+        syncTableRows();
+        applyLegendFilters();
+    }
+
+    function clearRoute() {
+        selectedOrderIds.splice(0, selectedOrderIds.length);
+        document.querySelectorAll('.planner-order-row').forEach(row => row.classList.remove('is-selected'));
+        markersById.forEach((_, id) => refreshMarker(id));
+        updateSelectionSummary();
+        updateRouteLine();
+        applyLegendFilters();
+    }
+
+    const clearRouteBtn = document.getElementById('clearRoute');
+    if (clearRouteBtn) {
+        clearRouteBtn.addEventListener('click', clearRoute);
+    }
+
+    document.querySelectorAll('.planner-order-row').forEach(row => {
+        row.addEventListener('click', () => toggleOrderSelection(row.dataset.orderId));
+    });
+
+    if (closeDetailModalBtn) {
+        closeDetailModalBtn.addEventListener('click', closeDetailModal);
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && detailModal && detailModal.style.display === 'flex') {
+            closeDetailModal();
+        }
+    });
+
+    // Modal logic
+    document.addEventListener('DOMContentLoaded', () => {
+        setupMultiComboboxes();
+
+        const reportsModal = document.getElementById('plannerReportsModal');
+        const openReportsBtn = document.getElementById('openPlannerReports');
+        const closeReportsBtn = document.getElementById('closePlannerReports');
+        const reportButtons = Array.from(document.querySelectorAll('[data-report-target]'));
+        const reportPanels = Array.from(document.querySelectorAll('[data-report-panel]'));
+        const distributionMap = document.getElementById('distributionCenterMap');
+        const distributionSummary = document.getElementById('distributionCenterSummary');
+        const distributionTiles = distributionMap ? Array.from(distributionMap.querySelectorAll('[data-uf]')) : [];
+        const quantityFormatter = new Intl.NumberFormat('pt-BR', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        });
+
+        const updateDistributionMap = () => {
+            if (!distributionMap || distributionTiles.length === 0) {
+                if (distributionSummary) {
+                    distributionSummary.textContent = quantityFormatter.format(0);
+                }
+                return;
+            }
+            let total = 0;
+            distributionTiles.forEach((tile) => {
+                const uf = (tile.dataset.uf || '').trim();
+                if (!uf) {
+                    return;
+                }
+                const rawValue = Object.prototype.hasOwnProperty.call(distributionReportData, uf)
+                    ? distributionReportData[uf]
+                    : 0;
+                const numericValue = Number(rawValue);
+                const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+                const normalizedValue = Math.abs(safeValue) < 1e-6 ? 0 : safeValue;
+                total += normalizedValue;
+                const formatted = quantityFormatter.format(normalizedValue);
+                const valueElements = tile.querySelectorAll('.uf-value');
+                if (valueElements.length) {
+                    valueElements.forEach((element) => {
+                        element.textContent = formatted;
+                    });
+                }
+                tile.classList.toggle('has-positive', normalizedValue > 0);
+                tile.classList.toggle('has-negative', normalizedValue < 0);
+                tile.dataset.quantity = normalizedValue;
+                const titleElement = tile.querySelector('title');
+                if (titleElement) {
+                    titleElement.textContent = `${uf}: ${formatted} itens`;
+                }
+            });
+            if (distributionSummary) {
+                distributionSummary.textContent = quantityFormatter.format(total);
+            }
+        };
+
+        const activateReport = (target) => {
+            if (!target) {
+                return;
+            }
+            reportButtons.forEach((button) => {
+                const isActive = button.dataset.reportTarget === target;
+                button.classList.toggle('is-active', isActive);
+                button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+            reportPanels.forEach((panel) => {
+                const isActive = panel.dataset.reportPanel === target;
+                panel.classList.toggle('is-active', isActive);
+                panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+            });
+        };
+
+        const toggleReportsModal = (show) => {
+            if (!reportsModal) {
+                return;
+            }
+            if (show) {
+                reportsModal.classList.add('is-visible');
+                updateDistributionMap();
+            } else {
+                reportsModal.classList.remove('is-visible');
+            }
+        };
+
+        if (openReportsBtn) {
+            openReportsBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                toggleReportsModal(true);
+            });
+        }
+        if (closeReportsBtn) {
+            closeReportsBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                toggleReportsModal(false);
+            });
+        }
+        if (reportsModal) {
+            reportsModal.addEventListener('click', (event) => {
+                if (event.target === reportsModal) {
+                    toggleReportsModal(false);
+                }
+            });
+        }
+        if (reportButtons.length) {
+            reportButtons.forEach((button) => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    const target = button.dataset.reportTarget;
+                    activateReport(target);
+                    updateDistributionMap();
+                });
+            });
+            activateReport(reportButtons[0].dataset.reportTarget);
+        }
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && reportsModal && reportsModal.classList.contains('is-visible')) {
+                toggleReportsModal(false);
+            }
+        });
+        updateDistributionMap();
+
+        stageLegendButtons = Array.from(document.querySelectorAll('[data-stage-filter]'));
+        lotLegendButtons = Array.from(document.querySelectorAll('[data-lot-filter]'));
+
+        const toggleFilterSet = (filterSet, value, options = {}) => {
+            const { solo = false, reset = false } = options;
+            if (reset) {
+                filterSet.clear();
+                return;
+            }
+            if (!value) {
+                return;
+            }
+            if (solo) {
+                const alreadySolo = filterSet.size === 1 && filterSet.has(value);
+                filterSet.clear();
+                if (!alreadySolo) {
+                    filterSet.add(value);
+                }
+                return;
+            }
+            if (filterSet.has(value)) {
+                filterSet.delete(value);
+            } else {
+                filterSet.add(value);
+            }
+        };
+
+        const bindLegendEvents = (buttons, filterSet, valueKey) => {
+            buttons.forEach((button) => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    const rawValue = button.dataset[valueKey];
+                    const value = rawValue === undefined ? '' : rawValue.toString().trim();
+                    const options = {
+                        solo: event.metaKey || event.ctrlKey,
+                        reset: event.altKey,
+                    };
+                    toggleFilterSet(filterSet, value, options);
+                    refreshLegendAppearance();
+                    applyLegendFilters();
+                });
+            });
+        };
+
+        bindLegendEvents(stageLegendButtons, activeStageFilters, 'stageFilter');
+        bindLegendEvents(lotLegendButtons, activeLotFilters, 'lotFilter');
+        refreshLegendAppearance();
+        applyLegendFilters();
+
+        const mapContainerExists = document.getElementById('routePlannerMap');
+        if (mapContainerExists) {
+            map = L.map('routePlannerMap', { preferCanvas: true });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+            window.setTimeout(() => {
+                if (map) {
+                    map.invalidateSize();
+                }
+            }, 0);
+            map.on('popupopen', (event) => {
+                const popupEl = event.popup.getElement();
+                if (!popupEl) {
+                    return;
+                }
+                const detailButton = popupEl.querySelector('.planner-popup-detail-button');
+                if (!detailButton) {
+                    return;
+                }
+                detailButton.addEventListener('click', (buttonEvent) => {
+                    buttonEvent.preventDefault();
+                    buttonEvent.stopPropagation();
+                    const recordType = (detailButton.dataset.recordType || '').toString().toLowerCase();
+                    const pedido = (detailButton.dataset.documentId || '').toString().trim();
+                    if (!pedido || recordType === 'assistencia_tecnica') {
+                        return;
+                    }
+                    if (map) {
+                        map.closePopup();
+                    }
+                    openOrderDetails(pedido);
+                });
+            });
+        }
+
+        const plannerModal = document.getElementById('plannerFiltersModal');
+        const openFiltersBtn = document.getElementById('openPlannerFilters');
+        const closeFiltersBtn = document.getElementById('closePlannerFilters');
+
+        const openFilters = () => {
+            if (plannerModal) {
+                plannerModal.classList.add('is-visible');
+            }
+        };
+        const closeFilters = () => {
+            if (plannerModal) {
+                plannerModal.classList.remove('is-visible');
+            }
+        };
+
+        if (openFiltersBtn) {
+            openFiltersBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                openFilters();
+            });
+        }
+        if (closeFiltersBtn) {
+            closeFiltersBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                closeFilters();
+            });
+        }
+        if (plannerModal) {
+            plannerModal.addEventListener('click', (event) => {
+                if (event.target === plannerModal) {
+                    closeFilters();
+                }
+            });
+        }
+
+        const filtersForm = document.getElementById('plannerFiltersForm');
+        const saveFiltersBtn = document.getElementById('savePlannerFilters');
+        const filtersFeedback = document.getElementById('plannerFiltersFeedback');
+        const saveFiltersEndpoint = '{{ url_for("save_load_lot_route_filters_v2") }}';
+        let feedbackTimeoutId = null;
+
+        const updateFiltersFeedback = (message, tone) => {
+            if (!filtersFeedback) {
+                return;
+            }
+            filtersFeedback.textContent = message || '';
+            filtersFeedback.classList.remove('is-success', 'is-error');
+            if (tone === 'success') {
+                filtersFeedback.classList.add('is-success');
+            } else if (tone === 'error') {
+                filtersFeedback.classList.add('is-error');
+            }
+            if (feedbackTimeoutId) {
+                window.clearTimeout(feedbackTimeoutId);
+                feedbackTimeoutId = null;
+            }
+            if (tone === 'success' || tone === 'error') {
+                feedbackTimeoutId = window.setTimeout(() => {
+                    filtersFeedback.textContent = '';
+                    filtersFeedback.classList.remove('is-success', 'is-error');
+                    feedbackTimeoutId = null;
+                }, 4000);
+            }
+        };
+
+        const normalizeArrayValues = (values, { allowEmpty = false } = {}) => {
+            if (!Array.isArray(values)) {
+                return [];
+            }
+            return values
+                .map((value) => (value === null || value === undefined ? '' : String(value).trim()))
+                .filter((value) => (allowEmpty ? true : value.length > 0));
+        };
+
+        const collectFilterPayload = () => {
+            if (!filtersForm) {
+                return {};
+            }
+            const formData = new FormData(filtersForm);
+            return {
+                start_date: (formData.get('start_date') || '').toString().trim(),
+                end_date: (formData.get('end_date') || '').toString().trim(),
+                missing_production_lot: (formData.get('missing_production_lot') || '').toString().trim(),
+                document_sources: (formData.get('document_sources') || '').toString().trim(),
+                production_lots: normalizeArrayValues(formData.getAll('production_lots')),
+                approval_statuses: normalizeArrayValues(formData.getAll('approval_statuses')),
+                situations: normalizeArrayValues(formData.getAll('situations'), { allowEmpty: true }),
+                separation_stages: normalizeArrayValues(formData.getAll('separation_stage')),
+            };
+        };
+
+        if (saveFiltersBtn && filtersForm) {
+            saveFiltersBtn.addEventListener('click', async (event) => {
+                event.preventDefault();
+                if (saveFiltersBtn.disabled) {
+                    return;
+                }
+                saveFiltersBtn.disabled = true;
+                updateFiltersFeedback('Salvando filtros...', null);
+                const payload = collectFilterPayload();
+                try {
+                    const response = await fetch(saveFiltersEndpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload),
+                    });
+                    if (response.status === 401) {
+                        updateFiltersFeedback('Sessão expirada. Faça login novamente para salvar os filtros.', 'error');
+                        return;
+                    }
+                    const responseType = response.headers.get('content-type') || '';
+                    if (response.redirected || !responseType.toLowerCase().includes('application/json')) {
+                        updateFiltersFeedback('Não foi possível salvar os filtros. Faça login novamente e tente outra vez.', 'error');
+                        return;
+                    }
+                    const result = await response.json().catch(() => ({}));
+                    if (response.ok && result && result.success) {
+                        updateFiltersFeedback(result.message || 'Filtros salvos com sucesso!', 'success');
+                    } else {
+                        const message = (result && result.message) || 'Não foi possível salvar os filtros.';
+                        updateFiltersFeedback(message, 'error');
+                    }
+                } catch (error) {
+                    console.error('Erro ao salvar filtros do planejador de rota:', error);
+                    updateFiltersFeedback('Erro de comunicação ao salvar os filtros.', 'error');
+                } finally {
+                    saveFiltersBtn.disabled = false;
+                }
+            });
+        }
+
+        if (detailModal) {
+            detailModal.addEventListener('click', (event) => {
+                if (event.target === detailModal) {
+                    closeDetailModal();
+                }
+            });
+        }
+
+        updateSelectionSummary();
+        if (map) {
+            loadPlannerOrders();
+        } else {
+            hideMapLoading();
+        }
+        const scheduleOrderListHeight = () => window.requestAnimationFrame(enforceOrderListHeight);
+        scheduleOrderListHeight();
+        window.addEventListener('resize', scheduleOrderListHeight);
+        window.addEventListener('load', scheduleOrderListHeight);
+    });
+</script>
+{% endblock %}

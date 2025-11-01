@@ -104,6 +104,25 @@ OCCURRENCE_BLANK_VALUE = '__blank__'
 
 LOAD_LOT_ROUTE_PARAM_NAME = 'load_lot_route_prefs'
 LOAD_ROUTE_FILTERS_PARAM_NAME = 'load_route_planner_filters'
+LOAD_ROUTE_FILTERS_PARAM_NAME_V2 = 'load_route_planner_v2_filters'
+
+MAP_DOCUMENT_SOURCE_OPTIONS = [
+    {'value': 'both', 'label': 'Pedidos e Assistências'},
+    {'value': 'orders', 'label': 'Somente Pedidos'},
+    {'value': 'assistances', 'label': 'Somente Assistências'},
+]
+
+MAP_DOCUMENT_SOURCE_RECORD_TYPES = {
+    'both': ['consulta_pedidos', 'pedidos_vendas', 'assistencia_tecnica'],
+    'orders': ['consulta_pedidos', 'pedidos_vendas'],
+    'assistances': ['assistencia_tecnica'],
+}
+
+RECORD_TYPE_LABELS = {
+    'consulta_pedidos': 'Pedido',
+    'pedidos_vendas': 'Pedido',
+    'assistencia_tecnica': 'Assistência',
+}
 OSRM_TABLE_BASE_URL = 'https://router.project-osrm.org/table/v1/driving/'
 NOMINATIM_USER_AGENT = 'SIGA/1.0 (contato@siga.app)'
 AVERAGE_SPEED_KMH = 60
@@ -4259,6 +4278,286 @@ def fetch_sales_orders(filters):
     return orders, error_message
 
 
+def fetch_orders_from_integrated_view(filters):
+    """
+    Busca pedidos para o Mapa Interativo 2 utilizando a view vw_siga_integrated_documents no siga_db.
+    Parâmetros esperados em filters seguem a mesma convenção do fetch_orders tradicional.
+    """
+    orders = []
+    error_message = None
+    conn = get_siga_db_connection()
+
+    if not conn:
+        return orders, "Não foi possível conectar ao banco de dados auxiliar (siga_db)."
+
+    record_types = filters.get('record_types') or []
+    if not record_types:
+        record_types = ['consulta_pedidos']
+
+    if isinstance(record_types, str):
+        record_types = [record_types]
+
+    normalized_types = []
+    for value in record_types:
+        if not value:
+            continue
+        text = str(value).strip().lower()
+        if text in {'consulta_pedidos', 'pedidos_vendas', 'assistencia_tecnica'}:
+            normalized_types.append(text)
+    if not normalized_types:
+        normalized_types = ['consulta_pedidos']
+
+    sort_by = (filters.get('sort_by') or 'pedido').strip()
+    sort_order = (filters.get('sort_order') or 'desc').strip().lower()
+    if sort_order not in {'asc', 'desc'}:
+        sort_order = 'desc'
+
+    sort_column_map = {
+        'pedido': 'document_id',
+        'cliente_codigo': 'customer_code',
+        'cliente_nome': 'customer_name',
+        'cidade_uf': 'city',
+        'quantidade_total': 'quantity_total',
+        'reservado': 'reserved',
+        'separado': 'separated',
+        'carregado': 'loaded',
+        'linha': 'line',
+        'data_documento': 'document_date',
+    }
+    sort_column = sort_column_map.get(sort_by, 'document_id')
+    sort_direction = 'ASC' if sort_order == 'asc' else 'DESC'
+
+    try:
+        cur = conn.cursor()
+        base_query = [
+            "SELECT",
+            "    record_type,",
+            "    document_id,",
+            "    document_date,",
+            "    customer_code,",
+            "    customer_name,",
+            "    city,",
+            "    state,",
+            "    latitude,",
+            "    longitude,",
+            "    quantity_total,",
+            "    reserved,",
+            "    separated,",
+            "    loaded,",
+            "    line,",
+            "    approval_status_code,",
+            "    situation_code,",
+            "    production_lots_display,",
+            "    load_lot_code,",
+            "    load_lot_description,",
+            "    kpi_status",
+            "FROM vw_siga_integrated_documents",
+            "WHERE record_type = ANY(%s)",
+        ]
+        params = [normalized_types]
+
+        start_date = (filters.get('start_date') or '').strip()
+        if start_date:
+            try:
+                datetime.datetime.strptime(start_date, '%Y-%m-%d')
+                base_query.append("AND document_date >= %s")
+                params.append(start_date)
+            except ValueError:
+                pass
+
+        end_date = (filters.get('end_date') or '').strip()
+        if end_date:
+            try:
+                datetime.datetime.strptime(end_date, '%Y-%m-%d')
+                base_query.append("AND document_date <= %s")
+                params.append(end_date)
+            except ValueError:
+                pass
+
+        load_lots = filters.get('load_lots') or []
+        if isinstance(load_lots, str):
+            load_lots = [load_lots]
+        load_lots = [value.strip() for value in load_lots if value and value.strip()]
+        if load_lots:
+            base_query.append("AND COALESCE(load_lot_code, '') ILIKE ANY(%s)")
+            params.append([f"%{value}%" for value in load_lots])
+
+        single_load_lot = (filters.get('load_lot') or '').strip()
+        if single_load_lot:
+            pattern = f"%{single_load_lot}%"
+            base_query.append("AND (COALESCE(load_lot_code, '') ILIKE %s OR COALESCE(load_lot_description, '') ILIKE %s)")
+            params.extend([pattern, pattern])
+
+        production_lots = filters.get('production_lots') or []
+        if isinstance(production_lots, str):
+            production_lots = [production_lots]
+        production_lots = [value.strip() for value in production_lots if value and value.strip()]
+        if production_lots:
+            patterns = [f"%{value}%" for value in production_lots]
+            base_query.append(
+                "AND (COALESCE(production_lots_display, '') <> '' AND COALESCE(production_lots_display, '') ILIKE ANY(%s))"
+            )
+            params.append(patterns)
+
+        approval_statuses = filters.get('approval_statuses') or []
+        if approval_statuses:
+            normalized = [code.strip().upper() for code in approval_statuses if code]
+            normalized = [code for code in normalized if code in ORDER_APPROVAL_STATUS_LABELS]
+            if normalized:
+                base_query.append("AND UPPER(COALESCE(approval_status_code, '')) = ANY(%s)")
+                params.append(normalized)
+
+        situations = filters.get('situations') or []
+        if situations:
+            normalized = [code.strip().upper() for code in situations if code is not None]
+            normalized = [code for code in normalized if code in ORDER_SITUATION_LABELS]
+            if normalized:
+                base_query.append("AND UPPER(COALESCE(situation_code, '')) = ANY(%s)")
+                params.append(normalized)
+
+        lines = filters.get('lines') or []
+        if isinstance(lines, str):
+            lines = [lines]
+        lines = [value.strip() for value in lines if value and value.strip()]
+        if lines:
+            base_query.append("AND COALESCE(line, '') ILIKE ANY(%s)")
+            params.append([value for value in lines])
+        elif filters.get('line'):
+            value = (filters['line'] or '').strip()
+            if value:
+                base_query.append("AND COALESCE(line, '') ILIKE %s")
+                params.append(f"%{value}%")
+
+        base_query.append(f"ORDER BY {sort_column} {sort_direction}, document_id DESC")
+
+        cur.execute("\n".join(base_query), tuple(params))
+        rows = cur.fetchall()
+
+        for row in rows:
+            (
+                record_type,
+                document_id,
+                document_date,
+                customer_code,
+                customer_name,
+                city,
+                state,
+                latitude,
+                longitude,
+                quantity_total,
+                reserved,
+                separated,
+                loaded,
+                line_value,
+                approval_code,
+                situation_code,
+                production_lots_display,
+                load_lot_code,
+                load_lot_description,
+                kpi_status_raw,
+            ) = row
+
+            record_type = (record_type or '').strip().lower()
+            if record_type not in RECORD_TYPE_LABELS:
+                record_type = 'consulta_pedidos'
+            record_type_label = RECORD_TYPE_LABELS.get(record_type, 'Registro')
+
+            document_id_text = ''
+            if document_id is not None:
+                try:
+                    document_id_text = str(document_id).strip()
+                except (TypeError, ValueError):
+                    document_id_text = ''
+            if not document_id_text:
+                document_id_text = str(document_id or '').strip()
+            if not document_id_text:
+                document_id_text = str(len(orders) + 1)
+
+            try:
+                pedido = int(document_id_text)
+            except (TypeError, ValueError):
+                pedido = document_id_text
+
+            unique_id = f"{record_type}:{document_id_text}"
+            can_show_details = record_type != 'assistencia_tecnica'
+
+            try:
+                quantidade = float(quantity_total) if quantity_total is not None else 0.0
+            except (TypeError, ValueError):
+                quantidade = 0.0
+
+            try:
+                reservado = float(reserved) if reserved is not None else 0.0
+            except (TypeError, ValueError):
+                reservado = 0.0
+
+            try:
+                separado = float(separated) if separated is not None else 0.0
+            except (TypeError, ValueError):
+                separado = 0.0
+
+            try:
+                carregado = float(loaded) if loaded is not None else 0.0
+            except (TypeError, ValueError):
+                carregado = 0.0
+
+            latitude_value = None
+            longitude_value = None
+            try:
+                latitude_value = float(latitude) if latitude is not None else None
+            except (TypeError, ValueError):
+                latitude_value = None
+            try:
+                longitude_value = float(longitude) if longitude is not None else None
+            except (TypeError, ValueError):
+                longitude_value = None
+
+            kpi_status = kpi_status_raw
+            if kpi_status is None:
+                kpi_status = calculate_order_kpi(reservado, separado, carregado)
+
+            approval_code = (approval_code or '').strip()
+            situation_code = (situation_code or '').strip()
+
+            orders.append({
+                'record_type': record_type,
+                'record_type_label': record_type_label,
+                'unique_id': unique_id,
+                'can_show_details': can_show_details,
+                'pedido': pedido,
+                'document_id': document_id_text,
+                'document_date': document_date,
+                'cliente_codigo': customer_code,
+                'cliente_nome': customer_name,
+                'cidade': (city or '').strip(),
+                'estado': (state or '').strip(),
+                'cidade_uf': '',
+                'latitude': latitude_value,
+                'longitude': longitude_value,
+                'quantidade_total': quantidade,
+                'reservado': reservado,
+                'separado': separado,
+                'carregado': carregado,
+                'linha': line_value or 'OUTROS',
+                'approval_status_code': approval_code,
+                'approval_status': ORDER_APPROVAL_STATUS_LABELS.get(approval_code, 'Não Informado'),
+                'situation_code': situation_code,
+                'situation': ORDER_SITUATION_LABELS.get(situation_code, 'Não Informada'),
+                'production_lots_display': production_lots_display or '',
+                'load_lot_code': load_lot_code or '',
+                'load_lot_description': load_lot_description or '',
+                'kpi_status': kpi_status,
+            })
+    except Error as exc:
+        print(f"Erro ao carregar pedidos via view integrada: {exc}")
+        error_message = f"Erro ao carregar pedidos via view integrada: {exc}"
+    finally:
+        if conn:
+            conn.close()
+
+    return orders, error_message
+
+
 def fetch_technical_assistance(filters):
     """
     Busca as assistências técnicas com filtros opcionais.
@@ -5386,7 +5685,7 @@ def orders_list():
         query_filters['start_date'] = first_day_of_month.strftime('%Y-%m-%d')
         query_filters['end_date'] = last_day_of_month.strftime('%Y-%m-%d')
 
-    orders, error_message = fetch_orders(query_filters)
+    orders, error_message = fetch_orders_from_integrated_view(query_filters)
 
     if error_message:
         flash(error_message, 'danger')
@@ -5598,6 +5897,13 @@ def load_lot_route_planner():
 
     production_lots_param = deduplicate_preserve_order(production_lots_param)
 
+    document_sources_param = clean_string(request.args.get('document_sources')).lower()
+    if not document_sources_param and not ignore_saved_defaults:
+        document_sources_param = clean_string(saved_filters.get('document_sources')).lower()
+    if document_sources_param not in MAP_DOCUMENT_SOURCE_RECORD_TYPES:
+        document_sources_param = 'both'
+    selected_record_types = MAP_DOCUMENT_SOURCE_RECORD_TYPES.get(document_sources_param, MAP_DOCUMENT_SOURCE_RECORD_TYPES['both'])
+
     filters = {
         'start_date': start_date_param,
         'end_date': end_date_param,
@@ -5606,6 +5912,7 @@ def load_lot_route_planner():
         'situations': situation_param,
         'separation_stages': separation_stage_param,
         'missing_production_lot': missing_production_lot_param,
+        'document_sources': document_sources_param,
     }
 
     query_filters = {
@@ -5614,6 +5921,7 @@ def load_lot_route_planner():
         'situations': situation_param,
         'sort_by': 'pedido',
         'sort_order': 'desc',
+        'record_types': selected_record_types,
     }
 
     if start_date_param:
@@ -5628,7 +5936,7 @@ def load_lot_route_planner():
         filters['end_date'] = last_day.strftime('%Y-%m-%d')
         query_filters['end_date'] = filters['end_date']
 
-    orders, error_message = fetch_orders(query_filters)
+    orders, error_message = fetch_orders_from_integrated_view(query_filters)
     if error_message:
         if is_map_data_request:
             return jsonify({'success': False, 'message': error_message}), 500
@@ -5743,7 +6051,10 @@ def load_lot_route_planner():
     code_group_map = {}
     group_display_map = {}
     lot_groups_in_order = []
+    assistance_present = False
     for order in filtered_orders:
+        if (order.get('record_type') or '').lower() == 'assistencia_tecnica':
+            assistance_present = True
         for entry in extract_production_lots(order.get('production_lots_display', '')):
             code = entry['code']
             group_key = entry.get('group_key', '')
@@ -5760,6 +6071,13 @@ def load_lot_route_planner():
                     group_display_map[group_key] = display_label or group_key.upper()
             if group_key and group_key not in lot_groups_in_order:
                 lot_groups_in_order.append(group_key)
+
+    if assistance_present:
+        assistance_code = '__assist__'
+        if assistance_code not in lot_display_map:
+            lot_display_map[assistance_code] = 'Assistência Técnica'
+        if assistance_code not in lot_codes_in_order:
+            lot_codes_in_order.append(assistance_code)
 
     stage_border_colors = {
         'zero': '#dc2626',
@@ -5790,6 +6108,9 @@ def load_lot_route_planner():
             lot_color_map[code] = color_palette[next_color_index % len(color_palette)]
             next_color_index += 1
 
+    if assistance_present:
+        lot_color_map['__assist__'] = '#7c3aed'
+
     geocode_cache = GEOCODE_CACHE
 
     map_orders = []
@@ -5818,6 +6139,14 @@ def load_lot_route_planner():
                 latitude, longitude = geocoded_coord
                 coordinate_source = 'geocode'
 
+        document_date_value = order.get('document_date')
+        if isinstance(document_date_value, datetime.datetime):
+            document_date_render = document_date_value.strftime('%Y-%m-%d')
+        elif isinstance(document_date_value, datetime.date):
+            document_date_render = document_date_value.strftime('%Y-%m-%d')
+        else:
+            document_date_render = document_date_value
+
         lot_entries = extract_production_lots(order.get('production_lots_display', ''))
         primary_lot_code = ''
         primary_lot_label = ''
@@ -5828,10 +6157,575 @@ def load_lot_route_planner():
                 primary_lot_label = entry['label']
                 marker_fill = lot_color_map[entry['code']]
                 break
+        if (order.get('record_type') or '').lower() == 'assistencia_tecnica':
+            primary_lot_code = '__assist__'
+            primary_lot_label = 'Assistência Técnica'
+            marker_fill = '#7c3aed'
+            lot_color_map['__assist__'] = '#7c3aed'
         map_orders.append(
             {
                 'pedido': order.get('pedido'),
+                'unique_id': order.get('unique_id'),
+                'record_type': order.get('record_type'),
+                'record_type_label': order.get('record_type_label'),
+                'can_show_details': order.get('can_show_details', True),
+                'document_date': document_date_render,
                 'cliente': order.get('cliente_nome'),
+                'document_id': order.get('document_id'),
+                'cidade': order.get('cidade'),
+                'estado': order.get('estado'),
+                'linha': order.get('linha'),
+                'quantidade_total': order.get('quantidade_total'),
+                'latitude': latitude,
+                'longitude': longitude,
+                'kpi_status': order.get('kpi_status'),
+                'reservado': order.get('reservado'),
+                'separado': order.get('separado'),
+                'carregado': order.get('carregado'),
+                'production_lots_display': order.get('production_lots_display'),
+                'primary_lot_code': primary_lot_code,
+                'primary_lot_label': primary_lot_label,
+                'marker_fill': marker_fill,
+                'stage_key': stage_key,
+                'marker_border': marker_border,
+                'coordinate_source': coordinate_source,
+            }
+        )
+
+    def serialize_map_order(item):
+        sanitized = {}
+        for key, value in item.items():
+            if isinstance(value, Decimal):
+                sanitized[key] = float(value)
+            else:
+                sanitized[key] = value
+        return sanitized
+
+    def has_valid_coordinates(item):
+        lat = item.get('latitude')
+        lon = item.get('longitude')
+        if lat is None or lon is None:
+            return False
+        try:
+            return not isclose(float(lat), 0.0, abs_tol=1e-6) and not isclose(float(lon), 0.0, abs_tol=1e-6)
+        except (TypeError, ValueError):
+            return False
+
+    serialized_map_orders = [serialize_map_order(item) for item in map_orders]
+    orders_with_coordinates = sum(1 for item in serialized_map_orders if has_valid_coordinates(item))
+    map_orders_summary = {
+        'total_orders': len(serialized_map_orders),
+        'orders_with_coordinates': orders_with_coordinates,
+        'orders_without_coordinates': len(serialized_map_orders) - orders_with_coordinates,
+    }
+    record_type_breakdown = {}
+    for item in serialized_map_orders:
+        key = (item.get('record_type') or '').strip().lower()
+        record_type_breakdown[key] = record_type_breakdown.get(key, 0) + 1
+    map_orders_summary['record_type_breakdown'] = record_type_breakdown
+
+    if is_map_data_request:
+        payload = {
+            'success': True,
+            'orders': serialized_map_orders,
+            'summary': map_orders_summary,
+        }
+        return jsonify(payload)
+
+    legend_entries = [
+        {
+            'code': code,
+            'label': lot_display_map.get(code, code),
+            'color': lot_color_map.get(code),
+            'group_key': code_group_map.get(code, ''),
+        }
+        for code in sorted(lot_codes_in_order)
+    ]
+    grouped_entries = {}
+    for entry in legend_entries:
+        group_key = entry['group_key'] or ''
+        grouped_entries.setdefault(group_key, []).append(entry)
+    lot_color_legend_groups = []
+    for group_key in lot_groups_in_order:
+        items = grouped_entries.pop(group_key, [])
+        if not items:
+            continue
+        items.sort(key=lambda item: item['code'])
+        lot_color_legend_groups.append(
+            {
+                'key': group_key,
+                'label': group_display_map.get(group_key) or group_key.upper(),
+                'items': items,
+            }
+        )
+    ungrouped_items = grouped_entries.pop('', [])
+    if ungrouped_items:
+        ungrouped_items.sort(key=lambda item: item['code'])
+        lot_color_legend_groups.append(
+            {
+                'key': '',
+                'label': '',
+                'items': ungrouped_items,
+            }
+        )
+    for leftover_key in sorted(grouped_entries.keys()):
+        items = grouped_entries[leftover_key]
+        if not items:
+            continue
+        items.sort(key=lambda item: item['code'])
+        lot_color_legend_groups.append(
+            {
+                'key': leftover_key,
+                'label': group_display_map.get(leftover_key) or leftover_key.upper(),
+                'items': items,
+            }
+        )
+    lot_color_legend = [
+        {'code': entry['code'], 'label': entry['label'], 'color': entry['color']}
+        for entry in legend_entries
+    ]
+
+    def format_period(value):
+        if not value:
+            return ''
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').strftime('%d/%m/%Y')
+        except ValueError:
+            return ''
+
+    period_display = {
+        'start': format_period(query_filters.get('start_date')),
+        'end': format_period(query_filters.get('end_date')),
+    }
+
+    return render_template(
+        'load_route_planner.html',
+        page_title="Mapa Interativo",
+        orders=filtered_orders,
+        map_orders_payload=serialized_map_orders,
+        map_orders_summary=map_orders_summary,
+        filters=filters,
+        production_lot_options=get_distinct_production_lots(),
+        approval_status_options=ORDER_APPROVAL_STATUS_OPTIONS,
+        situation_options=ORDER_SITUATION_OPTIONS,
+        production_lot_colors=lot_color_map,
+        lot_color_legend=lot_color_legend,
+        lot_color_legend_groups=lot_color_legend_groups,
+        stage_border_colors=stage_border_colors,
+        separation_stages=separation_stage_param,
+        separation_stage_options=SEPARATION_STAGE_OPTIONS,
+        period_display=period_display,
+        distribution_report_data=distribution_report_payload,
+        document_source_options=MAP_DOCUMENT_SOURCE_OPTIONS,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
+    )
+
+
+@app.route('/load_lots/route_planner_2')
+@login_required
+def load_lot_route_planner_v2():
+    today = datetime.date.today()
+    first_day = today.replace(day=1)
+    last_day = first_day.replace(day=calendar.monthrange(today.year, today.month)[1])
+
+    user_id = session.get('user_id')
+    is_map_data_request = (request.args.get('map_data') or '').strip() == '1'
+    saved_filters = {}
+    if user_id:
+        raw_saved_filters = get_user_parameters(user_id, LOAD_ROUTE_FILTERS_PARAM_NAME_V2)
+        if raw_saved_filters:
+            try:
+                parsed_filters = json.loads(raw_saved_filters)
+                if isinstance(parsed_filters, dict):
+                    saved_filters = parsed_filters
+            except (json.JSONDecodeError, TypeError):
+                saved_filters = {}
+
+    def clean_string(value):
+        if value is None:
+            return ''
+        return str(value).strip()
+
+    def clean_list(values, allow_blank=False):
+        if not values:
+            return []
+        if isinstance(values, str):
+            values_iterable = [values]
+        else:
+            try:
+                values_iterable = list(values)
+            except TypeError:
+                values_iterable = []
+        cleaned = []
+        for value in values_iterable:
+            text = clean_string(value)
+            if text:
+                cleaned.append(text)
+            elif allow_blank:
+                if value is None:
+                    continue
+                if isinstance(value, str):
+                    if value.strip() == '':
+                        cleaned.append('')
+                elif text == '':
+                    cleaned.append('')
+        return cleaned
+
+    def deduplicate_preserve_order(items):
+        seen = set()
+        result = []
+        for item in items:
+            if item not in seen:
+                seen.add(item)
+                result.append(item)
+        return result
+
+    reset_param = clean_string(request.args.get('reset')).lower()
+    ignore_saved_defaults = reset_param in {'1', 'true', 'yes', 'on'}
+
+    start_date_param = clean_string(request.args.get('start_date'))
+    end_date_param = clean_string(request.args.get('end_date'))
+    production_lots_param = deduplicate_preserve_order(clean_list(request.args.getlist('production_lots')))
+
+    if not start_date_param and not ignore_saved_defaults:
+        start_date_param = clean_string(saved_filters.get('start_date'))
+    if not end_date_param and not ignore_saved_defaults:
+        end_date_param = clean_string(saved_filters.get('end_date'))
+    if not production_lots_param and not ignore_saved_defaults:
+        production_lots_param = deduplicate_preserve_order(clean_list(saved_filters.get('production_lots')))
+
+    missing_production_lot_param = clean_string(request.args.get('missing_production_lot')).lower()
+    allowed_missing_values = {'', 'yes', 'no'}
+    if missing_production_lot_param not in allowed_missing_values:
+        missing_production_lot_param = ''
+    if not missing_production_lot_param and not ignore_saved_defaults:
+        saved_missing = clean_string(saved_filters.get('missing_production_lot')).lower()
+        if saved_missing in allowed_missing_values:
+            missing_production_lot_param = saved_missing
+
+    approval_status_param = []
+    for raw_value in request.args.getlist('approval_statuses'):
+        code = clean_string(raw_value).upper()
+        if code in ORDER_APPROVAL_STATUS_LABELS and code not in approval_status_param:
+            approval_status_param.append(code)
+    if not approval_status_param and not ignore_saved_defaults:
+        saved_approval_statuses = [
+            code.upper()
+            for code in deduplicate_preserve_order(clean_list(saved_filters.get('approval_statuses')))
+            if code.upper() in ORDER_APPROVAL_STATUS_LABELS
+        ]
+        approval_status_param = saved_approval_statuses
+
+    situation_param = []
+    for raw_value in request.args.getlist('situations'):
+        code = clean_string(raw_value).upper()
+        if code in ORDER_SITUATION_LABELS and code not in situation_param:
+            situation_param.append(code)
+    if not situation_param and not ignore_saved_defaults:
+        saved_situations = [
+            code.upper()
+            for code in deduplicate_preserve_order(clean_list(saved_filters.get('situations'), allow_blank=True))
+            if code.upper() in ORDER_SITUATION_LABELS
+        ]
+        situation_param = saved_situations
+
+    separation_stage_param = []
+    for raw_value in request.args.getlist('separation_stage'):
+        code = clean_string(raw_value).lower()
+        if code in VALID_SEPARATION_STAGE_CODES and code not in separation_stage_param:
+            separation_stage_param.append(code)
+    if not separation_stage_param and not ignore_saved_defaults:
+        saved_stages = []
+        for code in deduplicate_preserve_order(clean_list(saved_filters.get('separation_stages'))):
+            normalized = code.lower()
+            if normalized in VALID_SEPARATION_STAGE_CODES:
+                if normalized not in saved_stages:
+                    saved_stages.append(normalized)
+        separation_stage_param = saved_stages
+
+    production_lots_param = deduplicate_preserve_order(production_lots_param)
+
+    document_sources_param = clean_string(request.args.get('document_sources')).lower()
+    if not document_sources_param and not ignore_saved_defaults:
+        document_sources_param = clean_string(saved_filters.get('document_sources')).lower()
+    if document_sources_param not in MAP_DOCUMENT_SOURCE_RECORD_TYPES:
+        document_sources_param = 'both'
+    selected_record_types = MAP_DOCUMENT_SOURCE_RECORD_TYPES.get(
+        document_sources_param,
+        MAP_DOCUMENT_SOURCE_RECORD_TYPES['both'],
+    )
+
+    filters = {
+        'start_date': start_date_param,
+        'end_date': end_date_param,
+        'production_lots': production_lots_param,
+        'approval_statuses': approval_status_param,
+        'situations': situation_param,
+        'separation_stages': separation_stage_param,
+        'missing_production_lot': missing_production_lot_param,
+        'document_sources': document_sources_param,
+    }
+
+    query_filters = {
+        'production_lots': production_lots_param,
+        'approval_statuses': approval_status_param,
+        'situations': situation_param,
+        'sort_by': 'pedido',
+        'sort_order': 'desc',
+        'record_types': selected_record_types,
+    }
+
+    if start_date_param:
+        query_filters['start_date'] = start_date_param
+    else:
+        filters['start_date'] = first_day.strftime('%Y-%m-%d')
+        query_filters['start_date'] = filters['start_date']
+
+    if end_date_param:
+        query_filters['end_date'] = end_date_param
+    else:
+        filters['end_date'] = last_day.strftime('%Y-%m-%d')
+        query_filters['end_date'] = filters['end_date']
+
+    orders, error_message = fetch_orders_from_integrated_view(query_filters)
+    if error_message:
+        if is_map_data_request:
+            return jsonify({'success': False, 'message': error_message}), 500
+        flash(error_message, 'danger')
+
+    orders = orders or []
+
+    stage_filters = set(separation_stage_param)
+    if stage_filters and stage_filters == VALID_SEPARATION_STAGE_CODES:
+        stage_filters = set()
+
+    def matches_stage(order):
+        if not stage_filters:
+            return True
+        kpi = order.get('kpi_status')
+        separado = order.get('separado', 0)
+
+        def stage_matches(stage_code):
+            if stage_code == 'zero':
+                return separado == 0 or kpi == 0
+            if stage_code == 'partial':
+                return kpi == 1
+            if stage_code == 'total':
+                return kpi in (2, 3)
+            return True
+
+        return any(stage_matches(code) for code in stage_filters)
+
+    filtered_orders = [order for order in orders if matches_stage(order)]
+
+    if missing_production_lot_param == 'yes':
+        filtered_orders = [
+            order for order in filtered_orders
+            if not (order.get('production_lots_display') or '').strip()
+        ]
+    elif missing_production_lot_param == 'no':
+        filtered_orders = [
+            order for order in filtered_orders
+            if (order.get('production_lots_display') or '').strip()
+        ]
+
+    def extract_production_lots(display_value):
+        entries = []
+        if not display_value:
+            return entries
+
+        def get_description(raw_label):
+            parts = raw_label.split(' - ', 1)
+            if len(parts) == 2:
+                return parts[1].strip() or raw_label.strip()
+            return raw_label.strip()
+
+        def get_group_key(raw_label, prefix_length=9):
+            description = get_description(raw_label)
+            if not description:
+                return ''
+            return description[:prefix_length].strip().lower()
+
+        for chunk in display_value.split(';'):
+            token = chunk.strip()
+            if not token:
+                continue
+            code_part = token.split(' - ')[0].strip()
+            description = get_description(token)
+            entries.append(
+                {
+                    'code': code_part,
+                    'label': token,
+                    'description': description,
+                    'group_key': get_group_key(token),
+                }
+            )
+        return entries
+
+    selected_production_lot_codes = {code for code in production_lots_param if code}
+    if selected_production_lot_codes and missing_production_lot_param != 'yes':
+        def order_has_only_selected_lots(order):
+            entries = extract_production_lots(order.get('production_lots_display', ''))
+            order_codes = {entry['code'] for entry in entries if entry['code']}
+            if not order_codes:
+                return False
+            return order_codes.issubset(selected_production_lot_codes)
+
+        filtered_orders = [order for order in filtered_orders if order_has_only_selected_lots(order)]
+
+    def decimal_from(value):
+        if isinstance(value, Decimal):
+            return value
+        if value in (None, ''):
+            return Decimal(0)
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError):
+            return Decimal(0)
+
+    state_distribution = {uf: Decimal(0) for uf in BRAZIL_STATE_CODES}
+    for order in filtered_orders:
+        state_code = clean_string(order.get('estado')).upper()
+        if not state_code or state_code not in state_distribution:
+            continue
+        separado_value = decimal_from(order.get('separado'))
+        carregado_value = decimal_from(order.get('carregado'))
+        state_distribution[state_code] += separado_value - carregado_value
+
+    distribution_report_payload = {}
+    for uf, quantity in state_distribution.items():
+        try:
+            distribution_report_payload[uf] = float(quantity)
+        except (InvalidOperation, ValueError, TypeError):
+            distribution_report_payload[uf] = 0.0
+
+    lot_display_map = {}
+    lot_codes_in_order = []
+    code_group_map = {}
+    group_display_map = {}
+    lot_groups_in_order = []
+    assistance_present = False
+    for order in filtered_orders:
+        if (order.get('record_type') or '').lower() == 'assistencia_tecnica':
+            assistance_present = True
+        for entry in extract_production_lots(order.get('production_lots_display', '')):
+            code = entry['code']
+            group_key = entry.get('group_key', '')
+            if code and code not in lot_display_map:
+                lot_display_map[code] = entry['label']
+                lot_codes_in_order.append(code)
+            if code and group_key:
+                code_group_map[code] = group_key
+                if group_key not in group_display_map:
+                    raw_description = entry.get('description') or ''
+                    display_label = raw_description[:9].strip() if raw_description else ''
+                    if not display_label:
+                        display_label = (entry.get('label') or '')[:9].strip()
+                    group_display_map[group_key] = display_label or group_key.upper()
+            if group_key and group_key not in lot_groups_in_order:
+                lot_groups_in_order.append(group_key)
+
+    if assistance_present:
+        assistance_code = '__assist__'
+        if assistance_code not in lot_display_map:
+            lot_display_map[assistance_code] = 'Assistência Técnica'
+        if assistance_code not in lot_codes_in_order:
+            lot_codes_in_order.append(assistance_code)
+
+    stage_border_colors = {
+        'zero': '#dc2626',
+        'partial': '#facc15',
+        'total': '#16a34a',
+        'carregado': '#2563eb',
+    }
+    stage_color_values = {color.lower() for color in stage_border_colors.values()}
+
+    base_color_palette = [
+        '#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#f97316', '#f43f5e',
+        '#a855f7', '#eab308', '#ec4899', '#10b981', '#6366f1', '#fb7185',
+    ]
+    color_palette = [color for color in base_color_palette if color.lower() not in stage_color_values]
+    if not color_palette:
+        color_palette = ['#9333ea', '#0ea5e9', '#f97316', '#ec4899']
+    group_color_map = {}
+    for idx, group_key in enumerate(lot_groups_in_order):
+        group_color_map[group_key] = color_palette[idx % len(color_palette)]
+
+    lot_color_map = {}
+    next_color_index = 0
+    for code in lot_codes_in_order:
+        group_key = code_group_map.get(code)
+        if group_key:
+            lot_color_map[code] = group_color_map[group_key]
+        else:
+            lot_color_map[code] = color_palette[next_color_index % len(color_palette)]
+            next_color_index += 1
+
+    if assistance_present:
+        lot_color_map['__assist__'] = '#7c3aed'
+
+    geocode_cache = GEOCODE_CACHE
+
+    map_orders = []
+    for order in filtered_orders:
+        kpi_status = order.get('kpi_status')
+        if kpi_status == 1:
+            stage_key = 'partial'
+        elif kpi_status == 2:
+            stage_key = 'total'
+        elif kpi_status == 3:
+            stage_key = 'carregado'
+        else:
+            stage_key = 'zero'
+        marker_border = stage_border_colors.get(stage_key, '#1f2937')
+
+        latitude = normalize_coordinate_value(order.get('latitude'))
+        longitude = normalize_coordinate_value(order.get('longitude'))
+        coordinate_source = 'database'
+        if (
+            latitude is None or longitude is None
+            or isclose(latitude, 0.0, abs_tol=1e-6)
+            or isclose(longitude, 0.0, abs_tol=1e-6)
+        ):
+            geocoded_coord = geocode_city_state(order.get('cidade'), order.get('estado'), geocode_cache)
+            if geocoded_coord:
+                latitude, longitude = geocoded_coord
+                coordinate_source = 'geocode'
+
+        document_date_value = order.get('document_date')
+        if isinstance(document_date_value, datetime.datetime):
+            document_date_render = document_date_value.strftime('%Y-%m-%d')
+        elif isinstance(document_date_value, datetime.date):
+            document_date_render = document_date_value.strftime('%Y-%m-%d')
+        else:
+            document_date_render = document_date_value
+
+        lot_entries = extract_production_lots(order.get('production_lots_display', ''))
+        primary_lot_code = ''
+        primary_lot_label = ''
+        marker_fill = '#1f2937'
+        for entry in lot_entries:
+            if entry['code'] in lot_color_map:
+                primary_lot_code = entry['code']
+                primary_lot_label = entry['label']
+                marker_fill = lot_color_map[entry['code']]
+                break
+        if (order.get('record_type') or '').lower() == 'assistencia_tecnica':
+            primary_lot_code = '__assist__'
+            primary_lot_label = 'Assistência Técnica'
+            marker_fill = lot_color_map.get('__assist__', '#7c3aed')
+
+        map_orders.append(
+            {
+                'pedido': order.get('pedido'),
+                'unique_id': order.get('unique_id'),
+                'record_type': order.get('record_type'),
+                'record_type_label': order.get('record_type_label'),
+                'can_show_details': order.get('can_show_details', True),
+                'document_date': document_date_render,
+                'cliente': order.get('cliente_nome'),
+                'document_id': order.get('document_id'),
                 'cidade': order.get('cidade'),
                 'estado': order.get('estado'),
                 'linha': order.get('linha'),
@@ -5954,8 +6848,8 @@ def load_lot_route_planner():
     }
 
     return render_template(
-        'load_route_planner.html',
-        page_title="Mapa Interativo",
+        'load_route_planner_v2.html',
+        page_title="Mapa Interativo 2",
         orders=filtered_orders,
         map_orders_payload=serialized_map_orders,
         map_orders_summary=map_orders_summary,
@@ -5971,6 +6865,7 @@ def load_lot_route_planner():
         separation_stage_options=SEPARATION_STAGE_OPTIONS,
         period_display=period_display,
         distribution_report_data=distribution_report_payload,
+        document_source_options=MAP_DOCUMENT_SOURCE_OPTIONS,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado'),
     )
@@ -6074,6 +6969,117 @@ def save_load_lot_route_filters():
 
     try:
         saved = save_user_parameters(user_id, LOAD_ROUTE_FILTERS_PARAM_NAME, json.dumps(sanitized_filters))
+        if not saved:
+            return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
+    except (TypeError, ValueError) as error:
+        return jsonify({'success': False, 'message': f'Não foi possível processar os filtros: {error}'}), 400
+
+    return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
+
+
+@app.route('/load_lots/route_planner_2/save_filters', methods=['POST'])
+@login_required
+def save_load_lot_route_filters_v2():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def clean_string(value):
+        if value is None:
+            return ''
+        return str(value).strip()
+
+    def clean_list(values, allow_blank=False):
+        if not values:
+            return []
+        if isinstance(values, str):
+            values_iterable = [values]
+        else:
+            try:
+                values_iterable = list(values)
+            except TypeError:
+                values_iterable = []
+        cleaned = []
+        for value in values_iterable:
+            text = clean_string(value)
+            if text:
+                cleaned.append(text)
+            elif allow_blank:
+                if value is None:
+                    continue
+                if isinstance(value, str):
+                    if value.strip() == '':
+                        cleaned.append('')
+                elif text == '':
+                    cleaned.append('')
+        return cleaned
+
+    def deduplicate_preserve_order(items):
+        seen = set()
+        result = []
+        for item in items:
+            if item not in seen:
+                seen.add(item)
+                result.append(item)
+        return result
+
+    sanitized_filters = {}
+
+    start_date = clean_string(payload.get('start_date'))
+    if start_date:
+        try:
+            datetime.datetime.strptime(start_date, '%Y-%m-%d')
+        except ValueError:
+            start_date = ''
+    sanitized_filters['start_date'] = start_date
+
+    end_date = clean_string(payload.get('end_date'))
+    if end_date:
+        try:
+            datetime.datetime.strptime(end_date, '%Y-%m-%d')
+        except ValueError:
+            end_date = ''
+    sanitized_filters['end_date'] = end_date
+
+    allowed_missing_values = {'', 'yes', 'no'}
+    missing_production_lot = clean_string(payload.get('missing_production_lot')).lower()
+    if missing_production_lot not in allowed_missing_values:
+        missing_production_lot = ''
+    sanitized_filters['missing_production_lot'] = missing_production_lot
+
+    allowed_status_codes = set(ORDER_APPROVAL_STATUS_LABELS.keys())
+    approval_statuses = [
+        code.upper()
+        for code in deduplicate_preserve_order(clean_list(payload.get('approval_statuses')))
+        if code.upper() in allowed_status_codes
+    ]
+    sanitized_filters['approval_statuses'] = approval_statuses
+
+    allowed_situation_codes = set(ORDER_SITUATION_LABELS.keys())
+    situations = [
+        code.upper()
+        for code in deduplicate_preserve_order(clean_list(payload.get('situations'), allow_blank=True))
+        if code.upper() in allowed_situation_codes
+    ]
+    sanitized_filters['situations'] = situations
+
+    sanitized_filters['production_lots'] = deduplicate_preserve_order(clean_list(payload.get('production_lots')))
+
+    sanitized_filters['separation_stages'] = [
+        code.lower()
+        for code in deduplicate_preserve_order(clean_list(payload.get('separation_stages')))
+        if code.lower() in VALID_SEPARATION_STAGE_CODES
+    ]
+
+    document_sources = clean_string(payload.get('document_sources')).lower()
+    if document_sources not in MAP_DOCUMENT_SOURCE_RECORD_TYPES:
+        document_sources = ''
+    sanitized_filters['document_sources'] = document_sources
+
+    try:
+        saved = save_user_parameters(user_id, LOAD_ROUTE_FILTERS_PARAM_NAME_V2, json.dumps(sanitized_filters))
         if not saved:
             return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
     except (TypeError, ValueError) as error:
@@ -6409,9 +7415,7 @@ def sales_orders_list():
     )
 
 
-@app.route('/technical_assistance_list')
-@login_required
-def technical_assistance_list():
+def render_assistance_list_page(list_endpoint_name, page_title, list_heading=None):
     today = datetime.date.today()
     first_day_of_month = today.replace(day=1)
     last_day_of_month = first_day_of_month.replace(
@@ -6456,7 +7460,7 @@ def technical_assistance_list():
     customer_filter = (request.args.get('customer') or '').strip()
     representative_filter = (request.args.get('representative') or '').strip()
     responsavel_filter = (request.args.get('responsavel') or '').strip()
-    
+
     sort_by = (request.args.get('sort_by') or 'assdata').strip()
     sort_order = (request.args.get('sort_order') or 'desc').strip().lower()
     if sort_order not in ['asc', 'desc']:
@@ -6519,15 +7523,35 @@ def technical_assistance_list():
 
     return render_template(
         'technical_assistance_list.html',
-        page_title="Assistência Técnica",
+        page_title=page_title,
         assistance_records=assistance_records,
         totals=totals,
         status_options=status_options,
         filters=active_filters,
         sort_by=sort_by,
         sort_order=sort_order,
+        list_url=url_for(list_endpoint_name),
+        list_heading=list_heading or page_title,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/technical_assistance_list')
+@login_required
+def technical_assistance_list():
+    return render_assistance_list_page(
+        'technical_assistance_list',
+        "Assistência Técnica"
+    )
+
+
+@app.route('/production_assistance_list')
+@login_required
+def production_assistance_list():
+    return render_assistance_list_page(
+        'production_assistance_list',
+        "Consultar Assistências"
     )
 
 
