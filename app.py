@@ -4647,16 +4647,20 @@ def fetch_technical_assistance(filters):
         cur = conn.cursor()
         query = """
             WITH proj_totals AS (
-                SELECT prjmpedid AS assistec,
-                       SUM(CASE WHEN prjmovtip = 'R' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS reservado,
-                       SUM(CASE WHEN prjmovtip = 'P' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS separado,
-                       SUM(CASE WHEN prjmovtip = 'C' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS carregado
-                FROM projmovi
-                GROUP BY prjmpedid
+                SELECT
+                    TRIM(CAST(pm.prjmpedid AS TEXT)) AS assistec,
+                    SUM(CASE WHEN TRIM(UPPER(pm.prjmovtip)) = 'R' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS reservado,
+                    SUM(CASE WHEN TRIM(UPPER(pm.prjmovtip)) = 'P' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS separado,
+                    SUM(CASE WHEN TRIM(UPPER(pm.prjmovtip)) = 'C' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS carregado
+                FROM projmovi pm
+                INNER JOIN assiste1 ai ON TRIM(CAST(ai.assistec AS TEXT)) = TRIM(CAST(pm.prjmpedid AS TEXT))
+                                       AND TRIM(CAST(ai.aspproduto AS TEXT)) = TRIM(CAST(pm.prjmproex AS TEXT))
+                WHERE pm.prjmpedid IS NOT NULL
+                GROUP BY TRIM(CAST(pm.prjmpedid AS TEXT))
             ),
             linha_info AS (
                 SELECT
-                    sub.assistec,
+                    TRIM(CAST(sub.assistec AS TEXT)) AS assistec,
                     (ARRAY_AGG(sub.linha_value ORDER BY sub.priority))[1] AS linha
                 FROM (
                     SELECT DISTINCT
@@ -4691,7 +4695,7 @@ def fetch_technical_assistance(filters):
                         WHERE ai.assistec IS NOT NULL
                     ) base_data
                 ) sub
-                GROUP BY sub.assistec
+                GROUP BY TRIM(CAST(sub.assistec AS TEXT))
             )
             SELECT
                 a.assistec,
@@ -4723,8 +4727,8 @@ def fetch_technical_assistance(filters):
             LEFT JOIN empresa e ON e.empresa = a.asscliente
             LEFT JOIN cidade cid ON cid.cidade = e.empcidade
             LEFT JOIN vendedor v ON v.vendedor = a.assrepres
-            LEFT JOIN proj_totals pt ON CAST(pt.assistec AS TEXT) = CAST(a.assistec AS TEXT)
-            LEFT JOIN linha_info li ON CAST(li.assistec AS TEXT) = CAST(a.assistec AS TEXT)
+            LEFT JOIN proj_totals pt ON pt.assistec = TRIM(CAST(a.assistec AS TEXT))
+            LEFT JOIN linha_info li ON li.assistec = TRIM(CAST(a.assistec AS TEXT))
             LEFT JOIN LATERAL (
                 SELECT
                     COALESCE(TRIM(tinsp.tinspdesc::text), '') AS responsavel_nome
