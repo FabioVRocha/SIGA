@@ -20,6 +20,8 @@ import urllib.request
 import urllib.error
 import itertools
 import ssl
+from pathlib import Path
+import threading
 
 # Importa as configurações do arquivo config.py
 from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE
@@ -106,6 +108,161 @@ OSRM_TABLE_BASE_URL = 'https://router.project-osrm.org/table/v1/driving/'
 NOMINATIM_USER_AGENT = 'SIGA/1.0 (contato@siga.app)'
 AVERAGE_SPEED_KMH = 60
 GEOCODE_CACHE = {}
+GEOCODE_CACHE_FILE = Path(__file__).resolve().parent / 'Temp' / 'geocode_cache.json'
+GEOCODE_CACHE_LOCK = threading.Lock()
+TABLE_COLUMNS_CACHE = {}
+TABLE_COLUMN_EXISTS_CACHE = {}
+TABLE_METADATA_LOCK = threading.Lock()
+
+
+def _ensure_directory(path_obj):
+    """Garante que o diretório pai do caminho informado exista."""
+    try:
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+
+
+def load_geocode_cache_from_disk():
+    """Inicializa o cache de geocodificação a partir do disco, se disponível."""
+    if not GEOCODE_CACHE_FILE.exists():
+        return
+    try:
+        with GEOCODE_CACHE_FILE.open('r', encoding='utf-8') as handle:
+            raw_payload = json.load(handle)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return
+    if not isinstance(raw_payload, list):
+        return
+    with GEOCODE_CACHE_LOCK:
+        for entry in raw_payload:
+            if not isinstance(entry, dict):
+                continue
+            city = (entry.get('city') or '').strip().lower()
+            state = (entry.get('state') or '').strip().lower()
+            lat = entry.get('lat')
+            lon = entry.get('lon')
+            try:
+                lat_val = float(lat)
+                lon_val = float(lon)
+            except (TypeError, ValueError):
+                continue
+            if not city and not state:
+                continue
+            GEOCODE_CACHE[(city, state)] = (lat_val, lon_val)
+
+
+def _persist_geocode_cache():
+    """Salva o cache de geocodificação em disco."""
+    with GEOCODE_CACHE_LOCK:
+        if not GEOCODE_CACHE:
+            data = []
+        else:
+            data = [
+                {
+                    'city': city,
+                    'state': state,
+                    'lat': coords[0],
+                    'lon': coords[1],
+                }
+                for (city, state), coords in GEOCODE_CACHE.items()
+            ]
+    try:
+        _ensure_directory(GEOCODE_CACHE_FILE)
+        with GEOCODE_CACHE_FILE.open('w', encoding='utf-8') as handle:
+            json.dump(data, handle)
+    except OSError:
+        pass
+
+
+def table_has_column(conn, table_name, column_name):
+    """Verifica a existência de uma coluna na tabela, reutilizando um cache em memória."""
+    normalized_table = (table_name or '').strip().lower()
+    normalized_column = (column_name or '').strip().lower()
+    if not normalized_table or not normalized_column:
+        return False
+    cache_key = (normalized_table, normalized_column)
+    with TABLE_METADATA_LOCK:
+        cached_value = TABLE_COLUMN_EXISTS_CACHE.get(cache_key)
+    if cached_value is not None:
+        return cached_value
+
+    owns_connection = False
+    if conn is None:
+        conn = get_erp_db_connection()
+        owns_connection = True
+
+    exists = False
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = %s
+                      AND column_name = %s
+                )
+                """,
+                (normalized_table, normalized_column),
+            )
+            result = cur.fetchone()
+            if result:
+                exists = bool(result[0])
+            cur.close()
+        except Error as error:
+            print(f"Erro ao verificar coluna '{normalized_column}' na tabela '{normalized_table}': {error}")
+    if owns_connection and conn:
+        conn.close()
+    with TABLE_METADATA_LOCK:
+        TABLE_COLUMN_EXISTS_CACHE[cache_key] = exists
+    return exists
+
+
+def get_table_columns(conn, table_name):
+    """Retorna o conjunto de colunas disponíveis para a tabela informada."""
+    normalized_table = (table_name or '').strip().lower()
+    if not normalized_table:
+        return set()
+    with TABLE_METADATA_LOCK:
+        cached_columns = TABLE_COLUMNS_CACHE.get(normalized_table)
+    if cached_columns is not None:
+        return cached_columns
+
+    owns_connection = False
+    if conn is None:
+        conn = get_erp_db_connection()
+        owns_connection = True
+
+    columns = set()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = %s
+                """,
+                (normalized_table,),
+            )
+            columns = {
+                (row[0] or '').lower()
+                for row in cur.fetchall()
+                if row and row[0]
+            }
+            cur.close()
+        except Error as error:
+            print(f"Erro ao buscar colunas da tabela '{normalized_table}': {error}")
+    if owns_connection and conn:
+        conn.close()
+    with TABLE_METADATA_LOCK:
+        TABLE_COLUMNS_CACHE[normalized_table] = columns
+    return columns
+
+
+load_geocode_cache_from_disk()
 MAX_BRUTE_FORCE_ORDERS = 8
 INSECURE_SSL_CONTEXT = ssl._create_unverified_context()
 
@@ -268,10 +425,16 @@ def geocode_city_state(city, state, cache=None):
     normalized_state = (state or '').strip()
     if not normalized_city and not normalized_state:
         return None
-    cache_ref = cache if cache is not None else GEOCODE_CACHE
+    use_global_cache = cache is None or cache is GEOCODE_CACHE
+    cache_ref = GEOCODE_CACHE if use_global_cache else cache
     cache_key = (normalized_city.lower(), normalized_state.lower())
-    if cache_key in cache_ref:
-        return cache_ref[cache_key]
+    if use_global_cache:
+        with GEOCODE_CACHE_LOCK:
+            cached_value = cache_ref.get(cache_key)
+    else:
+        cached_value = cache_ref.get(cache_key)
+    if cached_value:
+        return cached_value
     params = {
         'format': 'json',
         'limit': 1,
@@ -303,8 +466,14 @@ def geocode_city_state(city, state, cache=None):
         lon = float(results[0]['lon'])
     except (KeyError, ValueError, TypeError):
         return None
-    cache_ref[cache_key] = (lat, lon)
-    return cache_ref[cache_key]
+    coords = (lat, lon)
+    if use_global_cache:
+        with GEOCODE_CACHE_LOCK:
+            cache_ref[cache_key] = coords
+        _persist_geocode_cache()
+    else:
+        cache_ref[cache_key] = coords
+    return coords
 
 
 def build_haversine_matrices(coords):
@@ -1151,33 +1320,6 @@ def get_distinct_load_lots():
             if conn:
                 conn.close()
     return load_lots
-
-def get_table_columns(conn, table_name):
-    """Retorna o conjunto de colunas disponíveis para a tabela informada."""
-    columns = set()
-    if not conn:
-        return columns
-
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_name = %s
-            """,
-            (table_name,)
-        )
-        columns = {
-            (row[0] or '').lower()
-            for row in cur.fetchall()
-            if row and row[0]
-        }
-        cur.close()
-    except Error as e:
-        print(f"Erro ao buscar colunas da tabela '{table_name}': {e}")
-
-    return columns
 
 def get_distinct_vendors():
     """Busca todos os vendedores distintos e seus status presentes no ERP."""
@@ -3643,53 +3785,8 @@ def fetch_sales_orders(filters):
     if not conn:
         return orders, "Não foi possível conectar ao banco de dados do ERP."
 
-    has_lcapecod_column = False
-    has_peddesval_column = False
-    column_check_cursor = None
-
-    try:
-        column_check_cursor = conn.cursor()
-        column_check_cursor.execute(
-            """
-            SELECT EXISTS (
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'pedido'
-                  AND column_name = 'lcapecod'
-            )
-            """
-        )
-        result = column_check_cursor.fetchone()
-        if result:
-            has_lcapecod_column = bool(result[0])
-    except Error as e:
-        print(f"Erro ao verificar a coluna 'lcapecod' na tabela 'pedido' (relatório de vendas): {e}")
-    finally:
-        if column_check_cursor:
-            column_check_cursor.close()
-
-    column_check_cursor = None
-
-    try:
-        column_check_cursor = conn.cursor()
-        column_check_cursor.execute(
-            """
-            SELECT EXISTS (
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'pedido'
-                  AND column_name = 'peddesval'
-            )
-            """
-        )
-        result = column_check_cursor.fetchone()
-        if result:
-            has_peddesval_column = bool(result[0])
-    except Error as e:
-        print(f"Erro ao verificar a coluna 'peddesval' na tabela 'pedido' (relatório de vendas): {e}")
-    finally:
-        if column_check_cursor:
-            column_check_cursor.close()
+    has_lcapecod_column = table_has_column(conn, 'pedido', 'lcapecod')
+    has_peddesval_column = table_has_column(conn, 'pedido', 'peddesval')
 
     city_expression = (
         "CASE "
@@ -5755,35 +5852,38 @@ def load_lot_route_planner():
             }
         )
 
+    def serialize_map_order(item):
+        sanitized = {}
+        for key, value in item.items():
+            if isinstance(value, Decimal):
+                sanitized[key] = float(value)
+            else:
+                sanitized[key] = value
+        return sanitized
+
+    def has_valid_coordinates(item):
+        lat = item.get('latitude')
+        lon = item.get('longitude')
+        if lat is None or lon is None:
+            return False
+        try:
+            return not isclose(float(lat), 0.0, abs_tol=1e-6) and not isclose(float(lon), 0.0, abs_tol=1e-6)
+        except (TypeError, ValueError):
+            return False
+
+    serialized_map_orders = [serialize_map_order(item) for item in map_orders]
+    orders_with_coordinates = sum(1 for item in serialized_map_orders if has_valid_coordinates(item))
+    map_orders_summary = {
+        'total_orders': len(serialized_map_orders),
+        'orders_with_coordinates': orders_with_coordinates,
+        'orders_without_coordinates': len(serialized_map_orders) - orders_with_coordinates,
+    }
+
     if is_map_data_request:
-        def serialize_map_order(item):
-            sanitized = {}
-            for key, value in item.items():
-                if isinstance(value, Decimal):
-                    sanitized[key] = float(value)
-                else:
-                    sanitized[key] = value
-            return sanitized
-
-        def has_valid_coordinates(item):
-            lat = item.get('latitude')
-            lon = item.get('longitude')
-            if lat is None or lon is None:
-                return False
-            try:
-                return not isclose(float(lat), 0.0, abs_tol=1e-6) and not isclose(float(lon), 0.0, abs_tol=1e-6)
-            except (TypeError, ValueError):
-                return False
-
-        orders_with_coordinates = sum(1 for item in map_orders if has_valid_coordinates(item))
         payload = {
             'success': True,
-            'orders': [serialize_map_order(item) for item in map_orders],
-            'summary': {
-                'total_orders': len(map_orders),
-                'orders_with_coordinates': orders_with_coordinates,
-                'orders_without_coordinates': len(map_orders) - orders_with_coordinates,
-            },
+            'orders': serialized_map_orders,
+            'summary': map_orders_summary,
         }
         return jsonify(payload)
 
@@ -5857,7 +5957,8 @@ def load_lot_route_planner():
         'load_route_planner.html',
         page_title="Mapa Interativo",
         orders=filtered_orders,
-        map_orders=[],
+        map_orders_payload=serialized_map_orders,
+        map_orders_summary=map_orders_summary,
         filters=filters,
         production_lot_options=get_distinct_production_lots(),
         approval_status_options=ORDER_APPROVAL_STATUS_OPTIONS,

@@ -413,9 +413,14 @@
         gap: 0.5rem;
     }
     .legend-lot-groups {
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: 1fr;
         gap: 0.75rem;
+    }
+    @media (min-width: 1100px) {
+        .legend-lot-groups {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
     .legend-lot-group-title {
         font-weight: 500;
@@ -987,7 +992,7 @@
                             <span class="legend-lot-group-title">{{ group.label }}</span>
                             {% endif %}
                             <div class="legend-items">
-                                {% for item in group.items %}
+                                {% for item in group['items'] %}
                                 <button type="button" class="legend-item" data-lot-filter="{{ item.code }}" aria-pressed="true">
                                     <span class="legend-dot fill-only" style="background-color: {{ item.color }}"></span>
                                     {{ item.label }}
@@ -1441,6 +1446,10 @@
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+    window.__MAP_INITIAL_ORDERS__ = {{ map_orders_payload | tojson | safe }};
+    window.__MAP_INITIAL_SUMMARY__ = {{ map_orders_summary | tojson | safe }};
+</script>
+<script>
     function normalizeText(value) {
         if (!value) {
             return '';
@@ -1624,6 +1633,11 @@
     }
 
     let plannerOrders = [];
+    const preloadedMapOrders = Array.isArray(window.__MAP_INITIAL_ORDERS__) ? window.__MAP_INITIAL_ORDERS__ : [];
+    const preloadedMapSummary = (window.__MAP_INITIAL_SUMMARY__ && typeof window.__MAP_INITIAL_SUMMARY__ === 'object')
+        ? window.__MAP_INITIAL_SUMMARY__
+        : null;
+    let hasConsumedPreloadedOrders = false;
     const mapDataUrl = (() => {
         const url = new URL(window.location.href);
         url.searchParams.set('map_data', '1');
@@ -2234,7 +2248,31 @@
         window.requestAnimationFrame(processChunk);
     }
 
-    async function loadPlannerOrders() {
+    async function loadPlannerOrders({ forceFetch = false } = {}) {
+        if (!forceFetch && preloadedMapOrders.length && !hasConsumedPreloadedOrders) {
+            setPlannerOrders(preloadedMapOrders);
+            mountMarkers();
+            updateSelectionSummary();
+            hideMapLoading();
+            hasConsumedPreloadedOrders = true;
+            if (Array.isArray(window.__MAP_INITIAL_ORDERS__)) {
+                window.__MAP_INITIAL_ORDERS__ = [];
+            }
+            if (mapLoadingRetryButton) {
+                mapLoadingRetryButton.disabled = false;
+            }
+            return;
+        }
+
+        if (!mapDataUrl) {
+            hideMapLoading();
+            showMapLoadingError('Fonte de dados do mapa não disponível.');
+            if (mapLoadingRetryButton) {
+                mapLoadingRetryButton.disabled = false;
+            }
+            return;
+        }
+
         showMapLoading('Carregando pedidos no mapa...');
         try {
             const response = await fetch(mapDataUrl, {
@@ -2255,9 +2293,14 @@
             setPlannerOrders(orders);
             mountMarkers();
             updateSelectionSummary();
+            hasConsumedPreloadedOrders = true;
         } catch (error) {
             console.error('Erro ao carregar pedidos do mapa:', error);
             showMapLoadingError('Nao foi possivel carregar os pedidos do mapa.');
+        } finally {
+            if (mapLoadingRetryButton) {
+                mapLoadingRetryButton.disabled = false;
+            }
         }
     }
 
@@ -2267,7 +2310,7 @@
                 return;
             }
             mapLoadingRetryButton.disabled = true;
-            loadPlannerOrders();
+            loadPlannerOrders({ forceFetch: true });
         });
     }
 
