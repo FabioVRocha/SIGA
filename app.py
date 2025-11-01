@@ -4558,6 +4558,79 @@ def fetch_orders_from_integrated_view(filters):
     return orders, error_message
 
 
+def fetch_assistance_operational_metrics(assistance_codes):
+    """
+    Recupera métricas operacionais (reservado, separado, carregado e linha)
+    a partir da view integrada para as assistências informadas.
+    """
+    normalized = []
+    for code in assistance_codes or []:
+        text = str(code or '').strip()
+        if text:
+            normalized.append(text)
+
+    if not normalized:
+        return {}
+
+    metrics = {}
+    conn = get_siga_db_connection()
+    if not conn:
+        return metrics
+
+    cur = None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                CAST(document_id AS TEXT) AS assistance_id,
+                COALESCE(reserved, 0) AS reserved,
+                COALESCE(separated, 0) AS separated,
+                COALESCE(loaded, 0) AS loaded,
+                COALESCE(line, '') AS line
+            FROM vw_siga_integrated_documents
+            WHERE record_type = 'assistencia_tecnica'
+              AND CAST(document_id AS TEXT) = ANY(%s)
+            """,
+            (normalized,),
+        )
+
+        for assistance_id, reserved, separated, loaded, line in cur.fetchall():
+            key = (assistance_id or '').strip()
+            if not key:
+                continue
+            try:
+                reserved_value = Decimal(reserved or 0)
+            except (TypeError, InvalidOperation):
+                reserved_value = Decimal('0')
+
+            try:
+                separated_value = Decimal(separated or 0)
+            except (TypeError, InvalidOperation):
+                separated_value = Decimal('0')
+
+            try:
+                loaded_value = Decimal(loaded or 0)
+            except (TypeError, InvalidOperation):
+                loaded_value = Decimal('0')
+
+            metrics[key] = {
+                'reservado': reserved_value,
+                'separado': separated_value,
+                'carregado': loaded_value,
+                'linha': (line or '').strip(),
+            }
+    except (Exception, Error) as error:
+        print(f"Erro ao carregar métricas de assistência: {error}")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    return metrics
+
+
 def fetch_technical_assistance(filters):
     """
     Busca as assistências técnicas com filtros opcionais.
@@ -4573,6 +4646,53 @@ def fetch_technical_assistance(filters):
     try:
         cur = conn.cursor()
         query = """
+            WITH proj_totals AS (
+                SELECT prjmpedid AS assistec,
+                       SUM(CASE WHEN prjmovtip = 'R' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS reservado,
+                       SUM(CASE WHEN prjmovtip = 'P' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS separado,
+                       SUM(CASE WHEN prjmovtip = 'C' THEN COALESCE(prjmquant, 0) ELSE 0 END) AS carregado
+                FROM projmovi
+                GROUP BY prjmpedid
+            ),
+            linha_info AS (
+                SELECT
+                    sub.assistec,
+                    (ARRAY_AGG(sub.linha_value ORDER BY sub.priority))[1] AS linha
+                FROM (
+                    SELECT DISTINCT
+                        base_data.assistec,
+                        CASE
+                            WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 'MADRESILVA'
+                            WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 'PETRA'
+                            WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 'GARLAND'
+                            WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 'GLASSMADRE'
+                            WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 'CAVILHAS'
+                            WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 'SOLARE'
+                            WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 'ESPUMA'
+                            ELSE 'OUTROS'
+                        END AS linha_value,
+                        CASE
+                            WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 1
+                            WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 2
+                            WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 3
+                            WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 4
+                            WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 5
+                            WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 6
+                            WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 7
+                            ELSE 999
+                        END AS priority
+                    FROM (
+                        SELECT
+                            ai.assistec,
+                            UPPER(COALESCE(g.grunome, '')) AS group_name_upper
+                        FROM assiste1 ai
+                        LEFT JOIN produto prod ON prod.produto = ai.aspproduto
+                        LEFT JOIN grupo g ON g.grupo = prod.grupo
+                        WHERE ai.assistec IS NOT NULL
+                    ) base_data
+                ) sub
+                GROUP BY sub.assistec
+            )
             SELECT
                 a.assistec,
                 a.asscliente,
@@ -4593,12 +4713,18 @@ def fetch_technical_assistance(filters):
                 COALESCE(a.assusualt, '') AS usuario_alteracao,
                 COALESCE(SUM(i.aspquanti), 0) AS quantidade_pecas,
                 COALESCE(SUM(i.asptotal), 0) AS valor_total,
-                COUNT(DISTINCT i.aspseq) AS total_itens
+                COUNT(DISTINCT i.aspseq) AS total_itens,
+                COALESCE(pt.reservado, 0) AS reservado,
+                COALESCE(pt.separado, 0) AS separado,
+                COALESCE(pt.carregado, 0) AS carregado,
+                COALESCE(li.linha, '') AS linha
             FROM assistec a
             LEFT JOIN assiste1 i ON i.assistec = a.assistec
             LEFT JOIN empresa e ON e.empresa = a.asscliente
             LEFT JOIN cidade cid ON cid.cidade = e.empcidade
             LEFT JOIN vendedor v ON v.vendedor = a.assrepres
+            LEFT JOIN proj_totals pt ON CAST(pt.assistec AS TEXT) = CAST(a.assistec AS TEXT)
+            LEFT JOIN linha_info li ON CAST(li.assistec AS TEXT) = CAST(a.assistec AS TEXT)
             LEFT JOIN LATERAL (
                 SELECT
                     COALESCE(TRIM(tinsp.tinspdesc::text), '') AS responsavel_nome
@@ -4684,7 +4810,11 @@ def fetch_technical_assistance(filters):
                 a.assdtalt,
                 a.asshralt,
                 a.assusualt,
-                resp.responsavel_nome
+                resp.responsavel_nome,
+                pt.reservado,
+                pt.separado,
+                pt.carregado,
+                li.linha
         """
 
         sort_by = filters.get('sort_by', 'assdata')
@@ -4700,7 +4830,11 @@ def fetch_technical_assistance(filters):
             'situacao_label': 'a.asssitua',
             'quantidade_pecas': 'quantidade_pecas',
             'valor_total': 'valor_total',
-            'ultima_alteracao_display': 'a.assdtalt'
+            'ultima_alteracao_display': 'a.assdtalt',
+            'reservado': 'reservado',
+            'separado': 'separado',
+            'carregado': 'carregado',
+            'linha': 'linha'
         }
         sort_column = sort_column_map.get(sort_by, 'a.assdata')
         sort_direction = 'ASC' if sort_order == 'asc' else 'DESC'
@@ -4747,6 +4881,25 @@ def fetch_technical_assistance(filters):
                 record['cidade_estado'] = f"{cidade}/{estado}"
             else:
                 record['cidade_estado'] = cidade or estado
+
+            # Processar valores de reservado, separado e carregado
+            try:
+                record['reservado'] = Decimal(record.get('reservado') or 0)
+            except (TypeError, InvalidOperation):
+                record['reservado'] = Decimal('0')
+
+            try:
+                record['separado'] = Decimal(record.get('separado') or 0)
+            except (TypeError, InvalidOperation):
+                record['separado'] = Decimal('0')
+
+            try:
+                record['carregado'] = Decimal(record.get('carregado') or 0)
+            except (TypeError, InvalidOperation):
+                record['carregado'] = Decimal('0')
+
+            # Processar linha
+            record['linha'] = (record.get('linha') or '').strip()
 
             records.append(record)
     except UndefinedColumn as error:
@@ -7415,7 +7568,7 @@ def sales_orders_list():
     )
 
 
-def render_assistance_list_page(list_endpoint_name, page_title, list_heading=None):
+def render_technical_assistance_list_page(list_endpoint_name, page_title, list_heading=None):
     today = datetime.date.today()
     first_day_of_month = today.replace(day=1)
     last_day_of_month = first_day_of_month.replace(
@@ -7461,10 +7614,15 @@ def render_assistance_list_page(list_endpoint_name, page_title, list_heading=Non
     representative_filter = (request.args.get('representative') or '').strip()
     responsavel_filter = (request.args.get('responsavel') or '').strip()
 
-    sort_by = (request.args.get('sort_by') or 'assdata').strip()
+    requested_sort_by = (request.args.get('sort_by') or 'assdata').strip()
     sort_order = (request.args.get('sort_order') or 'desc').strip().lower()
     if sort_order not in ['asc', 'desc']:
         sort_order = 'desc'
+
+    extra_sort_fields = {'reservado', 'separado', 'carregado', 'linha'}
+    sort_by_for_query = requested_sort_by
+    if requested_sort_by in extra_sort_fields:
+        sort_by_for_query = 'assdata'
 
     filters = {
         'start_date': start_date,
@@ -7474,13 +7632,26 @@ def render_assistance_list_page(list_endpoint_name, page_title, list_heading=Non
         'customer': customer_filter,
         'representative': representative_filter,
         'responsavel': responsavel_filter,
-        'sort_by': sort_by,
+        'sort_by': sort_by_for_query,
         'sort_order': sort_order,
     }
 
     assistance_records, error_message = fetch_technical_assistance(filters)
     if error_message:
         flash(error_message, 'danger')
+
+    if requested_sort_by in extra_sort_fields:
+        reverse = sort_order == 'desc'
+        if requested_sort_by == 'linha':
+            assistance_records.sort(
+                key=lambda record: (record.get('linha') or '').strip().upper(),
+                reverse=reverse,
+            )
+        else:
+            assistance_records.sort(
+                key=lambda record: record.get(requested_sort_by) or Decimal('0'),
+                reverse=reverse,
+            )
 
     total_pecas = Decimal('0')
     valor_total = Decimal('0')
@@ -7528,7 +7699,147 @@ def render_assistance_list_page(list_endpoint_name, page_title, list_heading=Non
         totals=totals,
         status_options=status_options,
         filters=active_filters,
-        sort_by=sort_by,
+        sort_by=requested_sort_by,
+        sort_order=sort_order,
+        list_url=url_for(list_endpoint_name),
+        list_heading=list_heading or page_title,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+def render_production_assistance_list_page(list_endpoint_name, page_title, list_heading=None):
+    today = datetime.date.today()
+    first_day_of_month = today.replace(day=1)
+    last_day_of_month = first_day_of_month.replace(
+        day=calendar.monthrange(today.year, today.month)[1]
+    )
+
+    start_date_param = (request.args.get('start_date') or '').strip()
+    end_date_param = (request.args.get('end_date') or '').strip()
+
+    def parse_date(value):
+        if not value:
+            return None
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    start_date = parse_date(start_date_param)
+    end_date = parse_date(end_date_param)
+
+    if start_date_param and start_date is None:
+        flash('Data inicial inválida. Ajuste o filtro e tente novamente.', 'warning')
+        start_date_param = ''
+    if end_date_param and end_date is None:
+        flash('Data final inválida. Ajuste o filtro e tente novamente.', 'warning')
+        end_date_param = ''
+
+    if not start_date_param and not end_date_param:
+        start_date_param = first_day_of_month.strftime('%Y-%m-%d')
+        end_date_param = last_day_of_month.strftime('%Y-%m-%d')
+        start_date = first_day_of_month
+        end_date = last_day_of_month
+
+    selected_statuses = [
+        normalize_lookup_code(value)
+        for value in request.args.getlist('statuses')
+        if value is not None
+    ]
+    selected_statuses = list(dict.fromkeys(selected_statuses))
+
+    assistance_code = (request.args.get('assistance_code') or '').strip()
+    customer_filter = (request.args.get('customer') or '').strip()
+    representative_filter = (request.args.get('representative') or '').strip()
+    responsavel_filter = (request.args.get('responsavel') or '').strip()
+
+    requested_sort_by = (request.args.get('sort_by') or 'assdata').strip()
+    sort_order = (request.args.get('sort_order') or 'desc').strip().lower()
+    if sort_order not in ['asc', 'desc']:
+        sort_order = 'desc'
+
+    extra_sort_fields = {'reservado', 'separado', 'carregado', 'linha'}
+    sort_by_for_query = requested_sort_by
+    if requested_sort_by in extra_sort_fields:
+        sort_by_for_query = 'assdata'
+
+    filters = {
+        'start_date': start_date,
+        'end_date': end_date,
+        'statuses': selected_statuses,
+        'assistance_code': assistance_code,
+        'customer': customer_filter,
+        'representative': representative_filter,
+        'responsavel': responsavel_filter,
+        'sort_by': sort_by_for_query,
+        'sort_order': sort_order,
+    }
+
+    assistance_records, error_message = fetch_technical_assistance(filters)
+    if error_message:
+        flash(error_message, 'danger')
+
+    if requested_sort_by in extra_sort_fields:
+        reverse = sort_order == 'desc'
+        if requested_sort_by == 'linha':
+            assistance_records.sort(
+                key=lambda record: (record.get('linha') or '').strip().upper(),
+                reverse=reverse,
+            )
+        else:
+            assistance_records.sort(
+                key=lambda record: record.get(requested_sort_by) or Decimal('0'),
+                reverse=reverse,
+            )
+
+    total_pecas = Decimal('0')
+    valor_total = Decimal('0')
+    for record in assistance_records:
+        quantidade = record.get('quantidade_pecas')
+        if isinstance(quantidade, Decimal):
+            total_pecas += quantidade
+        elif quantidade is not None:
+            try:
+                total_pecas += Decimal(quantidade)
+            except (TypeError, InvalidOperation):
+                pass
+
+        valor = record.get('valor_total')
+        if isinstance(valor, Decimal):
+            valor_total += valor
+        elif valor is not None:
+            try:
+                valor_total += Decimal(valor)
+            except (TypeError, InvalidOperation):
+                pass
+
+    totals = {
+        'total_registros': len(assistance_records),
+        'total_pecas': total_pecas,
+        'valor_total': valor_total,
+    }
+
+    status_options = get_technical_assistance_status_options()
+
+    active_filters = {
+        'start_date': start_date_param,
+        'end_date': end_date_param,
+        'statuses': selected_statuses,
+        'assistance_code': assistance_code,
+        'customer': customer_filter,
+        'representative': representative_filter,
+        'responsavel': responsavel_filter,
+    }
+
+    return render_template(
+        'production_assistance_list.html',
+        page_title=page_title,
+        assistance_records=assistance_records,
+        totals=totals,
+        status_options=status_options,
+        filters=active_filters,
+        sort_by=requested_sort_by,
         sort_order=sort_order,
         list_url=url_for(list_endpoint_name),
         list_heading=list_heading or page_title,
@@ -7540,7 +7851,7 @@ def render_assistance_list_page(list_endpoint_name, page_title, list_heading=Non
 @app.route('/technical_assistance_list')
 @login_required
 def technical_assistance_list():
-    return render_assistance_list_page(
+    return render_technical_assistance_list_page(
         'technical_assistance_list',
         "Assistência Técnica"
     )
@@ -7549,7 +7860,7 @@ def technical_assistance_list():
 @app.route('/production_assistance_list')
 @login_required
 def production_assistance_list():
-    return render_assistance_list_page(
+    return render_production_assistance_list_page(
         'production_assistance_list',
         "Consultar Assistências"
     )
