@@ -92,6 +92,57 @@ TECHNICAL_ASSISTANCE_SITUATION_LABELS = {
     'NA': 'Não Aprovada',
 }
 
+def _format_combined_filter_label(code, order_labels, assistance_labels):
+    """Compose a friendly label for filters that mix pedidos and assistências."""
+    order_label = (order_labels.get(code) or '').strip()
+    assistance_label = (assistance_labels.get(code) or '').strip()
+    if order_label and assistance_label:
+        if order_label.lower() == assistance_label.lower():
+            base = order_label or assistance_label
+            combined = f"{base} (Pedido e Assistência)"
+        else:
+            combined = f"{order_label} (Pedido) / {assistance_label} (Assistência)"
+    elif order_label:
+        combined = f"{order_label} (Pedido)"
+    elif assistance_label:
+        combined = f"{assistance_label} (Assistência)"
+    else:
+        combined = 'Não Informado'
+
+    code_text = str(code or '').strip()
+    if code_text:
+        return f"{code_text} - {combined}"
+    return combined
+
+
+def _build_combined_filter_options(order_labels, assistance_labels):
+    """Builds ordered filter options joining pedido and assistência codes."""
+    options = []
+    seen = set()
+    for labels in (order_labels, assistance_labels):
+        for code in labels.keys():
+            if code in seen:
+                continue
+            seen.add(code)
+            options.append(
+                {
+                    'code': code,
+                    'label': _format_combined_filter_label(code, order_labels, assistance_labels),
+                }
+            )
+    return options
+
+
+MAP_APPROVAL_STATUS_OPTIONS = _build_combined_filter_options(
+    ORDER_APPROVAL_STATUS_LABELS, TECHNICAL_ASSISTANCE_STATUS_LABELS
+)
+MAP_APPROVAL_STATUS_CODES = {option['code'] for option in MAP_APPROVAL_STATUS_OPTIONS}
+
+MAP_SITUATION_OPTIONS = _build_combined_filter_options(
+    ORDER_SITUATION_LABELS, TECHNICAL_ASSISTANCE_SITUATION_LABELS
+)
+MAP_SITUATION_CODES = {option['code'] for option in MAP_SITUATION_OPTIONS}
+
 SEPARATION_STAGE_OPTIONS = [
     {'code': 'zero', 'label': 'Igual a zero'},
     {'code': 'partial', 'label': 'Parcial'},
@@ -436,6 +487,109 @@ def normalize_coordinate_value(value):
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+EMP_OBSERVATION_LAT_PATTERN = re.compile(
+    r'\bLAT(?:ITUDE)?\s*[:=]?\s*(-?\d+(?:[.,]\d+)?)',
+    re.IGNORECASE,
+)
+EMP_OBSERVATION_LON_PATTERN = re.compile(
+    r'\bLO(?:NG(?:ITUDE)?|N)\s*[:=]?\s*(-?\d+(?:[.,]\d+)?)',
+    re.IGNORECASE,
+)
+
+
+def _safe_parse_float(value):
+    """Converte texto em float usando Decimal para maior tolerância."""
+    if value in (None, ''):
+        return None
+    try:
+        return float(Decimal(str(value).strip()))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def parse_coordinates_from_observation(observation_text):
+    """
+    Extrai latitude e longitude de um texto de observação da empresa.
+    Espera padrões como 'LAT: -3.16' e 'LON: -40.08'.
+    """
+    if not observation_text:
+        return None, None
+
+    normalized = observation_text.replace(',', '.')
+    lat_match = EMP_OBSERVATION_LAT_PATTERN.search(normalized)
+    lon_match = EMP_OBSERVATION_LON_PATTERN.search(normalized)
+
+    latitude_value = _safe_parse_float(lat_match.group(1)) if lat_match else None
+    longitude_value = _safe_parse_float(lon_match.group(1)) if lon_match else None
+
+    return latitude_value, longitude_value
+
+
+def fetch_customer_coordinates_from_observations(company_codes):
+    """
+    Busca coordenadas a partir das observações cadastradas na tabela empresa1.
+    Retorna um dicionário {empresa: {'latitude': lat, 'longitude': lon}}.
+    """
+    normalized_codes = []
+    seen = set()
+    for code in company_codes or []:
+        text = str(code or '').strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        normalized_codes.append(text)
+
+    if not normalized_codes:
+        return {}
+
+    coords_map = {}
+    conn = get_erp_db_connection()
+    if not conn:
+        return coords_map
+
+    cur = None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                CAST(e1.empresa AS TEXT) AS empresa,
+                COALESCE(e1.empseqobs, 0) AS sequencia,
+                COALESCE(e1.empobserva, '') AS observacao
+            FROM empresa1 e1
+            WHERE CAST(e1.empresa AS TEXT) = ANY(%s)
+            ORDER BY CAST(e1.empresa AS TEXT), COALESCE(e1.empseqobs, 0)
+            """,
+            (normalized_codes,),
+        )
+        aggregated = {}
+        for empresa_raw, _, observacao_raw in cur.fetchall():
+            key = (empresa_raw or '').strip()
+            if not key:
+                continue
+            aggregated.setdefault(key, []).append(observacao_raw or '')
+
+        for empresa, fragments in aggregated.items():
+            combined_text = ' '.join(
+                fragment.strip() for fragment in fragments if fragment and fragment.strip()
+            )
+            latitude_value, longitude_value = parse_coordinates_from_observation(combined_text)
+            if latitude_value is None or longitude_value is None:
+                continue
+            coords_map[empresa] = {
+                'latitude': latitude_value,
+                'longitude': longitude_value,
+            }
+    except (Exception, Error) as exc:
+        print(f"Erro ao carregar coordenadas de empresa1: {exc}")
+    finally:
+        if cur:
+            cur.close()
+        conn.close()
+
+    return coords_map
 
 
 def geocode_city_state(city, state, cache=None):
@@ -4306,6 +4460,7 @@ def fetch_orders_from_integrated_view(filters):
             normalized_types.append(text)
     if not normalized_types:
         normalized_types = ['consulta_pedidos']
+    includes_assistance = 'assistencia_tecnica' in normalized_types
 
     sort_by = (filters.get('sort_by') or 'pedido').strip()
     sort_order = (filters.get('sort_order') or 'desc').strip().lower()
@@ -4394,15 +4549,21 @@ def fetch_orders_from_integrated_view(filters):
         production_lots = [value.strip() for value in production_lots if value and value.strip()]
         if production_lots:
             patterns = [f"%{value}%" for value in production_lots]
-            base_query.append(
-                "AND (COALESCE(production_lots_display, '') <> '' AND COALESCE(production_lots_display, '') ILIKE ANY(%s))"
-            )
+            if includes_assistance:
+                base_query.append(
+                    "AND ((record_type <> 'assistencia_tecnica' AND COALESCE(production_lots_display, '') <> '' "
+                    "AND COALESCE(production_lots_display, '') ILIKE ANY(%s)) OR record_type = 'assistencia_tecnica')"
+                )
+            else:
+                base_query.append(
+                    "AND (COALESCE(production_lots_display, '') <> '' AND COALESCE(production_lots_display, '') ILIKE ANY(%s))"
+                )
             params.append(patterns)
 
         approval_statuses = filters.get('approval_statuses') or []
         if approval_statuses:
             normalized = [code.strip().upper() for code in approval_statuses if code]
-            normalized = [code for code in normalized if code in ORDER_APPROVAL_STATUS_LABELS]
+            normalized = [code for code in normalized if code in MAP_APPROVAL_STATUS_CODES]
             if normalized:
                 base_query.append("AND UPPER(COALESCE(approval_status_code, '')) = ANY(%s)")
                 params.append(normalized)
@@ -4410,7 +4571,7 @@ def fetch_orders_from_integrated_view(filters):
         situations = filters.get('situations') or []
         if situations:
             normalized = [code.strip().upper() for code in situations if code is not None]
-            normalized = [code for code in normalized if code in ORDER_SITUATION_LABELS]
+            normalized = [code for code in normalized if code in MAP_SITUATION_CODES]
             if normalized:
                 base_query.append("AND UPPER(COALESCE(situation_code, '')) = ANY(%s)")
                 params.append(normalized)
@@ -4518,6 +4679,12 @@ def fetch_orders_from_integrated_view(filters):
 
             approval_code = (approval_code or '').strip()
             situation_code = (situation_code or '').strip()
+            if record_type == 'assistencia_tecnica':
+                approval_label = get_technical_assistance_status_label(approval_code)
+                situation_label = get_technical_assistance_situation_label(situation_code)
+            else:
+                approval_label = ORDER_APPROVAL_STATUS_LABELS.get(approval_code, 'Não Informado')
+                situation_label = ORDER_SITUATION_LABELS.get(situation_code, 'Não Informada')
 
             orders.append({
                 'record_type': record_type,
@@ -4540,14 +4707,119 @@ def fetch_orders_from_integrated_view(filters):
                 'carregado': carregado,
                 'linha': line_value or 'OUTROS',
                 'approval_status_code': approval_code,
-                'approval_status': ORDER_APPROVAL_STATUS_LABELS.get(approval_code, 'Não Informado'),
+                'approval_status': approval_label,
                 'situation_code': situation_code,
-                'situation': ORDER_SITUATION_LABELS.get(situation_code, 'Não Informada'),
+                'situation': situation_label,
                 'production_lots_display': production_lots_display or '',
                 'load_lot_code': load_lot_code or '',
                 'load_lot_description': load_lot_description or '',
                 'kpi_status': kpi_status,
             })
+
+        if orders:
+            missing_codes = []
+            seen_codes = set()
+            for order in orders:
+                lat_value = normalize_coordinate_value(order.get('latitude'))
+                lon_value = normalize_coordinate_value(order.get('longitude'))
+                if (
+                    lat_value is not None and lon_value is not None
+                    and not isclose(lat_value, 0.0, abs_tol=1e-6)
+                    and not isclose(lon_value, 0.0, abs_tol=1e-6)
+                ):
+                    continue
+                code_text = str(order.get('cliente_codigo') or '').strip()
+                if code_text and code_text not in seen_codes:
+                    seen_codes.add(code_text)
+                    missing_codes.append(code_text)
+
+            if missing_codes:
+                fallback_coordinates = fetch_customer_coordinates_from_observations(missing_codes)
+                if fallback_coordinates:
+                    for order in orders:
+                        code_text = str(order.get('cliente_codigo') or '').strip()
+                        if not code_text:
+                            continue
+                        fallback_coord = fallback_coordinates.get(code_text)
+                        if not fallback_coord:
+                            continue
+
+                        lat_value = normalize_coordinate_value(order.get('latitude'))
+                        lon_value = normalize_coordinate_value(order.get('longitude'))
+                        if (
+                            lat_value is not None and lon_value is not None
+                            and not isclose(lat_value, 0.0, abs_tol=1e-6)
+                            and not isclose(lon_value, 0.0, abs_tol=1e-6)
+                        ):
+                            continue
+
+                        order['latitude'] = fallback_coord['latitude']
+                        order['longitude'] = fallback_coord['longitude']
+                        order['coordinate_source'] = 'customer_observation'
+
+        assistance_identifiers = [
+            str(order.get('document_id') or '').strip()
+            for order in orders
+            if (order.get('record_type') or '').strip().lower() == 'assistencia_tecnica'
+        ]
+        assistance_identifiers = [code for code in assistance_identifiers if code]
+        if assistance_identifiers:
+            assistance_metrics = fetch_assistance_operational_metrics(assistance_identifiers)
+            if assistance_metrics:
+                def to_float(value):
+                    if value in (None, ''):
+                        return 0.0
+                    try:
+                        return float(value)
+                    except (TypeError, ValueError, InvalidOperation):
+                        try:
+                            return float(Decimal(str(value)))
+                        except (TypeError, ValueError, InvalidOperation):
+                            return 0.0
+
+                for order in orders:
+                    if (order.get('record_type') or '').strip().lower() != 'assistencia_tecnica':
+                        continue
+                    key = str(order.get('document_id') or '').strip()
+                    if not key:
+                        continue
+                    metrics = assistance_metrics.get(key)
+                    if not metrics:
+                        continue
+                    order['reservado'] = to_float(metrics.get('reservado'))
+                    order['separado'] = to_float(metrics.get('separado'))
+                    order['carregado'] = to_float(metrics.get('carregado'))
+                    metrics_line = (metrics.get('linha') or '').strip()
+                    if metrics_line:
+                        current_line = str(order.get('linha') or '').strip()
+                        if not current_line or current_line.upper() == 'OUTROS':
+                            order['linha'] = metrics_line
+
+            production_lot_map = fetch_assistance_production_lots(assistance_identifiers)
+            if production_lot_map:
+                for order in orders:
+                    if (order.get('record_type') or '').strip().lower() != 'assistencia_tecnica':
+                        continue
+                    key = str(order.get('document_id') or '').strip()
+                    if not key:
+                        continue
+                    lot_display = production_lot_map.get(key)
+                    if not lot_display:
+                        continue
+                    existing_display = (order.get('production_lots_display') or '').strip()
+                    if existing_display:
+                        combined = []
+                        for value in existing_display.split(';'):
+                            cleaned = value.strip()
+                            if cleaned and cleaned not in combined:
+                                combined.append(cleaned)
+                        for value in lot_display.split(';'):
+                            cleaned = value.strip()
+                            if cleaned and cleaned not in combined:
+                                combined.append(cleaned)
+                        order['production_lots_display'] = '; '.join(combined)
+                    else:
+                        order['production_lots_display'] = lot_display
     except Error as exc:
         print(f"Erro ao carregar pedidos via view integrada: {exc}")
         error_message = f"Erro ao carregar pedidos via view integrada: {exc}"
@@ -4556,6 +4828,75 @@ def fetch_orders_from_integrated_view(filters):
             conn.close()
 
     return orders, error_message
+
+
+def fetch_assistance_production_lots(assistance_codes):
+    """
+    Localiza os lotes de produção associados às assistências técnicas informadas.
+    Retorna um dicionário {codigo_assistencia: 'lote - descrição'}.
+    """
+    normalized = []
+    seen = set()
+    for code in assistance_codes or []:
+        text = str(code or '').strip()
+        if not text:
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        normalized.append(text)
+
+    if not normalized:
+        return {}
+
+    production_lot_map = {}
+    conn = get_erp_db_connection()
+    if not conn:
+        return production_lot_map
+
+    cur = None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                ao.acaorasco::text AS assistance_code,
+                TRIM(COALESCE(o.lotcod::text, '')) AS lot_code,
+                TRIM(COALESCE(lp.lotdes, '')) AS lot_description
+            FROM acaorde4 ao
+            INNER JOIN ordem o ON o.ordem = ao.acaoorde
+            LEFT JOIN loteprod lp ON lp.lotcod = o.lotcod
+            WHERE ao.acaorasco::text = ANY(%s)
+              AND TRIM(COALESCE(o.lotcod::text, '')) <> ''
+            """,
+            (normalized,),
+        )
+
+        aggregated = {}
+        for assistance_code, lot_code, lot_description in cur.fetchall():
+            assistance_key = (assistance_code or '').strip()
+            lot_code = (lot_code or '').strip()
+            lot_description = (lot_description or '').strip()
+            if not assistance_key or not lot_code:
+                continue
+            label = lot_code
+            if lot_description:
+                label = f"{lot_code} - {lot_description}"
+            entries = aggregated.setdefault(assistance_key, [])
+            if label not in entries:
+                entries.append(label)
+
+        for assistance_code, labels in aggregated.items():
+            production_lot_map[assistance_code] = '; '.join(labels)
+    except (Exception, Error) as error:
+        print(f"Erro ao carregar lotes de produção das assistências: {error}")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    return production_lot_map
 
 
 def fetch_assistance_operational_metrics(assistance_codes):
@@ -5861,8 +6202,8 @@ def orders_list():
         load_lot_options=get_distinct_load_lots(),
         production_lot_options=get_distinct_production_lots(),
         product_line_options=get_distinct_product_lines(),
-        approval_status_options=ORDER_APPROVAL_STATUS_OPTIONS,
-        situation_options=ORDER_SITUATION_OPTIONS,
+        approval_status_options=MAP_APPROVAL_STATUS_OPTIONS,
+        situation_options=MAP_SITUATION_OPTIONS,
         totals=totals,
         sort_by=sort_by_param,
         sort_order=sort_order_param,
@@ -6122,15 +6463,22 @@ def load_lot_route_planner():
 
     filtered_orders = [order for order in orders if matches_stage(order)]
 
+    def has_production_lot(order):
+        return bool((order.get('production_lots_display') or '').strip())
+
+    def is_assistance_record(order):
+        record_type = (order.get('record_type') or '').strip().lower()
+        return record_type == 'assistencia_tecnica'
+
     if missing_production_lot_param == 'yes':
         filtered_orders = [
             order for order in filtered_orders
-            if not (order.get('production_lots_display') or '').strip()
+            if is_assistance_record(order) or not has_production_lot(order)
         ]
     elif missing_production_lot_param == 'no':
         filtered_orders = [
             order for order in filtered_orders
-            if (order.get('production_lots_display') or '').strip()
+            if is_assistance_record(order) or has_production_lot(order)
         ]
 
     def extract_production_lots(display_value):
@@ -6168,14 +6516,14 @@ def load_lot_route_planner():
 
     selected_production_lot_codes = {code for code in production_lots_param if code}
     if selected_production_lot_codes and missing_production_lot_param != 'yes':
-        def order_has_only_selected_lots(order):
+        def order_matches_selected_lots(order):
             entries = extract_production_lots(order.get('production_lots_display', ''))
             order_codes = {entry['code'] for entry in entries if entry['code']}
             if not order_codes:
                 return False
-            return order_codes.issubset(selected_production_lot_codes)
+            return bool(order_codes.intersection(selected_production_lot_codes))
 
-        filtered_orders = [order for order in filtered_orders if order_has_only_selected_lots(order)]
+        filtered_orders = [order for order in filtered_orders if order_matches_selected_lots(order)]
 
     def decimal_from(value):
         if isinstance(value, Decimal):
@@ -6208,11 +6556,13 @@ def load_lot_route_planner():
     code_group_map = {}
     group_display_map = {}
     lot_groups_in_order = []
-    assistance_present = False
+    assistance_without_lot = False
     for order in filtered_orders:
-        if (order.get('record_type') or '').lower() == 'assistencia_tecnica':
-            assistance_present = True
-        for entry in extract_production_lots(order.get('production_lots_display', '')):
+        entries = extract_production_lots(order.get('production_lots_display', ''))
+        is_assistance = (order.get('record_type') or '').strip().lower() == 'assistencia_tecnica'
+        if is_assistance and not entries:
+            assistance_without_lot = True
+        for entry in entries:
             code = entry['code']
             group_key = entry.get('group_key', '')
             if code and code not in lot_display_map:
@@ -6229,7 +6579,7 @@ def load_lot_route_planner():
             if group_key and group_key not in lot_groups_in_order:
                 lot_groups_in_order.append(group_key)
 
-    if assistance_present:
+    if assistance_without_lot:
         assistance_code = '__assist__'
         if assistance_code not in lot_display_map:
             lot_display_map[assistance_code] = 'Assistência Técnica'
@@ -6265,13 +6615,14 @@ def load_lot_route_planner():
             lot_color_map[code] = color_palette[next_color_index % len(color_palette)]
             next_color_index += 1
 
-    if assistance_present:
+    if assistance_without_lot:
         lot_color_map['__assist__'] = '#7c3aed'
 
     geocode_cache = GEOCODE_CACHE
 
     map_orders = []
     for order in filtered_orders:
+        record_type_value = (order.get('record_type') or '').strip().lower()
         kpi_status = order.get('kpi_status')
         if kpi_status == 1:
             stage_key = 'partial'
@@ -6285,7 +6636,7 @@ def load_lot_route_planner():
 
         latitude = normalize_coordinate_value(order.get('latitude'))
         longitude = normalize_coordinate_value(order.get('longitude'))
-        coordinate_source = 'database'
+        coordinate_source = order.get('coordinate_source') or 'database'
         if (
             latitude is None or longitude is None
             or isclose(latitude, 0.0, abs_tol=1e-6)
@@ -6314,11 +6665,12 @@ def load_lot_route_planner():
                 primary_lot_label = entry['label']
                 marker_fill = lot_color_map[entry['code']]
                 break
-        if (order.get('record_type') or '').lower() == 'assistencia_tecnica':
+        if record_type_value == 'assistencia_tecnica' and not primary_lot_code:
             primary_lot_code = '__assist__'
             primary_lot_label = 'Assistência Técnica'
-            marker_fill = '#7c3aed'
-            lot_color_map['__assist__'] = '#7c3aed'
+            if '__assist__' not in lot_color_map:
+                lot_color_map['__assist__'] = '#7c3aed'
+            marker_fill = lot_color_map['__assist__']
         map_orders.append(
             {
                 'pedido': order.get('pedido'),
@@ -6564,26 +6916,26 @@ def load_lot_route_planner_v2():
     approval_status_param = []
     for raw_value in request.args.getlist('approval_statuses'):
         code = clean_string(raw_value).upper()
-        if code in ORDER_APPROVAL_STATUS_LABELS and code not in approval_status_param:
+        if code in MAP_APPROVAL_STATUS_CODES and code not in approval_status_param:
             approval_status_param.append(code)
     if not approval_status_param and not ignore_saved_defaults:
         saved_approval_statuses = [
             code.upper()
             for code in deduplicate_preserve_order(clean_list(saved_filters.get('approval_statuses')))
-            if code.upper() in ORDER_APPROVAL_STATUS_LABELS
+            if code.upper() in MAP_APPROVAL_STATUS_CODES
         ]
         approval_status_param = saved_approval_statuses
 
     situation_param = []
     for raw_value in request.args.getlist('situations'):
         code = clean_string(raw_value).upper()
-        if code in ORDER_SITUATION_LABELS and code not in situation_param:
+        if code in MAP_SITUATION_CODES and code not in situation_param:
             situation_param.append(code)
     if not situation_param and not ignore_saved_defaults:
         saved_situations = [
             code.upper()
             for code in deduplicate_preserve_order(clean_list(saved_filters.get('situations'), allow_blank=True))
-            if code.upper() in ORDER_SITUATION_LABELS
+            if code.upper() in MAP_SITUATION_CODES
         ]
         situation_param = saved_situations
 
@@ -6676,15 +7028,22 @@ def load_lot_route_planner_v2():
 
     filtered_orders = [order for order in orders if matches_stage(order)]
 
+    def has_production_lot(order):
+        return bool((order.get('production_lots_display') or '').strip())
+
+    def is_assistance_record(order):
+        record_type = (order.get('record_type') or '').strip().lower()
+        return record_type == 'assistencia_tecnica'
+
     if missing_production_lot_param == 'yes':
         filtered_orders = [
             order for order in filtered_orders
-            if not (order.get('production_lots_display') or '').strip()
+            if is_assistance_record(order) or not has_production_lot(order)
         ]
     elif missing_production_lot_param == 'no':
         filtered_orders = [
             order for order in filtered_orders
-            if (order.get('production_lots_display') or '').strip()
+            if is_assistance_record(order) or has_production_lot(order)
         ]
 
     def extract_production_lots(display_value):
@@ -6722,14 +7081,14 @@ def load_lot_route_planner_v2():
 
     selected_production_lot_codes = {code for code in production_lots_param if code}
     if selected_production_lot_codes and missing_production_lot_param != 'yes':
-        def order_has_only_selected_lots(order):
+        def order_matches_selected_lots(order):
             entries = extract_production_lots(order.get('production_lots_display', ''))
             order_codes = {entry['code'] for entry in entries if entry['code']}
             if not order_codes:
                 return False
-            return order_codes.issubset(selected_production_lot_codes)
+            return bool(order_codes.intersection(selected_production_lot_codes))
 
-        filtered_orders = [order for order in filtered_orders if order_has_only_selected_lots(order)]
+        filtered_orders = [order for order in filtered_orders if order_matches_selected_lots(order)]
 
     def decimal_from(value):
         if isinstance(value, Decimal):
@@ -6762,11 +7121,13 @@ def load_lot_route_planner_v2():
     code_group_map = {}
     group_display_map = {}
     lot_groups_in_order = []
-    assistance_present = False
+    assistance_without_lot = False
     for order in filtered_orders:
-        if (order.get('record_type') or '').lower() == 'assistencia_tecnica':
-            assistance_present = True
-        for entry in extract_production_lots(order.get('production_lots_display', '')):
+        entries = extract_production_lots(order.get('production_lots_display', ''))
+        is_assistance = (order.get('record_type') or '').strip().lower() == 'assistencia_tecnica'
+        if is_assistance and not entries:
+            assistance_without_lot = True
+        for entry in entries:
             code = entry['code']
             group_key = entry.get('group_key', '')
             if code and code not in lot_display_map:
@@ -6783,7 +7144,7 @@ def load_lot_route_planner_v2():
             if group_key and group_key not in lot_groups_in_order:
                 lot_groups_in_order.append(group_key)
 
-    if assistance_present:
+    if assistance_without_lot:
         assistance_code = '__assist__'
         if assistance_code not in lot_display_map:
             lot_display_map[assistance_code] = 'Assistência Técnica'
@@ -6819,13 +7180,14 @@ def load_lot_route_planner_v2():
             lot_color_map[code] = color_palette[next_color_index % len(color_palette)]
             next_color_index += 1
 
-    if assistance_present:
+    if assistance_without_lot:
         lot_color_map['__assist__'] = '#7c3aed'
 
     geocode_cache = GEOCODE_CACHE
 
     map_orders = []
     for order in filtered_orders:
+        record_type_value = (order.get('record_type') or '').strip().lower()
         kpi_status = order.get('kpi_status')
         if kpi_status == 1:
             stage_key = 'partial'
@@ -6839,7 +7201,7 @@ def load_lot_route_planner_v2():
 
         latitude = normalize_coordinate_value(order.get('latitude'))
         longitude = normalize_coordinate_value(order.get('longitude'))
-        coordinate_source = 'database'
+        coordinate_source = order.get('coordinate_source') or 'database'
         if (
             latitude is None or longitude is None
             or isclose(latitude, 0.0, abs_tol=1e-6)
@@ -6868,10 +7230,12 @@ def load_lot_route_planner_v2():
                 primary_lot_label = entry['label']
                 marker_fill = lot_color_map[entry['code']]
                 break
-        if (order.get('record_type') or '').lower() == 'assistencia_tecnica':
+        if record_type_value == 'assistencia_tecnica' and not primary_lot_code:
             primary_lot_code = '__assist__'
             primary_lot_label = 'Assistência Técnica'
-            marker_fill = lot_color_map.get('__assist__', '#7c3aed')
+            if '__assist__' not in lot_color_map:
+                lot_color_map['__assist__'] = '#7c3aed'
+            marker_fill = lot_color_map['__assist__']
 
         map_orders.append(
             {
@@ -7012,8 +7376,8 @@ def load_lot_route_planner_v2():
         map_orders_summary=map_orders_summary,
         filters=filters,
         production_lot_options=get_distinct_production_lots(),
-        approval_status_options=ORDER_APPROVAL_STATUS_OPTIONS,
-        situation_options=ORDER_SITUATION_OPTIONS,
+        approval_status_options=MAP_APPROVAL_STATUS_OPTIONS,
+        situation_options=MAP_SITUATION_OPTIONS,
         production_lot_colors=lot_color_map,
         lot_color_legend=lot_color_legend,
         lot_color_legend_groups=lot_color_legend_groups,
@@ -7206,7 +7570,7 @@ def save_load_lot_route_filters_v2():
         missing_production_lot = ''
     sanitized_filters['missing_production_lot'] = missing_production_lot
 
-    allowed_status_codes = set(ORDER_APPROVAL_STATUS_LABELS.keys())
+    allowed_status_codes = set(MAP_APPROVAL_STATUS_CODES)
     approval_statuses = [
         code.upper()
         for code in deduplicate_preserve_order(clean_list(payload.get('approval_statuses')))
@@ -7214,7 +7578,7 @@ def save_load_lot_route_filters_v2():
     ]
     sanitized_filters['approval_statuses'] = approval_statuses
 
-    allowed_situation_codes = set(ORDER_SITUATION_LABELS.keys())
+    allowed_situation_codes = set(MAP_SITUATION_CODES)
     situations = [
         code.upper()
         for code in deduplicate_preserve_order(clean_list(payload.get('situations'), allow_blank=True))

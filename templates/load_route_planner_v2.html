@@ -834,6 +834,12 @@
         align-items: center;
         justify-content: center;
     }
+    .planner-marker.is-assistance {
+        border-radius: 0;
+    }
+    .planner-marker.is-assistance .inner {
+        border-radius: 0;
+    }
     .planner-marker.is-selected {
         transform: scale(1.05);
         box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.35);
@@ -948,6 +954,10 @@
                 <div class="metric">
                     <span>Distância estimada</span>
                     <strong id="routeDistance">—</strong>
+                </div>
+                <div class="metric">
+                    <span>Tempo estimado</span>
+                    <strong id="routeDuration">—</strong>
                 </div>
                 <button id="clearRoute" class="btn-secondary px-4 py-2 rounded-lg">Limpar rota</button>
             </div>
@@ -1727,6 +1737,8 @@
     const mapLoadingError = document.getElementById('routePlannerMapError');
     const mapLoadingErrorMessage = document.getElementById('routePlannerMapErrorMessage');
     const mapLoadingRetryButton = document.getElementById('routePlannerMapRetry');
+    const routeDistanceElement = document.getElementById('routeDistance');
+    const routeDurationElement = document.getElementById('routeDuration');
 
     function escapeHtml(value) {
         if (value === null || value === undefined) {
@@ -1895,6 +1907,12 @@
             if (!ordersById.has(id)) {
                 selectedOrderIds.splice(index, 1);
             }
+        }
+        reorderSelectedOrders();
+        if (selectedOrderIds.length >= 2) {
+            updateRouteLine();
+        } else {
+            resetRouteMetrics();
         }
     }
 
@@ -2126,6 +2144,13 @@
     }
 
     const defaultView = [-14.2350, -51.9253];
+    const OSRM_ROUTE_BASE_URL = 'https://router.project-osrm.org/route/v1/driving/';
+    const ROUTE_DIRECT_LIMIT = 20;
+    const ROUTE_REQUEST_DELAY_MS = 450;
+    const AVERAGE_ROUTE_SPEED_KMH = 60;
+    const ROUTE_CACHE = new Map();
+    const ROUTE_SEGMENT_CACHE = new Map();
+    let routeComputationToken = 0;
 
     function haversineDistance(start, end) {
         const toRad = (value) => (value * Math.PI) / 180;
@@ -2145,6 +2170,347 @@
             total += haversineDistance(points[i - 1], points[i]);
         }
         return total;
+    }
+
+    function delay(ms) {
+        return new Promise((resolve) => {
+            window.setTimeout(resolve, ms);
+        });
+    }
+
+    function formatRouteDistance(distanceKm) {
+        if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
+            return '—';
+        }
+        if (distanceKm >= 100) {
+            return `${distanceKm.toFixed(0)} km`;
+        }
+        return `${distanceKm.toFixed(1)} km`;
+    }
+
+    function formatRouteDuration(minutes) {
+        if (!Number.isFinite(minutes) || minutes <= 0) {
+            return '—';
+        }
+        const totalMinutes = Math.round(minutes);
+        const hours = Math.floor(totalMinutes / 60);
+        const remainingMinutes = totalMinutes % 60;
+        if (hours > 0 && remainingMinutes > 0) {
+            return `${hours}h ${remainingMinutes}min`;
+        }
+        if (hours > 0) {
+            return `${hours}h`;
+        }
+        return `${remainingMinutes}min`;
+    }
+
+    function estimateDurationFromDistance(distanceKm) {
+        if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
+            return 0;
+        }
+        if (!Number.isFinite(AVERAGE_ROUTE_SPEED_KMH) || AVERAGE_ROUTE_SPEED_KMH <= 0) {
+            return 0;
+        }
+        return (distanceKm / AVERAGE_ROUTE_SPEED_KMH) * 60;
+    }
+
+    function buildRouteCacheKey(points) {
+        return points
+            .map(point => {
+                if (!Array.isArray(point) || point.length < 2) {
+                    return '';
+                }
+                return `${point[0].toFixed(5)},${point[1].toFixed(5)}`;
+            })
+            .join('|');
+    }
+
+    async function fetchOsrmRoute(points) {
+        if (!Array.isArray(points) || points.length < 2) {
+            return null;
+        }
+        const cacheKey = buildRouteCacheKey(points);
+        if (ROUTE_CACHE.has(cacheKey)) {
+            return ROUTE_CACHE.get(cacheKey);
+        }
+        const coordParam = points
+            .map(([lat, lon]) => `${lon.toFixed(6)},${lat.toFixed(6)}`)
+            .join(';');
+        const url = `${OSRM_ROUTE_BASE_URL}${coordParam}?overview=full&geometries=geojson&steps=false`;
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                return null;
+            }
+            const data = await response.json();
+            if (!data || !data.routes || !data.routes.length) {
+                return null;
+            }
+            const route = data.routes[0] || {};
+            const geometry = Array.isArray(route.geometry?.coordinates) ? route.geometry.coordinates : [];
+            const coords = geometry.map(([lon, lat]) => [lat, lon]);
+            const result = {
+                coords,
+                distanceKm: typeof route.distance === 'number' ? route.distance / 1000 : null,
+                durationMinutes: typeof route.duration === 'number' ? route.duration / 60 : null,
+            };
+            ROUTE_CACHE.set(cacheKey, result);
+            return result;
+        } catch (error) {
+            console.error('Erro ao consultar rota OSRM:', error);
+            return null;
+        }
+    }
+
+    function getRouteSegmentKey(start, end) {
+        const serialize = (point) => {
+            if (!Array.isArray(point) || point.length < 2) {
+                return '';
+            }
+            return `${point[0].toFixed(5)},${point[1].toFixed(5)}`;
+        };
+        return `${serialize(start)}|${serialize(end)}`;
+    }
+
+    async function fetchOsrmSegment(start, end) {
+        if (!start || !end) {
+            return null;
+        }
+        const cacheKey = getRouteSegmentKey(start, end);
+        if (ROUTE_SEGMENT_CACHE.has(cacheKey)) {
+            return ROUTE_SEGMENT_CACHE.get(cacheKey);
+        }
+        const url = `${OSRM_ROUTE_BASE_URL}${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson&steps=false`;
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                return null;
+            }
+            const data = await response.json();
+            if (!data || !data.routes || !data.routes.length) {
+                return null;
+            }
+            const route = data.routes[0] || {};
+            const geometry = Array.isArray(route.geometry?.coordinates) ? route.geometry.coordinates : [];
+            const coords = geometry.map(([lon, lat]) => [lat, lon]);
+            const result = {
+                coords,
+                distanceKm: typeof route.distance === 'number' ? route.distance / 1000 : null,
+                durationMinutes: typeof route.duration === 'number' ? route.duration / 60 : null,
+            };
+            ROUTE_SEGMENT_CACHE.set(cacheKey, result);
+            return result;
+        } catch (error) {
+            console.error('Erro ao consultar segmento OSRM:', error);
+            return null;
+        }
+    }
+
+    async function buildRouteFromSegments(points) {
+        if (!Array.isArray(points) || points.length < 2) {
+            return null;
+        }
+        const combined = [points[0]];
+        let totalDistance = 0;
+        let totalDuration = 0;
+        for (let index = 0; index < points.length - 1; index += 1) {
+            const start = points[index];
+            const end = points[index + 1];
+            let segmentDistance = haversineDistance(start, end);
+            let segmentDuration = estimateDurationFromDistance(segmentDistance);
+            let segmentCoords = [start, end];
+            try {
+                const segment = await fetchOsrmSegment(start, end);
+                if (segment && Array.isArray(segment.coords) && segment.coords.length >= 2) {
+                    segmentCoords = segment.coords;
+                    if (Number.isFinite(segment.distanceKm)) {
+                        segmentDistance = segment.distanceKm;
+                    } else {
+                        segmentDistance = calculateLinearDistance(segmentCoords);
+                    }
+                    if (Number.isFinite(segment.durationMinutes)) {
+                        segmentDuration = segment.durationMinutes;
+                    } else {
+                        segmentDuration = estimateDurationFromDistance(segmentDistance);
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao construir segmento de rota:', error);
+            }
+            totalDistance += segmentDistance;
+            totalDuration += segmentDuration;
+            segmentCoords.slice(1).forEach(coord => combined.push(coord));
+            await delay(ROUTE_REQUEST_DELAY_MS);
+        }
+        return {
+            coords: combined,
+            distanceKm: totalDistance,
+            durationMinutes: totalDuration,
+        };
+    }
+
+    async function buildRoadRoute(points) {
+        if (!Array.isArray(points) || points.length < 2) {
+            return null;
+        }
+        if (points.length <= ROUTE_DIRECT_LIMIT) {
+            const directRoute = await fetchOsrmRoute(points);
+            if (directRoute && Array.isArray(directRoute.coords) && directRoute.coords.length >= 2) {
+                const distance = Number.isFinite(directRoute.distanceKm)
+                    ? directRoute.distanceKm
+                    : calculateLinearDistance(directRoute.coords);
+                const duration = Number.isFinite(directRoute.durationMinutes)
+                    ? directRoute.durationMinutes
+                    : estimateDurationFromDistance(distance);
+                return {
+                    coords: directRoute.coords,
+                    distanceKm: distance,
+                    durationMinutes: duration,
+                };
+            }
+        }
+        return buildRouteFromSegments(points);
+    }
+
+    function getOrderCoordinates(order) {
+        if (!order) {
+            return null;
+        }
+        const latitude = Number(order.latitude);
+        const longitude = Number(order.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            return null;
+        }
+        return [latitude, longitude];
+    }
+
+    function buildOptimizableNodes(orderIds) {
+        const nodes = [];
+        const missing = [];
+        orderIds.forEach((orderId) => {
+            const order = ordersById.get(orderId);
+            const coords = getOrderCoordinates(order);
+            if (coords) {
+                nodes.push({ id: orderId, coords });
+            } else {
+                missing.push(orderId);
+            }
+        });
+        return { nodes, missing };
+    }
+
+    function computeRouteDistanceFromNodes(routeNodes) {
+        if (!Array.isArray(routeNodes) || routeNodes.length < 2) {
+            return 0;
+        }
+        let distance = 0;
+        for (let index = 1; index < routeNodes.length; index += 1) {
+            distance += haversineDistance(routeNodes[index - 1].coords, routeNodes[index].coords);
+        }
+        return distance;
+    }
+
+    function buildNearestNeighborRoute(nodes) {
+        if (!nodes.length) {
+            return [];
+        }
+        let bestRoute = null;
+        let bestDistance = Infinity;
+        const idToNode = new Map(nodes.map(node => [node.id, node]));
+        nodes.forEach((startNode) => {
+            const remaining = new Set(nodes.map(node => node.id));
+            const route = [];
+            let current = startNode;
+            remaining.delete(current.id);
+            route.push(current);
+            while (remaining.size) {
+                let nextId = null;
+                let smallestDistance = Infinity;
+                remaining.forEach((candidateId) => {
+                    const candidate = idToNode.get(candidateId);
+                    if (!candidate) {
+                        return;
+                    }
+                    const distance = haversineDistance(current.coords, candidate.coords);
+                    if (distance < smallestDistance) {
+                        smallestDistance = distance;
+                        nextId = candidateId;
+                    }
+                });
+                if (!nextId) {
+                    break;
+                }
+                current = idToNode.get(nextId);
+                remaining.delete(nextId);
+                route.push(current);
+            }
+            const totalDistance = computeRouteDistanceFromNodes(route);
+            if (route.length === nodes.length && totalDistance < bestDistance) {
+                bestDistance = totalDistance;
+                bestRoute = route;
+            }
+        });
+        return bestRoute || nodes.slice();
+    }
+
+    function applyTwoOpt(routeNodes) {
+        if (!Array.isArray(routeNodes) || routeNodes.length < 4) {
+            return routeNodes.slice();
+        }
+        let bestRoute = routeNodes.slice();
+        let bestDistance = computeRouteDistanceFromNodes(bestRoute);
+        let improved = true;
+        while (improved) {
+            improved = false;
+            for (let i = 0; i < bestRoute.length - 2; i += 1) {
+                for (let k = i + 2; k < bestRoute.length; k += 1) {
+                    const candidateRoute = [
+                        ...bestRoute.slice(0, i + 1),
+                        ...bestRoute.slice(i + 1, k + 1).reverse(),
+                        ...bestRoute.slice(k + 1),
+                    ];
+                    const candidateDistance = computeRouteDistanceFromNodes(candidateRoute);
+                    if (candidateDistance + 1e-6 < bestDistance) {
+                        bestRoute = candidateRoute;
+                        bestDistance = candidateDistance;
+                        improved = true;
+                        break;
+                    }
+                }
+                if (improved) {
+                    break;
+                }
+            }
+        }
+        return bestRoute;
+    }
+
+    function optimizeSelectedOrderSequence(orderIds) {
+        if (!Array.isArray(orderIds) || orderIds.length <= 2) {
+            return Array.isArray(orderIds) ? orderIds.slice() : [];
+        }
+        const { nodes, missing } = buildOptimizableNodes(orderIds);
+        if (nodes.length <= 2) {
+            return [...nodes.map(node => node.id), ...missing];
+        }
+        const initialRoute = buildNearestNeighborRoute(nodes);
+        const improvedRoute = applyTwoOpt(initialRoute);
+        const optimizedIds = improvedRoute.map(node => node.id);
+        if (missing.length) {
+            return optimizedIds.concat(missing);
+        }
+        return optimizedIds;
+    }
+
+    function reorderSelectedOrders() {
+        if (selectedOrderIds.length <= 2) {
+            return;
+        }
+        const optimized = optimizeSelectedOrderSequence(selectedOrderIds);
+        if (!optimized.length) {
+            return;
+        }
+        selectedOrderIds.splice(0, selectedOrderIds.length, ...optimized);
     }
 
     function getStageKey(order) {
@@ -2194,10 +2560,14 @@
             return L.divIcon({ className: '' });
         }
         const stageKey = order.stage_key || getStageKey(order);
+        const recordType = (order.record_type || '').toString().toLowerCase();
         const borderColor = order.marker_border || borderColors[stageKey] || '#1f2937';
         const fillColor = order.marker_fill || '#1f3a5f';
         const quantityLabel = formatQuantity(order.quantidade_total);
         const classes = ['planner-marker'];
+        if (recordType === 'assistencia_tecnica') {
+            classes.push('is-assistance');
+        }
         if (isSelected) {
             classes.push('is-selected');
         }
@@ -2438,8 +2808,11 @@
 
     function updateRouteLine() {
         if (!map) {
+            resetRouteMetrics();
             return;
         }
+        routeComputationToken += 1;
+        const token = routeComputationToken;
         if (routeLine) {
             map.removeLayer(routeLine);
             routeLine = null;
@@ -2448,14 +2821,50 @@
             .map(id => ordersById.get(id))
             .filter(order => order && order.latitude && order.longitude)
             .map(order => [order.latitude, order.longitude]);
-        if (coords.length >= 2) {
+        if (coords.length < 2) {
+            resetRouteMetrics();
+            return;
+        }
+        setRouteMetricsText('Calculando...', 'Calculando...');
+        buildRoadRoute(coords).then((route) => {
+            if (token !== routeComputationToken) {
+                return;
+            }
+            let polylineCoords = coords;
+            let distanceKm = calculateLinearDistance(coords);
+            let durationMinutes = estimateDurationFromDistance(distanceKm);
+            if (route && Array.isArray(route.coords) && route.coords.length >= 2) {
+                polylineCoords = route.coords;
+                if (Number.isFinite(route.distanceKm)) {
+                    distanceKm = route.distanceKm;
+                } else {
+                    distanceKm = calculateLinearDistance(polylineCoords);
+                }
+                if (Number.isFinite(route.durationMinutes)) {
+                    durationMinutes = route.durationMinutes;
+                } else {
+                    durationMinutes = estimateDurationFromDistance(distanceKm);
+                }
+            }
+            if (routeLine) {
+                map.removeLayer(routeLine);
+            }
+            routeLine = L.polyline(polylineCoords, { color: '#1d4ed8', weight: 4, opacity: 0.85 }).addTo(map);
+            if (polylineCoords.length >= 2) {
+                map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+            }
+            setRouteMetrics(distanceKm, durationMinutes);
+        }).catch((error) => {
+            console.error('Erro ao construir rota rodoviária:', error);
+            if (token !== routeComputationToken) {
+                return;
+            }
+            const fallbackDistance = calculateLinearDistance(coords);
+            const fallbackDuration = estimateDurationFromDistance(fallbackDistance);
             routeLine = L.polyline(coords, { color: '#1d4ed8', weight: 4, opacity: 0.85 }).addTo(map);
             map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
-            const distance = calculateLinearDistance(coords);
-            document.getElementById('routeDistance').textContent = `${distance.toFixed(1)} km`;
-        } else {
-            document.getElementById('routeDistance').textContent = '—';
-        }
+            setRouteMetrics(fallbackDistance, fallbackDuration);
+        });
     }
 
     function syncTableRows() {
@@ -2484,6 +2893,28 @@
         plannerList.style.maxHeight = `${maxHeight}px`;
     }
 
+    function setRouteMetrics(distanceKm, durationMinutes) {
+        if (routeDistanceElement) {
+            routeDistanceElement.textContent = formatRouteDistance(distanceKm);
+        }
+        if (routeDurationElement) {
+            routeDurationElement.textContent = formatRouteDuration(durationMinutes);
+        }
+    }
+
+    function setRouteMetricsText(distanceText, durationText) {
+        if (routeDistanceElement) {
+            routeDistanceElement.textContent = distanceText;
+        }
+        if (routeDurationElement) {
+            routeDurationElement.textContent = durationText;
+        }
+    }
+
+    function resetRouteMetrics() {
+        setRouteMetricsText('—', '—');
+    }
+
     function toggleOrderSelection(orderId) {
         const normalizedId = String(orderId);
         const idx = selectedOrderIds.indexOf(normalizedId);
@@ -2492,6 +2923,7 @@
         } else {
             selectedOrderIds.splice(idx, 1);
         }
+        reorderSelectedOrders();
         refreshMarker(normalizedId);
         updateSelectionSummary();
         updateRouteLine();
