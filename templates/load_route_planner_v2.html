@@ -2638,6 +2638,7 @@
                 }
                 const marker = L.marker([order.latitude, order.longitude], { icon: createMarkerIcon(order, false, shouldDimOrder(order, false)) });
                 marker.bindPopup(buildPopupContent(order));
+                marker.on('mouseover', () => marker.openPopup());
                 marker.on('click', () => toggleOrderSelection(markerKey));
                 markersById.set(markerKey, marker);
                 chunkMarkers.push(marker);

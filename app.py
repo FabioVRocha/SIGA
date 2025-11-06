@@ -4758,7 +4758,7 @@ def fetch_orders_from_integrated_view(filters):
                         order['coordinate_source'] = 'customer_observation'
 
         assistance_identifiers = [
-            str(order.get('document_id') or '').strip()
+            str(order.get('pedido') or order.get('document_id') or '').strip()
             for order in orders
             if (order.get('record_type') or '').strip().lower() == 'assistencia_tecnica'
         ]
@@ -4780,7 +4780,7 @@ def fetch_orders_from_integrated_view(filters):
                 for order in orders:
                     if (order.get('record_type') or '').strip().lower() != 'assistencia_tecnica':
                         continue
-                    key = str(order.get('document_id') or '').strip()
+                    key = str(order.get('pedido') or order.get('document_id') or '').strip()
                     if not key:
                         continue
                     metrics = assistance_metrics.get(key)
@@ -4800,7 +4800,7 @@ def fetch_orders_from_integrated_view(filters):
                 for order in orders:
                     if (order.get('record_type') or '').strip().lower() != 'assistencia_tecnica':
                         continue
-                    key = str(order.get('document_id') or '').strip()
+                    key = str(order.get('pedido') or order.get('document_id') or '').strip()
                     if not key:
                         continue
                     lot_display = production_lot_map.get(key)
