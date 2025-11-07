@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}{{ page_title or 'Assistência Técnica' }}{% endblock %}
+{% block title %}{{ page_title or 'Consultar Assistências' }}{% endblock %}
 
-{% block page_title %}{{ page_title or 'Assistência Técnica' }}{% endblock %}
+{% block page_title %}{{ page_title or 'Consultar Assistências' }}{% endblock %}
 
 {% block content %}
 <style>
@@ -160,8 +160,8 @@
     }
 </style>
 
-{% set list_url = (list_url | default(url_for('technical_assistance_list'))) %}
-{% set list_heading = (list_heading | default(page_title | default('Assistência Técnica'))) %}
+{% set list_url = (list_url | default(url_for('production_assistance_list'))) %}
+{% set list_heading = (list_heading | default(page_title | default('Consultar Assistências'))) %}
 
 <div class="space-y-6">
     <section class="list-section">
@@ -326,7 +326,7 @@
 <div
     id="assistanceDetailModal"
     class="modal"
-    data-endpoint="{{ url_for('technical_assistance_details', assistance_identifier='__PLACEHOLDER__') }}"
+    data-endpoint="{{ url_for('production_assistance_details', assistance_identifier='__PLACEHOLDER__') }}"
 >
     <div class="modal-content assistance-detail-modal-content p-6 md:p-8 rounded-xl space-y-4">
         <div class="flex items-center justify-between">
@@ -354,22 +354,26 @@
                             <th scope="col" class="px-4 py-3 text-left">Código do Produto</th>
                             <th scope="col" class="px-4 py-3 text-left">Sequência</th>
                             <th scope="col" class="px-4 py-3 text-left">Produto</th>
-                            <th scope="col" class="px-4 py-3 text-right">Quantidade</th>
-                            <th scope="col" class="px-4 py-3 text-right">Valor Unitário</th>
-                            <th scope="col" class="px-4 py-3 text-right">Valor Total</th>
+                            <th scope="col" class="px-4 py-3 text-right">Reservado</th>
+                            <th scope="col" class="px-4 py-3 text-right">Separado</th>
+                            <th scope="col" class="px-4 py-3 text-right">Carregado</th>
                         </tr>
                     </thead>
                     <tbody id="assistanceDetailTableBody" class="text-sm text-dark-blue"></tbody>
                 </table>
             </div>
             <div id="assistanceDetailTotals" class="summary-footer hidden">
-                <div class="summary-card">
-                    <span class="summary-label">Quantidade Total</span>
-                    <span class="summary-value" id="assistanceDetailTotalQuantidade">--</span>
+                <div class="summary-card summary-card--blue">
+                    <span class="summary-label">Reservado Total</span>
+                    <span class="summary-value" id="assistanceDetailTotalReservado">--</span>
                 </div>
-                <div class="summary-card">
-                    <span class="summary-label">Valor Total</span>
-                    <span class="summary-value" id="assistanceDetailTotalValor">--</span>
+                <div class="summary-card summary-card--amber">
+                    <span class="summary-label">Separado Total</span>
+                    <span class="summary-value" id="assistanceDetailTotalSeparado">--</span>
+                </div>
+                <div class="summary-card summary-card--green">
+                    <span class="summary-label">Carregado Total</span>
+                    <span class="summary-value" id="assistanceDetailTotalCarregado">--</span>
                 </div>
             </div>
             <div id="assistanceDetailEmptyState" class="hidden text-sm text-center text-slate-muted">
@@ -453,8 +457,9 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const assistanceDetailTotalsContainer = document.getElementById('assistanceDetailTotals');
     const assistanceDetailTotalsFields = {
-        quantidade: document.getElementById('assistanceDetailTotalQuantidade'),
-        valor: document.getElementById('assistanceDetailTotalValor'),
+        reservado: document.getElementById('assistanceDetailTotalReservado'),
+        separado: document.getElementById('assistanceDetailTotalSeparado'),
+        carregado: document.getElementById('assistanceDetailTotalCarregado'),
     };
     let lastFocusedAssistanceTrigger = null;
 
@@ -500,12 +505,6 @@ document.addEventListener('DOMContentLoaded', () => {
         minimumFractionDigits: 0,
         maximumFractionDigits: 4,
     });
-    const currencyFormatter = new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
 
     const formatQuantity = (value) => {
         const numeric = Number(value);
@@ -515,31 +514,30 @@ document.addEventListener('DOMContentLoaded', () => {
         return quantityFormatter.format(numeric);
     };
 
-    const formatCurrency = (value) => {
-        const numeric = Number(value);
-        if (Number.isNaN(numeric)) {
-            return currencyFormatter.format(0);
-        }
-        return currencyFormatter.format(numeric);
-    };
-
     const updateAssistanceTotals = (totals) => {
         if (!assistanceDetailTotalsContainer) {
             return;
         }
-        const quantityValue =
-            totals && typeof totals.quantidade_total !== 'undefined'
-                ? totals.quantidade_total
+        const reservadoValue =
+            totals && typeof totals.reservado_total !== 'undefined'
+                ? totals.reservado_total
                 : 0;
-        const totalValue =
-            totals && typeof totals.valor_total !== 'undefined'
-                ? totals.valor_total
+        const separadoValue =
+            totals && typeof totals.separado_total !== 'undefined'
+                ? totals.separado_total
                 : 0;
-        if (assistanceDetailTotalsFields.quantidade) {
-            assistanceDetailTotalsFields.quantidade.textContent = formatQuantity(quantityValue);
+        const carregadoValue =
+            totals && typeof totals.carregado_total !== 'undefined'
+                ? totals.carregado_total
+                : 0;
+        if (assistanceDetailTotalsFields.reservado) {
+            assistanceDetailTotalsFields.reservado.textContent = formatQuantity(reservadoValue);
         }
-        if (assistanceDetailTotalsFields.valor) {
-            assistanceDetailTotalsFields.valor.textContent = formatCurrency(totalValue);
+        if (assistanceDetailTotalsFields.separado) {
+            assistanceDetailTotalsFields.separado.textContent = formatQuantity(separadoValue);
+        }
+        if (assistanceDetailTotalsFields.carregado) {
+            assistanceDetailTotalsFields.carregado.textContent = formatQuantity(carregadoValue);
         }
         assistanceDetailTotalsContainer.classList.remove('hidden');
     };
@@ -556,11 +554,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (assistanceDetailEmptyState) {
             assistanceDetailEmptyState.classList.add('hidden');
         }
-        if (assistanceDetailTotalsFields.quantidade) {
-            assistanceDetailTotalsFields.quantidade.textContent = '--';
+        if (assistanceDetailTotalsFields.reservado) {
+            assistanceDetailTotalsFields.reservado.textContent = '--';
         }
-        if (assistanceDetailTotalsFields.valor) {
-            assistanceDetailTotalsFields.valor.textContent = '--';
+        if (assistanceDetailTotalsFields.separado) {
+            assistanceDetailTotalsFields.separado.textContent = '--';
+        }
+        if (assistanceDetailTotalsFields.carregado) {
+            assistanceDetailTotalsFields.carregado.textContent = '--';
         }
         if (assistanceDetailTotalsContainer) {
             assistanceDetailTotalsContainer.classList.add('hidden');
@@ -637,9 +638,9 @@ document.addEventListener('DOMContentLoaded', () => {
             row.appendChild(createCell(item.codigo_produto));
             row.appendChild(createCell(item.sequencia));
             row.appendChild(createCell(item.produto));
-            row.appendChild(createCell(formatQuantity(item.quantidade), true));
-            row.appendChild(createCell(formatCurrency(item.valor_unitario), true));
-            row.appendChild(createCell(formatCurrency(item.valor_total), true));
+            row.appendChild(createCell(formatQuantity(item.reservado), true));
+            row.appendChild(createCell(formatQuantity(item.separado), true));
+            row.appendChild(createCell(formatQuantity(item.carregado), true));
             assistanceDetailTableBody.appendChild(row);
         });
     };

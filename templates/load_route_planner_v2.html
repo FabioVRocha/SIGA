@@ -852,6 +852,9 @@
         opacity: 0.35;
         box-shadow: none;
     }
+    .planner-marker-connector {
+        pointer-events: none;
+    }
     .sequence-badge {
         display: inline-flex;
         align-items: center;
@@ -1718,12 +1721,16 @@
         maximumFractionDigits: 2,
     });
 
+    const METERS_PER_DEGREE_LAT = 111320;
+
     let map;
     let markerLayerGroup = null;
+    let connectorLayerGroup = null;
 
     const ordersById = new Map();
 
     const markersById = new Map();
+    const connectorsById = new Map();
     let routeLine = null;
     const selectedOrderIds = [];
     const activeStageFilters = new Set();
@@ -1808,6 +1815,15 @@
             return '--';
         }
         return numberFormatter.format(numericValue);
+    };
+
+    const calculatePendingQuantity = (separado, carregado) => {
+        const separadoNumber = Number(separado);
+        const carregadoNumber = Number(carregado);
+        if (Number.isNaN(separadoNumber) || Number.isNaN(carregadoNumber)) {
+            return null;
+        }
+        return separadoNumber - carregadoNumber;
     };
 
     const getStatusClass = (status) => {
@@ -1929,6 +1945,8 @@
         const reservado = formatPopupQuantity(order.reservado);
         const separado = formatPopupQuantity(order.separado);
         const carregado = formatPopupQuantity(order.carregado);
+        const pendenteValue = calculatePendingQuantity(order.separado, order.carregado);
+        const pendente = pendenteValue === null ? '--' : formatPopupQuantity(pendenteValue);
         const typeLabel = escapeHtml(order.record_type_label || 'Registro');
         const recordType = (order.record_type || '').toString();
         const canShowDetails = order.can_show_details !== false && !isAssistanceRecord(order);
@@ -1943,6 +1961,7 @@
                     <div class="planner-popup-metric"><span>Reservado</span><span>${reservado}</span></div>
                     <div class="planner-popup-metric"><span>Separado</span><span>${separado}</span></div>
                     <div class="planner-popup-metric"><span>Carregado</span><span>${carregado}</span></div>
+                    <div class="planner-popup-metric"><span>Pendente</span><span>${pendente}</span></div>
                 </div>
                 ${detailButtonHtml}
             </div>
@@ -2544,6 +2563,94 @@
         return !doesOrderMatchLegendFilters(order);
     }
 
+    function getOrderCoordinateKey(order) {
+        const lat = Number(order && order.latitude);
+        const lng = Number(order && order.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return '';
+        }
+        return `${lat.toFixed(6)}|${lng.toFixed(6)}`;
+    }
+
+    function metersPerDegreeLongitude(lat) {
+        const latRad = Number(lat) * (Math.PI / 180);
+        const scale = Math.max(Math.cos(latRad), 0.00001);
+        return METERS_PER_DEGREE_LAT * scale;
+    }
+
+    function applyMeterOffset(lat, lng, offsetX = 0, offsetY = 0) {
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return [lat, lng];
+        }
+        const deltaLat = offsetY / METERS_PER_DEGREE_LAT;
+        const deltaLng = offsetX / metersPerDegreeLongitude(lat);
+        return [lat + deltaLat, lng + deltaLng];
+    }
+
+    function computeGroupOffsets(count) {
+        if (!count || count <= 0) {
+            return [];
+        }
+        const spacing = 28;
+        const verticalStep = 8;
+        const start = -((count - 1) / 2) * spacing;
+        const offsets = [];
+        for (let index = 0; index < count; index += 1) {
+            const offsetX = start + index * spacing;
+            let offsetY = 0;
+            if (count >= 4) {
+                const direction = index % 2 === 0 ? 1 : -1;
+                offsetY = direction * verticalStep;
+            }
+            offsets.push({ x: offsetX, y: offsetY });
+        }
+        return offsets;
+    }
+
+    function buildOffsetLookupForOrders(orders) {
+        const lookup = new Map();
+        const groups = new Map();
+        if (!Array.isArray(orders)) {
+            return lookup;
+        }
+        orders.forEach((order) => {
+            const markerKey = getOrderKey(order);
+            const coordinateKey = getOrderCoordinateKey(order);
+            if (!markerKey || !coordinateKey) {
+                return;
+            }
+            if (!groups.has(coordinateKey)) {
+                groups.set(coordinateKey, {
+                    lat: Number(order.latitude),
+                    lng: Number(order.longitude),
+                    orders: []
+                });
+            }
+            groups.get(coordinateKey).orders.push(order);
+        });
+        groups.forEach((group) => {
+            if (!group || !Array.isArray(group.orders) || group.orders.length <= 1) {
+                return;
+            }
+            const offsets = computeGroupOffsets(group.orders.length);
+            group.orders.forEach((order, index) => {
+                const markerKey = getOrderKey(order);
+                if (!markerKey) {
+                    return;
+                }
+                const offset = offsets[index] || { x: 0, y: 0 };
+                const [lat, lng] = applyMeterOffset(group.lat, group.lng, offset.x, offset.y);
+                lookup.set(markerKey, {
+                    lat,
+                    lng,
+                    anchorLat: group.lat,
+                    anchorLng: group.lng
+                });
+            });
+        });
+        return lookup;
+    }
+
     function formatQuantity(value) {
         const normalized = Number(value || 0);
         if (!Number.isFinite(normalized)) {
@@ -2598,16 +2705,77 @@
         return markerLayerGroup;
     }
 
+    function ensureConnectorLayer() {
+        if (!map) {
+            return null;
+        }
+        if (!connectorLayerGroup) {
+            connectorLayerGroup = L.featureGroup();
+            connectorLayerGroup.addTo(map);
+        }
+        return connectorLayerGroup;
+    }
+
+    function getConnectorStyle(isSelected, isDimmed) {
+        if (isSelected) {
+            return {
+                color: '#2563eb',
+                weight: 2.4,
+                opacity: 0.85,
+                dashArray: '2 6'
+            };
+        }
+        if (isDimmed) {
+            return {
+                color: '#94a3b8',
+                weight: 1.4,
+                opacity: 0.25,
+                dashArray: '2 6'
+            };
+        }
+        return {
+            color: '#475569',
+            weight: 1.8,
+            opacity: 0.55,
+            dashArray: '2 6'
+        };
+    }
+
+    function createMarkerConnector(start, end, isSelected, isDimmed) {
+        const style = getConnectorStyle(isSelected, isDimmed);
+        return L.polyline([start, end], {
+            ...style,
+            interactive: false,
+            lineCap: 'round',
+            lineJoin: 'round',
+            className: 'planner-marker-connector'
+        });
+    }
+
+    function updateConnectorStyle(orderId, order, isSelected, isDimmed) {
+        const connector = connectorsById.get(orderId);
+        if (!connector || !order) {
+            return;
+        }
+        const style = getConnectorStyle(isSelected, isDimmed);
+        connector.setStyle(style);
+    }
+
     function mountMarkers() {
         if (!map) {
             return;
         }
+        const connectorLayer = ensureConnectorLayer();
         const layer = ensureMarkerLayer();
         if (!layer) {
             return;
         }
         markersById.clear();
         layer.clearLayers();
+        if (connectorLayer) {
+            connectorLayer.clearLayers();
+        }
+        connectorsById.clear();
         if (mapLoadingError) {
             mapLoadingError.classList.add('hidden');
         }
@@ -2621,6 +2789,7 @@
         const chunkSize = total > 1200 ? 220 : 400;
         let index = 0;
         let bounds = null;
+        const offsetLookup = buildOffsetLookupForOrders(plannerOrders);
 
         showMapLoading('Processando registros para o mapa...');
         updateMapLoadingProgress(0, total);
@@ -2633,16 +2802,28 @@
                 index += 1;
                 processedInChunk += 1;
                 const markerKey = getOrderKey(order);
-                if (!order || !markerKey || !order.latitude || !order.longitude) {
+                const baseLat = Number(order && order.latitude);
+                const baseLng = Number(order && order.longitude);
+                if (!order || !markerKey || !Number.isFinite(baseLat) || !Number.isFinite(baseLng)) {
                     continue;
                 }
-                const marker = L.marker([order.latitude, order.longitude], { icon: createMarkerIcon(order, false, shouldDimOrder(order, false)) });
+                const offsetData = offsetLookup.get(markerKey);
+                const markerLat = offsetData ? offsetData.lat : baseLat;
+                const markerLng = offsetData ? offsetData.lng : baseLng;
+                const isSelected = selectedOrderIds.includes(markerKey);
+                const dimmed = shouldDimOrder(order, isSelected);
+                const marker = L.marker([markerLat, markerLng], { icon: createMarkerIcon(order, isSelected, dimmed) });
                 marker.bindPopup(buildPopupContent(order));
                 marker.on('mouseover', () => marker.openPopup());
                 marker.on('click', () => toggleOrderSelection(markerKey));
                 markersById.set(markerKey, marker);
                 chunkMarkers.push(marker);
-                const point = L.latLng(order.latitude, order.longitude);
+                if (connectorLayer && offsetData) {
+                    const connector = createMarkerConnector([markerLat, markerLng], [offsetData.anchorLat, offsetData.anchorLng], isSelected, dimmed);
+                    connectorsById.set(markerKey, connector);
+                    connectorLayer.addLayer(connector);
+                }
+                const point = L.latLng(markerLat, markerLng);
                 if (!bounds) {
                     bounds = L.latLngBounds(point, point);
                 } else {
@@ -2747,8 +2928,22 @@
         const marker = markersById.get(orderId);
         if (!marker) return;
         const order = ordersById.get(orderId);
+        if (!order) {
+            if (markerLayerGroup) {
+                markerLayerGroup.removeLayer(marker);
+            }
+            markersById.delete(orderId);
+            const connector = connectorsById.get(orderId);
+            if (connector && connectorLayerGroup) {
+                connectorLayerGroup.removeLayer(connector);
+            }
+            connectorsById.delete(orderId);
+            return;
+        }
         const isSelected = selectedOrderIds.includes(orderId);
-        marker.setIcon(createMarkerIcon(order, isSelected, shouldDimOrder(order, isSelected)));
+        const dimmed = shouldDimOrder(order, isSelected);
+        marker.setIcon(createMarkerIcon(order, isSelected, dimmed));
+        updateConnectorStyle(orderId, order, isSelected, dimmed);
     }
 
     function refreshLegendAppearance() {
@@ -2781,7 +2976,12 @@
         markersById.forEach((marker, orderId) => {
             const order = ordersById.get(orderId);
             const isSelected = selectedOrderIds.includes(orderId);
-            marker.setIcon(createMarkerIcon(order, isSelected, shouldDimOrder(order, isSelected)));
+            if (!order) {
+                return;
+            }
+            const dimmed = shouldDimOrder(order, isSelected);
+            marker.setIcon(createMarkerIcon(order, isSelected, dimmed));
+            updateConnectorStyle(orderId, order, isSelected, dimmed);
         });
         document.querySelectorAll('.planner-order-row').forEach((row) => {
             const orderId = row.dataset.orderId;

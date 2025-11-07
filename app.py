@@ -3513,6 +3513,7 @@ def fetch_orders(filters):
 
     has_lcapecod_column = False
     column_check_cursor = None
+    items_cur = None
     pedprodu_columns = None
     cidade_columns = None
 
@@ -4902,7 +4903,7 @@ def fetch_assistance_production_lots(assistance_codes):
 def fetch_assistance_operational_metrics(assistance_codes):
     """
     Recupera métricas operacionais (reservado, separado, carregado e linha)
-    a partir da view integrada para as assistências informadas.
+    diretamente do banco do ERP para as assistências informadas.
     """
     normalized = []
     for code in assistance_codes or []:
@@ -4914,7 +4915,20 @@ def fetch_assistance_operational_metrics(assistance_codes):
         return {}
 
     metrics = {}
-    conn = get_siga_db_connection()
+
+    def ensure_entry(code):
+        entry = metrics.get(code)
+        if not entry:
+            entry = {
+                'reservado': Decimal('0'),
+                'separado': Decimal('0'),
+                'carregado': Decimal('0'),
+                'linha': '',
+            }
+            metrics[code] = entry
+        return entry
+
+    conn = get_erp_db_connection()
     if not conn:
         return metrics
 
@@ -4924,43 +4938,88 @@ def fetch_assistance_operational_metrics(assistance_codes):
         cur.execute(
             """
             SELECT
-                CAST(document_id AS TEXT) AS assistance_id,
-                COALESCE(reserved, 0) AS reserved,
-                COALESCE(separated, 0) AS separated,
-                COALESCE(loaded, 0) AS loaded,
-                COALESCE(line, '') AS line
-            FROM vw_siga_integrated_documents
-            WHERE record_type = 'assistencia_tecnica'
-              AND CAST(document_id AS TEXT) = ANY(%s)
+                TRIM(CAST(pm.prjmpedid AS TEXT)) AS assistance_id,
+                SUM(CASE WHEN TRIM(UPPER(pm.prjmovtip)) = 'R' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS reservado,
+                SUM(CASE WHEN TRIM(UPPER(pm.prjmovtip)) = 'P' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS separado,
+                SUM(CASE WHEN TRIM(UPPER(pm.prjmovtip)) = 'C' THEN COALESCE(pm.prjmquant, 0) ELSE 0 END) AS carregado
+            FROM projmovi pm
+            INNER JOIN assiste1 ai ON TRIM(CAST(ai.assistec AS TEXT)) = TRIM(CAST(pm.prjmpedid AS TEXT))
+                                   AND TRIM(CAST(ai.aspproduto AS TEXT)) = TRIM(CAST(pm.prjmproex AS TEXT))
+            WHERE pm.prjmpedid IS NOT NULL
+              AND TRIM(CAST(pm.prjmpedid AS TEXT)) = ANY(%s)
+            GROUP BY TRIM(CAST(pm.prjmpedid AS TEXT))
             """,
             (normalized,),
         )
 
-        for assistance_id, reserved, separated, loaded, line in cur.fetchall():
+        for assistance_id, reserved, separated, loaded in cur.fetchall():
             key = (assistance_id or '').strip()
             if not key:
                 continue
+            entry = ensure_entry(key)
             try:
-                reserved_value = Decimal(reserved or 0)
+                entry['reservado'] = Decimal(reserved or 0)
             except (TypeError, InvalidOperation):
-                reserved_value = Decimal('0')
-
+                entry['reservado'] = Decimal('0')
             try:
-                separated_value = Decimal(separated or 0)
+                entry['separado'] = Decimal(separated or 0)
             except (TypeError, InvalidOperation):
-                separated_value = Decimal('0')
-
+                entry['separado'] = Decimal('0')
             try:
-                loaded_value = Decimal(loaded or 0)
+                entry['carregado'] = Decimal(loaded or 0)
             except (TypeError, InvalidOperation):
-                loaded_value = Decimal('0')
+                entry['carregado'] = Decimal('0')
 
-            metrics[key] = {
-                'reservado': reserved_value,
-                'separado': separated_value,
-                'carregado': loaded_value,
-                'linha': (line or '').strip(),
-            }
+        cur.execute(
+            """
+            SELECT
+                TRIM(CAST(sub.assistec AS TEXT)) AS assistance_id,
+                (ARRAY_AGG(sub.linha_value ORDER BY sub.priority))[1] AS linha
+            FROM (
+                SELECT DISTINCT
+                    TRIM(CAST(base_data.assistec AS TEXT)) AS assistec,
+                    CASE
+                        WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 'MADRESILVA'
+                        WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 'PETRA'
+                        WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 'GARLAND'
+                        WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 'GLASSMADRE'
+                        WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 'CAVILHAS'
+                        WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 'SOLARE'
+                        WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 'ESPUMA'
+                        ELSE 'OUTROS'
+                    END AS linha_value,
+                    CASE
+                        WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 1
+                        WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 2
+                        WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 3
+                        WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 4
+                        WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 5
+                        WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 6
+                        WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 7
+                        ELSE 999
+                    END AS priority
+                FROM (
+                    SELECT
+                        ai.assistec,
+                        UPPER(COALESCE(g.grunome, '')) AS group_name_upper
+                    FROM assiste1 ai
+                    LEFT JOIN produto prod ON prod.produto = ai.aspproduto
+                    LEFT JOIN grupo g ON g.grupo = prod.grupo
+                    WHERE ai.assistec IS NOT NULL
+                      AND TRIM(CAST(ai.assistec AS TEXT)) = ANY(%s)
+                ) base_data
+            ) sub
+            GROUP BY TRIM(CAST(sub.assistec AS TEXT))
+            """,
+            (normalized,),
+        )
+
+        for assistance_id, linha in cur.fetchall():
+            key = (assistance_id or '').strip()
+            if not key:
+                continue
+            entry = ensure_entry(key)
+            entry['linha'] = (linha or '').strip()
     except (Exception, Error) as error:
         print(f"Erro ao carregar métricas de assistência: {error}")
     finally:
@@ -5260,21 +5319,12 @@ def fetch_technical_assistance(filters):
     return records, error_message
 
 
-def fetch_technical_assistance_details(assistance_code):
+def get_assistance_header_data(conn, code_value):
     """
-    Recupera os detalhes (cabeçalho e itens) de uma assistência técnica específica.
+    Recupera o cabeçalho compartilhado das assistências.
     """
-    code_value = str(assistance_code or '').strip()
-    if not code_value:
-        return None, {'message': 'Assistência inválida.', 'status': 400}
-
-    conn = get_erp_db_connection()
-    if not conn:
-        return None, {'message': 'Não foi possível conectar ao banco de dados do ERP.', 'status': 500}
-
-    header_data = None
-    items = []
-
+    header_cur = None
+    lot_cur = None
     try:
         header_cur = conn.cursor()
         header_cur.execute(
@@ -5296,8 +5346,6 @@ def fetch_technical_assistance_details(assistance_code):
             (code_value,),
         )
         header_row = header_cur.fetchone()
-        header_cur.close()
-
         if not header_row:
             return None, {'message': 'Assistência não encontrada.', 'status': 404}
 
@@ -5348,7 +5396,6 @@ def fetch_technical_assistance_details(assistance_code):
             (code_value,),
         )
         production_rows = lot_cur.fetchall()
-        lot_cur.close()
 
         production_lots = []
         for lotcod, lotdes in production_rows:
@@ -5372,6 +5419,35 @@ def fetch_technical_assistance_details(assistance_code):
             'lote_producao': lote_producao_display,
             'lote_carga': lote_carga_display,
         }
+
+        return header_data, None
+    except (Exception, Error) as error:
+        return None, {'message': f'Erro ao carregar cabeçalho da assistência: {error}', 'status': 500}
+    finally:
+        if header_cur:
+            header_cur.close()
+        if lot_cur:
+            lot_cur.close()
+
+
+def fetch_technical_assistance_details(assistance_code):
+    """
+    Recupera os detalhes (cabeçalho e itens) de uma assistência técnica específica.
+    """
+    code_value = str(assistance_code or '').strip()
+    if not code_value:
+        return None, {'message': 'Assistência inválida.', 'status': 400}
+
+    conn = get_erp_db_connection()
+    if not conn:
+        return None, {'message': 'Não foi possível conectar ao banco de dados do ERP.', 'status': 500}
+
+    items = []
+
+    try:
+        header_data, header_error = get_assistance_header_data(conn, code_value)
+        if header_error:
+            return None, header_error
 
         items_cur = conn.cursor()
         items_cur.execute(
@@ -5444,6 +5520,210 @@ def fetch_technical_assistance_details(assistance_code):
     except (Exception, Error) as error:
         return None, {'message': f'Erro ao carregar detalhes da assistência: {error}', 'status': 500}
     finally:
+        if conn:
+            conn.close()
+
+
+def fetch_production_assistance_details(assistance_code):
+    """
+    Recupera os detalhes da tela Consultar Assistências utilizando os movimentos do projmovi.
+    """
+    code_value = str(assistance_code or '').strip()
+    if not code_value:
+        return None, {'message': 'Assistência inválida.', 'status': 400}
+
+    conn = get_erp_db_connection()
+    if not conn:
+        return None, {'message': 'Não foi possível conectar ao banco de dados do ERP.', 'status': 500}
+
+    column_check_cursor = None
+    assistance_items_cur = None
+    movement_cur = None
+
+    try:
+        header_data, header_error = get_assistance_header_data(conn, code_value)
+        if header_error:
+            return None, header_error
+
+        try:
+            column_check_cursor = conn.cursor()
+            column_check_cursor.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'projmovi'
+                """
+            )
+            projmovi_columns = {
+                (row[0] or '').lower()
+                for row in column_check_cursor.fetchall()
+                if row and row[0]
+            }
+        except Error as error:
+            print(f"Erro ao verificar colunas da tabela 'projmovi' (assistência): {error}")
+            projmovi_columns = None
+        finally:
+            if column_check_cursor:
+                column_check_cursor.close()
+                column_check_cursor = None
+
+        has_prjmproex_column = projmovi_columns is None or 'prjmproex' in projmovi_columns
+        has_prjmpedse_column = projmovi_columns is None or 'prjmpedse' in projmovi_columns
+        has_prjmseque_column = projmovi_columns is None or 'prjmseque' in projmovi_columns
+        has_prjmprodu_column = projmovi_columns is None or 'prjmprodu' in projmovi_columns
+
+        assistance_items_cur = conn.cursor()
+        assistance_items_cur.execute(
+            """
+            SELECT
+                COALESCE(TRIM(i.aspproduto::text), '') AS codigo_produto,
+                COALESCE(TRIM(i.aspseq::text), '') AS sequencia,
+                COALESCE(prod.pronome::text, '') AS produto_nome
+            FROM assiste1 i
+            LEFT JOIN produto prod ON prod.produto = i.aspproduto
+            WHERE CAST(i.assistec AS TEXT) = %s
+            ORDER BY
+                CASE
+                    WHEN NULLIF(TRIM(i.aspseq::text), '') ~ '^[0-9]+$' THEN LPAD(TRIM(i.aspseq::text), 10, '0')
+                    ELSE TRIM(i.aspseq::text)
+                END,
+                COALESCE(TRIM(i.aspproduto::text), '')
+            """,
+            (code_value,),
+        )
+        assistance_rows = assistance_items_cur.fetchall()
+        assistance_items_cur.close()
+        assistance_items_cur = None
+
+        product_code_source = None
+        if has_prjmproex_column:
+            codigo_produto_expr = "COALESCE(TRIM(pm.prjmproex::text), '')"
+            product_code_source = "pm.prjmproex"
+        elif has_prjmprodu_column:
+            codigo_produto_expr = "COALESCE(TRIM(pm.prjmprodu::text), '')"
+            product_code_source = "pm.prjmprodu"
+        else:
+            codigo_produto_expr = "''"
+
+        if has_prjmpedse_column:
+            sequencia_expr = "COALESCE(TRIM(pm.prjmpedse::text), '')"
+        elif has_prjmseque_column:
+            sequencia_expr = "COALESCE(TRIM(pm.prjmseque::text), '')"
+        else:
+            sequencia_expr = "''"
+
+        if product_code_source:
+            produto_join = f"""
+                LEFT JOIN produto prod
+                    ON COALESCE(TRIM(prod.produto::text), '') = COALESCE(TRIM({product_code_source}::text), '')
+            """
+            produto_nome_expr = "COALESCE(prod.pronome::text, '')"
+        else:
+            produto_join = ""
+            produto_nome_expr = "''"
+
+        sequence_sort_expr = (
+            f"CASE WHEN NULLIF({sequencia_expr}, '') ~ '^[0-9]+$' THEN "
+            f"LPAD({sequencia_expr}, 10, '0') ELSE {sequencia_expr} END"
+        )
+
+        movement_cur = conn.cursor()
+        movement_query = f"""
+            SELECT
+                {codigo_produto_expr} AS codigo_produto,
+                {sequencia_expr} AS sequencia,
+                {produto_nome_expr} AS produto_nome,
+                SUM(
+                    CASE WHEN UPPER(COALESCE(pm.prjmovtip, '')) = 'R'
+                        THEN COALESCE(pm.prjmquant, 0) ELSE 0 END
+                ) AS reservado,
+                SUM(
+                    CASE WHEN UPPER(COALESCE(pm.prjmovtip, '')) = 'P'
+                        THEN COALESCE(pm.prjmquant, 0) ELSE 0 END
+                ) AS separado,
+                SUM(
+                    CASE WHEN UPPER(COALESCE(pm.prjmovtip, '')) = 'C'
+                        THEN COALESCE(pm.prjmquant, 0) ELSE 0 END
+                ) AS carregado
+            FROM projmovi pm
+            {produto_join}
+            WHERE CAST(pm.prjmpedid AS TEXT) = %s
+            GROUP BY codigo_produto, sequencia, produto_nome
+            ORDER BY {sequence_sort_expr}, codigo_produto
+        """
+        movement_cur.execute(movement_query, (code_value,))
+        movement_rows = movement_cur.fetchall()
+        movement_cur.close()
+        movement_cur = None
+
+        def safe_decimal(value):
+            try:
+                return Decimal(str(value or 0))
+            except (TypeError, InvalidOperation, ValueError):
+                return Decimal('0')
+
+        movement_map = {}
+        for (
+            movimento_codigo,
+            movimento_sequencia,
+            movimento_produto_nome,
+            reservado_raw,
+            separado_raw,
+            carregado_raw,
+        ) in movement_rows:
+            normalized_code = (movimento_codigo or '').strip()
+            normalized_seq = (movimento_sequencia or '').strip()
+            movement_map[(normalized_code, normalized_seq)] = {
+                'reservado': safe_decimal(reservado_raw),
+                'separado': safe_decimal(separado_raw),
+                'carregado': safe_decimal(carregado_raw),
+                'produto': (movimento_produto_nome or '').strip(),
+            }
+
+        total_reservado = Decimal('0')
+        total_separado = Decimal('0')
+        total_carregado = Decimal('0')
+        items = []
+        for (codigo_produto, sequencia, produto_nome) in assistance_rows:
+            normalized_code = (codigo_produto or '').strip()
+            normalized_seq = (sequencia or '').strip()
+            movement = movement_map.get((normalized_code, normalized_seq))
+            if movement is None and normalized_code:
+                movement = movement_map.get((normalized_code, ''))
+
+            reservado = movement['reservado'] if movement else Decimal('0')
+            separado = movement['separado'] if movement else Decimal('0')
+            carregado = movement['carregado'] if movement else Decimal('0')
+
+            items.append(
+                {
+                    'codigo_produto': normalized_code,
+                    'sequencia': normalized_seq,
+                    'produto': (produto_nome or '').strip(),
+                    'reservado': float(reservado),
+                    'separado': float(separado),
+                    'carregado': float(carregado),
+                }
+            )
+
+            total_reservado += reservado
+            total_separado += separado
+            total_carregado += carregado
+
+        totals_payload = {
+            'reservado_total': float(total_reservado),
+            'separado_total': float(total_separado),
+            'carregado_total': float(total_carregado),
+        }
+
+        return {'header': header_data, 'items': items, 'totals': totals_payload}, None
+    except (Exception, Error) as error:
+        return None, {'message': f'Erro ao carregar detalhes da assistência: {error}', 'status': 500}
+    finally:
+        if movement_cur:
+            movement_cur.close()
+        if assistance_items_cur:
+            assistance_items_cur.close()
         if conn:
             conn.close()
 
@@ -8238,6 +8518,16 @@ def production_assistance_list():
 @login_required
 def technical_assistance_details(assistance_identifier):
     details, error = fetch_technical_assistance_details(assistance_identifier)
+    if error:
+        status_code = error.get('status', 500)
+        return jsonify({'error': error.get('message', 'Erro ao carregar detalhes da assistência.')}), status_code
+    return jsonify(details)
+
+
+@app.route('/production_assistance/<path:assistance_identifier>/details')
+@login_required
+def production_assistance_details(assistance_identifier):
+    details, error = fetch_production_assistance_details(assistance_identifier)
     if error:
         status_code = error.get('status', 500)
         return jsonify({'error': error.get('message', 'Erro ao carregar detalhes da assistência.')}), status_code
