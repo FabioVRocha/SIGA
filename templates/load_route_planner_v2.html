@@ -27,7 +27,7 @@
     }
     .planner-layout {
         display: grid;
-        grid-template-columns: minmax(280px, 360px) 1fr;
+        grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
         grid-template-areas:
             "sidebar map"
             "sidebar legend";
@@ -166,7 +166,7 @@
         display: flex;
         flex-direction: column;
         position: relative;
-        min-height: 720px;
+        min-height: clamp(560px, 75vh, 1000px);
     }
     .planner-map-toolbar {
         padding: 1rem 1.25rem;
@@ -191,12 +191,12 @@
     .planner-map-container {
         position: relative;
         flex: 1 1 auto;
-        min-height: 520px;
+        min-height: clamp(420px, 65vh, 900px);
     }
     #routePlannerMap {
         width: 100%;
         height: 100%;
-        min-height: 520px;
+        min-height: clamp(420px, 65vh, 900px);
         border-bottom-left-radius: 0.75rem;
         border-bottom-right-radius: 0.75rem;
     }
@@ -638,114 +638,6 @@
         font-size: 0.85rem;
         fill: var(--clr-text-secondary);
     }
-    .pending-items-groups {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    .pending-items-group {
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        border-radius: 0.85rem;
-        background-color: rgba(241, 245, 249, 0.5);
-        padding: 1rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.85rem;
-    }
-    .pending-items-group header {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.65rem;
-        justify-content: space-between;
-        align-items: baseline;
-    }
-    .pending-lot-title {
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--clr-dark-blue);
-    }
-    .pending-lot-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        font-size: 0.85rem;
-        color: var(--clr-text-secondary);
-    }
-    .pending-lot-badge {
-        padding: 0.2rem 0.55rem;
-        border-radius: 999px;
-        border: 1px solid rgba(148, 163, 184, 0.4);
-        background-color: var(--clr-white);
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: var(--clr-dark-blue);
-    }
-    .pending-items-table-wrapper {
-        overflow-x: auto;
-    }
-    .pending-items-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-        min-width: 520px;
-    }
-    .pending-items-table th {
-        font-size: 0.7rem;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--clr-medium-gray);
-        text-align: left;
-        padding: 0.35rem 0.5rem;
-    }
-    .pending-items-table td {
-        padding: 0.55rem 0.5rem;
-        font-size: 0.85rem;
-        color: var(--clr-dark-blue);
-        border-top: 1px solid rgba(148, 163, 184, 0.3);
-        vertical-align: top;
-    }
-    .pending-items-table th.text-right,
-    .pending-items-table td.text-right {
-        text-align: right;
-    }
-    .pending-doc-title {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.35rem;
-        align-items: center;
-        font-weight: 600;
-    }
-    .pending-doc-type {
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--clr-text-secondary);
-    }
-    .pending-doc-stage {
-        font-size: 0.7rem;
-        color: var(--clr-text-secondary);
-        border: 1px solid rgba(148, 163, 184, 0.65);
-        border-radius: 999px;
-        padding: 0.1rem 0.45rem;
-    }
-    .pending-doc-location {
-        font-size: 0.75rem;
-        color: var(--clr-text-secondary);
-        margin-top: 0.15rem;
-    }
-    .pending-quantity {
-        font-weight: 600;
-        color: #b91c1c;
-    }
-    .pending-empty-state {
-        padding: 1rem;
-        text-align: center;
-        font-size: 0.9rem;
-        color: var(--clr-text-secondary);
-        border: 1px dashed rgba(148, 163, 184, 0.6);
-        border-radius: 0.75rem;
-        background-color: rgba(241, 245, 249, 0.4);
-    }
     .multi-combobox {
         position: relative;
     }
@@ -1087,7 +979,7 @@
                 </div>
             </div>
         </section>
-        <section class="planner-legends">
+        <section class="planner-legends" role="region" aria-label="Legenda do mapa">
             <div class="legend-group" data-legend-group="stage">
                 <span class="legend-title">Estágio de separação</span>
                 <div class="legend-items">
@@ -1391,10 +1283,6 @@
                     <span class="planner-report-item-title">Centro de Distribuição</span>
                     <span class="planner-report-item-subtitle">Saldo por UF</span>
                 </button>
-                <button type="button" class="planner-report-item" data-report-target="pending-items" role="tab" aria-selected="false" aria-controls="report-panel-pending-items">
-                    <span class="planner-report-item-title">Itens Pendentes</span>
-                    <span class="planner-report-item-subtitle">Por lote de produção</span>
-                </button>
             </aside>
             <section class="planner-reports-panel">
                 <article class="planner-report-card is-active" id="report-panel-distribution-center" data-report-panel="distribution-center" role="tabpanel" aria-hidden="false">
@@ -1575,82 +1463,6 @@
                             </svg>
                         </div>
                         <p class="text-xs text-slate-500">Valores negativos indicam estados com carregamento superior ao separado.</p>
-                    </div>
-                </article>
-                {% set pending_report = pending_items_report or {} %}
-                {% set pending_groups = pending_report.groups or [] %}
-                <article class="planner-report-card" id="report-panel-pending-items" data-report-panel="pending-items" role="tabpanel" aria-hidden="true">
-                    <header class="planner-report-card__header">
-                        <h4>Itens Pendentes</h4>
-                        <p>Pedidos e assistências com quantidade reservada maior que a separada.</p>
-                        <div class="planner-report-summary">
-                            <span>Total pendente (registros únicos)</span>
-                            <strong>{{ (pending_report.total_pending or 0) | format_decimal_br }}</strong>
-                            <span>· {{ pending_report.document_count or 0 }} registros</span>
-                        </div>
-                    </header>
-                    <div class="planner-report-card__body">
-                        {% if pending_groups %}
-                        <div class="pending-items-groups">
-                            {% for group in pending_groups %}
-                            <section class="pending-items-group">
-                                <header>
-                                    <span class="pending-lot-title">{{ group.lot_label or 'Sem lote de produção' }}</span>
-                                    <div class="pending-lot-meta">
-                                        <span class="pending-lot-badge">{{ group.total_pending | format_decimal_br }} pendente</span>
-                                        <span>{{ group.documents|length }} registro{% if group.documents|length != 1 %}s{% endif %}</span>
-                                    </div>
-                                </header>
-                                {% if group.documents %}
-                                <div class="pending-items-table-wrapper">
-                                    <table class="pending-items-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Registro / Cliente</th>
-                                                <th class="text-right">Reservado</th>
-                                                <th class="text-right">Separado</th>
-                                                <th class="text-right">Pendente</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for document in group.documents %}
-                                            <tr>
-                                                <td>
-                                                    <div class="pending-doc-title">
-                                                        <span class="pending-doc-type">{{ document.record_type_label }}</span>
-                                                        <span>{{ document.document_code }}</span>
-                                                        {% if document.stage_label %}
-                                                        <span class="pending-doc-stage">{{ document.stage_label }}</span>
-                                                        {% endif %}
-                                                    </div>
-                                                    <div>{{ document.customer_name or '—' }}</div>
-                                                    <div class="pending-doc-location">
-                                                        {% if document.city %}
-                                                        {{ document.city }}{% if document.state %}/{{ document.state }}{% endif %}
-                                                        {% elif document.state %}
-                                                        {{ document.state }}
-                                                        {% else %}
-                                                        Não informado
-                                                        {% endif %}
-                                                    </div>
-                                                </td>
-                                                <td class="text-right">{{ document.reserved | format_decimal_br }}</td>
-                                                <td class="text-right">{{ document.separated | format_decimal_br }}</td>
-                                                <td class="text-right pending-quantity">{{ document.pending_quantity | format_decimal_br }}</td>
-                                            </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                {% else %}
-                                <p class="pending-empty-state">Nenhum registro pendente para este lote.</p>
-                                {% endif %}
-                            </section>
-                            {% endfor %}
-                        </div>
-                        {% else %}
-                        <p class="pending-empty-state">Todos os registros filtrados estão totalmente separados.</p>
-                        {% endif %}
                     </div>
                 </article>
             </section>

@@ -1060,6 +1060,8 @@ def format_decimal_br(value, decimals=2):
 app.jinja_env.filters["format_currency_brl"] = format_currency_brl
 app.jinja_env.filters["format_decimal_br"] = format_decimal_br
 
+
+
 def normalize_lookup_code(value):
     """Normaliza códigos alfanuméricos para comparação consistente."""
     if value is None:
@@ -4458,6 +4460,107 @@ def fetch_orders_from_integrated_view(filters):
     if not conn:
         return orders, "Não foi possível conectar ao banco de dados auxiliar (siga_db)."
 
+    record_type_priority = {
+        'pedidos_vendas': 3,
+        'consulta_pedidos': 2,
+        'assistencia_tecnica': 1,
+    }
+
+    def normalize_record_type(value):
+        if not value:
+            return ''
+        return str(value).strip().lower()
+
+    def build_order_unique_key(record_type, document_id_text):
+        document_id_value = (document_id_text or '').strip()
+        if not document_id_value:
+            return ''
+        normalized_type = normalize_record_type(record_type)
+        if normalized_type == 'assistencia_tecnica':
+            return f'assistencia_tecnica:{document_id_value}'
+        if normalized_type in {'consulta_pedidos', 'pedidos_vendas'}:
+            return f'pedido:{document_id_value}'
+        fallback_type = normalized_type or 'registro'
+        return f'{fallback_type}:{document_id_value}'
+
+    def has_load_lot(payload):
+        return bool((payload.get('load_lot_code') or '').strip())
+
+    def has_production_lot(payload):
+        return bool((payload.get('production_lots_display') or '').strip())
+
+    def stage_data_score(payload):
+        score = 0
+        if not isinstance(payload, dict):
+            return score
+        presence = payload.get('_stage_presence')
+        if isinstance(presence, dict):
+            for key in ('reservado', 'separado', 'carregado'):
+                if presence.get(key):
+                    score += 1
+            return score
+        for key in ('reservado', 'separado', 'carregado'):
+            value = payload.get(key)
+            if value is None:
+                continue
+            try:
+                float(value)
+            except (TypeError, ValueError):
+                continue
+            score += 1
+        return score
+
+    def extract_date(value):
+        if isinstance(value, datetime.datetime):
+            return value.date()
+        if isinstance(value, datetime.date):
+            return value
+        return None
+
+    def build_order_rank(payload):
+        stage_score = stage_data_score(payload)
+        type_score = record_type_priority.get(
+            normalize_record_type((payload or {}).get('record_type')),
+            0,
+        )
+        coordinate_score = 1 if has_valid_coordinates(payload or {}) else 0
+        load_score = 1 if has_load_lot(payload or {}) else 0
+        lot_score = 1 if has_production_lot(payload or {}) else 0
+        date_value = extract_date((payload or {}).get('document_date')) or datetime.date.min
+        return (
+            stage_score,
+            type_score,
+            coordinate_score,
+            load_score,
+            lot_score,
+            date_value,
+        )
+
+    def merge_stage_data(preferred, fallback):
+        if not preferred or not fallback:
+            return preferred
+        stage_keys = ('reservado', 'separado', 'carregado')
+        preferred_presence = preferred.get('_stage_presence') or {}
+        fallback_presence = fallback.get('_stage_presence') or {}
+        for key in stage_keys:
+            has_preferred = bool(preferred_presence.get(key))
+            has_fallback = bool(fallback_presence.get(key))
+            if not has_preferred and has_fallback:
+                preferred[key] = fallback.get(key)
+                preferred_presence[key] = True
+        preferred['_stage_presence'] = preferred_presence
+        return preferred
+
+    def should_replace_order(existing, candidate):
+        if not existing:
+            return True
+
+        existing_rank = build_order_rank(existing)
+        candidate_rank = build_order_rank(candidate)
+        if candidate_rank == existing_rank:
+            return False
+        return candidate_rank > existing_rank
+
     record_types = filters.get('record_types') or []
     if not record_types:
         record_types = ['consulta_pedidos']
@@ -4498,6 +4601,8 @@ def fetch_orders_from_integrated_view(filters):
 
     try:
         cur = conn.cursor()
+        order_positions = {}
+        row_counter = 0
         base_query = [
             "SELECT",
             "    record_type,",
@@ -4609,6 +4714,7 @@ def fetch_orders_from_integrated_view(filters):
         rows = cur.fetchall()
 
         for row in rows:
+            row_counter += 1
             (
                 record_type,
                 document_id,
@@ -4646,14 +4752,14 @@ def fetch_orders_from_integrated_view(filters):
             if not document_id_text:
                 document_id_text = str(document_id or '').strip()
             if not document_id_text:
-                document_id_text = str(len(orders) + 1)
+                document_id_text = str(row_counter)
 
             try:
                 pedido = int(document_id_text)
             except (TypeError, ValueError):
                 pedido = document_id_text
-
-            unique_id = f"{record_type}:{document_id_text}"
+            unique_key = build_order_unique_key(record_type, document_id_text)
+            unique_id = unique_key or f"{record_type}:{document_id_text}"
             can_show_details = record_type != 'assistencia_tecnica'
 
             try:
@@ -4661,16 +4767,19 @@ def fetch_orders_from_integrated_view(filters):
             except (TypeError, ValueError):
                 quantidade = 0.0
 
+            has_reservado_value = reserved is not None
             try:
                 reservado = float(reserved) if reserved is not None else 0.0
             except (TypeError, ValueError):
                 reservado = 0.0
 
+            has_separado_value = separated is not None
             try:
                 separado = float(separated) if separated is not None else 0.0
             except (TypeError, ValueError):
                 separado = 0.0
 
+            has_carregado_value = loaded is not None
             try:
                 carregado = float(loaded) if loaded is not None else 0.0
             except (TypeError, ValueError):
@@ -4707,7 +4816,7 @@ def fetch_orders_from_integrated_view(filters):
             else:
                 cidade_uf_value = city_value or state_value or ''
 
-            orders.append({
+            order_payload = {
                 'record_type': record_type,
                 'record_type_label': record_type_label,
                 'unique_id': unique_id,
@@ -4736,7 +4845,23 @@ def fetch_orders_from_integrated_view(filters):
                 'load_lot_code': load_lot_code or '',
                 'load_lot_description': load_lot_description or '',
                 'kpi_status': kpi_status,
-            })
+                '_stage_presence': {
+                    'reservado': has_reservado_value,
+                    'separado': has_separado_value,
+                    'carregado': has_carregado_value,
+                },
+            }
+
+            existing_index = order_positions.get(unique_id)
+            if existing_index is None:
+                order_positions[unique_id] = len(orders)
+                orders.append(order_payload)
+            else:
+                existing_payload = orders[existing_index]
+                if should_replace_order(existing_payload, order_payload):
+                    orders[existing_index] = merge_stage_data(order_payload, existing_payload)
+                else:
+                    orders[existing_index] = merge_stage_data(existing_payload, order_payload)
 
         if orders:
             missing_codes = []
@@ -7646,113 +7771,13 @@ def load_lot_route_planner_v2():
             return Decimal(0)
 
     state_distribution = {uf: Decimal(0) for uf in BRAZIL_STATE_CODES}
-    pending_items_group_map = {}
-    pending_items_total_unique = Decimal(0)
-    pending_items_document_count = 0
-    pending_default_lot_code = '__no_production_lot__'
-    pending_default_lot_label = 'Sem Lote de Produção'
-
-    def resolve_pending_group(code, label):
-        normalized_code = clean_string(code)
-        if not normalized_code:
-            normalized_code = pending_default_lot_code
-        normalized_label = clean_string(label)
-        if not normalized_label:
-            normalized_label = (
-                pending_default_lot_label if normalized_code == pending_default_lot_code else normalized_code
-            )
-        group = pending_items_group_map.get(normalized_code)
-        if not group:
-            group = {
-                'lot_code': normalized_code,
-                'lot_label': normalized_label,
-                'documents': [],
-                'total_pending': Decimal(0),
-            }
-            pending_items_group_map[normalized_code] = group
-        elif not group.get('lot_label') and normalized_label:
-            group['lot_label'] = normalized_label
-        return group
-
-    def build_pending_document_payload(order, pending_quantity, reservado_value, separado_value):
-        record_type_value = clean_string(order.get('record_type')).lower()
-        record_type_label = clean_string(order.get('record_type_label'))
-        if not record_type_label:
-            record_type_label = clean_string(RECORD_TYPE_LABELS.get(record_type_value))
-        document_code = clean_string(order.get('pedido')) or clean_string(order.get('document_id')) or '--'
-        customer_name = clean_string(order.get('cliente_nome'))
-        city_value = clean_string(order.get('cidade'))
-        state_value = clean_string(order.get('estado'))
-        stage_key_value = clean_string(order.get('stage_key')).lower()
-        stage_label = SEPARATION_STAGE_LABELS.get(stage_key_value) or (stage_key_value.capitalize() if stage_key_value else '')
-
-        return {
-            'record_type': record_type_value,
-            'record_type_label': record_type_label or 'Registro',
-            'document_code': document_code,
-            'customer_name': customer_name,
-            'city': city_value,
-            'state': state_value,
-            'reserved': reservado_value,
-            'separated': separado_value,
-            'pending_quantity': pending_quantity,
-            'stage_key': stage_key_value,
-            'stage_label': stage_label,
-        }
-
     for order in filtered_orders:
         state_code = clean_string(order.get('estado')).upper()
+        if not state_code or state_code not in state_distribution:
+            continue
         separado_value = decimal_from(order.get('separado'))
-        if state_code and state_code in state_distribution:
-            carregado_value = decimal_from(order.get('carregado'))
-            state_distribution[state_code] += separado_value - carregado_value
-        reservado_value = decimal_from(order.get('reservado'))
-        pending_difference = reservado_value - separado_value
-        if pending_difference > Decimal(0):
-            pending_items_document_count += 1
-            pending_items_total_unique += pending_difference
-            document_payload = build_pending_document_payload(order, pending_difference, reservado_value, separado_value)
-            lot_entries = extract_production_lots(order.get('production_lots_display', ''))
-            if not lot_entries:
-                lot_entries = [{'code': pending_default_lot_code, 'label': pending_default_lot_label}]
-            seen_codes = set()
-            for entry in lot_entries:
-                entry_code = clean_string(entry.get('code'))
-                if not entry_code:
-                    entry_code = pending_default_lot_code
-                if entry_code in seen_codes:
-                    continue
-                seen_codes.add(entry_code)
-                entry_label = entry.get('label')
-                group = resolve_pending_group(entry_code, entry_label)
-                group['documents'].append(dict(document_payload))
-                group['total_pending'] += pending_difference
-
-    pending_items_report_groups = []
-    for group_code, group_data in pending_items_group_map.items():
-        documents_sorted = sorted(
-            group_data['documents'],
-            key=lambda item: item.get('pending_quantity', Decimal(0)),
-            reverse=True,
-        )
-        lot_label = group_data.get('lot_label') or (
-            pending_default_lot_label if group_code == pending_default_lot_code else group_code
-        )
-        pending_items_report_groups.append(
-            {
-                'lot_code': group_code,
-                'lot_label': lot_label,
-                'total_pending': group_data['total_pending'],
-                'documents': documents_sorted,
-            }
-        )
-    pending_items_report_groups.sort(key=lambda item: item['total_pending'], reverse=True)
-
-    pending_items_report = {
-        'groups': pending_items_report_groups,
-        'total_pending': pending_items_total_unique,
-        'document_count': pending_items_document_count,
-    }
+        carregado_value = decimal_from(order.get('carregado'))
+        state_distribution[state_code] += separado_value - carregado_value
 
     distribution_report_payload = {}
     for uf, quantity in state_distribution.items():
@@ -8031,7 +8056,6 @@ def load_lot_route_planner_v2():
         separation_stage_options=SEPARATION_STAGE_OPTIONS,
         period_display=period_display,
         distribution_report_data=distribution_report_payload,
-        pending_items_report=pending_items_report,
         document_source_options=MAP_DOCUMENT_SOURCE_OPTIONS,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado'),
