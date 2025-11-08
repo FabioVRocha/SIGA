@@ -92,6 +92,17 @@ TECHNICAL_ASSISTANCE_SITUATION_LABELS = {
     'NA': 'Não Aprovada',
 }
 
+ASSISTANCE_STATUS_OPTIONS = [
+    {'code': 'AT', 'label': TECHNICAL_ASSISTANCE_STATUS_LABELS.get('AT', 'Atendida')},
+    {'code': 'PT', 'label': TECHNICAL_ASSISTANCE_STATUS_LABELS.get('PT', 'Pendente')},
+]
+
+ASSISTANCE_SITUATION_OPTIONS = [
+    {'code': 'AP', 'label': TECHNICAL_ASSISTANCE_SITUATION_LABELS.get('AP', 'Aprovada')},
+    {'code': 'CA', 'label': TECHNICAL_ASSISTANCE_SITUATION_LABELS.get('CA', 'Cancelada')},
+    {'code': 'NA', 'label': TECHNICAL_ASSISTANCE_SITUATION_LABELS.get('NA', 'Não Aprovada')},
+]
+
 def _format_combined_filter_label(code, order_labels, assistance_labels):
     """Compose a friendly label for filters that mix pedidos and assistências."""
     order_label = (order_labels.get(code) or '').strip()
@@ -150,6 +161,8 @@ SEPARATION_STAGE_OPTIONS = [
 ]
 
 VALID_SEPARATION_STAGE_CODES = {option['code'] for option in SEPARATION_STAGE_OPTIONS}
+SEPARATION_STAGE_LABELS = {option['code']: option['label'] for option in SEPARATION_STAGE_OPTIONS}
+SEPARATION_STAGE_LABELS.setdefault('carregado', 'Carregado')
 
 OCCURRENCE_BLANK_VALUE = '__blank__'
 
@@ -7495,6 +7508,55 @@ def load_lot_route_planner_v2():
 
     orders = orders or []
 
+    def to_float(value):
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, Decimal):
+            try:
+                return float(value)
+            except (InvalidOperation, ValueError):
+                return 0.0
+        if value in (None, ''):
+            return 0.0
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def determine_stage_key_from_values(reservado, separado, carregado):
+        reservado_value = to_float(reservado)
+        separado_value = to_float(separado)
+        carregado_value = to_float(carregado)
+        rel_tol = 1e-6
+        abs_tol = 1e-6
+
+        if isclose(separado_value, 0.0, rel_tol=rel_tol, abs_tol=abs_tol):
+            return 'zero'
+
+        if (
+            not isclose(separado_value, 0.0, rel_tol=rel_tol, abs_tol=abs_tol)
+            and isclose(carregado_value, separado_value, rel_tol=rel_tol, abs_tol=abs_tol)
+        ):
+            return 'carregado'
+
+        if isclose(separado_value, reservado_value, rel_tol=rel_tol, abs_tol=abs_tol):
+            return 'total'
+
+        if separado_value < reservado_value and not isclose(separado_value, reservado_value, rel_tol=rel_tol, abs_tol=abs_tol):
+            return 'partial'
+
+        if separado_value > reservado_value and not isclose(separado_value, reservado_value, rel_tol=rel_tol, abs_tol=abs_tol):
+            return 'total'
+
+        return 'partial'
+
+    for order in orders:
+        order['stage_key'] = determine_stage_key_from_values(
+            order.get('reservado'),
+            order.get('separado'),
+            order.get('carregado'),
+        )
+
     stage_filters = set(separation_stage_param)
     if stage_filters and stage_filters == VALID_SEPARATION_STAGE_CODES:
         stage_filters = set()
@@ -7502,19 +7564,12 @@ def load_lot_route_planner_v2():
     def matches_stage(order):
         if not stage_filters:
             return True
-        kpi = order.get('kpi_status')
-        separado = order.get('separado', 0)
-
-        def stage_matches(stage_code):
-            if stage_code == 'zero':
-                return separado == 0 or kpi == 0
-            if stage_code == 'partial':
-                return kpi == 1
-            if stage_code == 'total':
-                return kpi in (2, 3)
-            return True
-
-        return any(stage_matches(code) for code in stage_filters)
+        stage_key = order.get('stage_key') or determine_stage_key_from_values(
+            order.get('reservado'),
+            order.get('separado'),
+            order.get('carregado'),
+        )
+        return stage_key in stage_filters
 
     filtered_orders = [order for order in orders if matches_stage(order)]
 
@@ -7591,13 +7646,113 @@ def load_lot_route_planner_v2():
             return Decimal(0)
 
     state_distribution = {uf: Decimal(0) for uf in BRAZIL_STATE_CODES}
+    pending_items_group_map = {}
+    pending_items_total_unique = Decimal(0)
+    pending_items_document_count = 0
+    pending_default_lot_code = '__no_production_lot__'
+    pending_default_lot_label = 'Sem Lote de Produção'
+
+    def resolve_pending_group(code, label):
+        normalized_code = clean_string(code)
+        if not normalized_code:
+            normalized_code = pending_default_lot_code
+        normalized_label = clean_string(label)
+        if not normalized_label:
+            normalized_label = (
+                pending_default_lot_label if normalized_code == pending_default_lot_code else normalized_code
+            )
+        group = pending_items_group_map.get(normalized_code)
+        if not group:
+            group = {
+                'lot_code': normalized_code,
+                'lot_label': normalized_label,
+                'documents': [],
+                'total_pending': Decimal(0),
+            }
+            pending_items_group_map[normalized_code] = group
+        elif not group.get('lot_label') and normalized_label:
+            group['lot_label'] = normalized_label
+        return group
+
+    def build_pending_document_payload(order, pending_quantity, reservado_value, separado_value):
+        record_type_value = clean_string(order.get('record_type')).lower()
+        record_type_label = clean_string(order.get('record_type_label'))
+        if not record_type_label:
+            record_type_label = clean_string(RECORD_TYPE_LABELS.get(record_type_value))
+        document_code = clean_string(order.get('pedido')) or clean_string(order.get('document_id')) or '--'
+        customer_name = clean_string(order.get('cliente_nome'))
+        city_value = clean_string(order.get('cidade'))
+        state_value = clean_string(order.get('estado'))
+        stage_key_value = clean_string(order.get('stage_key')).lower()
+        stage_label = SEPARATION_STAGE_LABELS.get(stage_key_value) or (stage_key_value.capitalize() if stage_key_value else '')
+
+        return {
+            'record_type': record_type_value,
+            'record_type_label': record_type_label or 'Registro',
+            'document_code': document_code,
+            'customer_name': customer_name,
+            'city': city_value,
+            'state': state_value,
+            'reserved': reservado_value,
+            'separated': separado_value,
+            'pending_quantity': pending_quantity,
+            'stage_key': stage_key_value,
+            'stage_label': stage_label,
+        }
+
     for order in filtered_orders:
         state_code = clean_string(order.get('estado')).upper()
-        if not state_code or state_code not in state_distribution:
-            continue
         separado_value = decimal_from(order.get('separado'))
-        carregado_value = decimal_from(order.get('carregado'))
-        state_distribution[state_code] += separado_value - carregado_value
+        if state_code and state_code in state_distribution:
+            carregado_value = decimal_from(order.get('carregado'))
+            state_distribution[state_code] += separado_value - carregado_value
+        reservado_value = decimal_from(order.get('reservado'))
+        pending_difference = reservado_value - separado_value
+        if pending_difference > Decimal(0):
+            pending_items_document_count += 1
+            pending_items_total_unique += pending_difference
+            document_payload = build_pending_document_payload(order, pending_difference, reservado_value, separado_value)
+            lot_entries = extract_production_lots(order.get('production_lots_display', ''))
+            if not lot_entries:
+                lot_entries = [{'code': pending_default_lot_code, 'label': pending_default_lot_label}]
+            seen_codes = set()
+            for entry in lot_entries:
+                entry_code = clean_string(entry.get('code'))
+                if not entry_code:
+                    entry_code = pending_default_lot_code
+                if entry_code in seen_codes:
+                    continue
+                seen_codes.add(entry_code)
+                entry_label = entry.get('label')
+                group = resolve_pending_group(entry_code, entry_label)
+                group['documents'].append(dict(document_payload))
+                group['total_pending'] += pending_difference
+
+    pending_items_report_groups = []
+    for group_code, group_data in pending_items_group_map.items():
+        documents_sorted = sorted(
+            group_data['documents'],
+            key=lambda item: item.get('pending_quantity', Decimal(0)),
+            reverse=True,
+        )
+        lot_label = group_data.get('lot_label') or (
+            pending_default_lot_label if group_code == pending_default_lot_code else group_code
+        )
+        pending_items_report_groups.append(
+            {
+                'lot_code': group_code,
+                'lot_label': lot_label,
+                'total_pending': group_data['total_pending'],
+                'documents': documents_sorted,
+            }
+        )
+    pending_items_report_groups.sort(key=lambda item: item['total_pending'], reverse=True)
+
+    pending_items_report = {
+        'groups': pending_items_report_groups,
+        'total_pending': pending_items_total_unique,
+        'document_count': pending_items_document_count,
+    }
 
     distribution_report_payload = {}
     for uf, quantity in state_distribution.items():
@@ -7678,15 +7833,11 @@ def load_lot_route_planner_v2():
     map_orders = []
     for order in filtered_orders:
         record_type_value = (order.get('record_type') or '').strip().lower()
-        kpi_status = order.get('kpi_status')
-        if kpi_status == 1:
-            stage_key = 'partial'
-        elif kpi_status == 2:
-            stage_key = 'total'
-        elif kpi_status == 3:
-            stage_key = 'carregado'
-        else:
-            stage_key = 'zero'
+        stage_key = order.get('stage_key') or determine_stage_key_from_values(
+            order.get('reservado'),
+            order.get('separado'),
+            order.get('carregado'),
+        )
         marker_border = stage_border_colors.get(stage_key, '#1f2937')
 
         latitude = normalize_coordinate_value(order.get('latitude'))
@@ -7868,6 +8019,10 @@ def load_lot_route_planner_v2():
         production_lot_options=get_distinct_production_lots(),
         approval_status_options=MAP_APPROVAL_STATUS_OPTIONS,
         situation_options=MAP_SITUATION_OPTIONS,
+        order_approval_status_options=ORDER_APPROVAL_STATUS_OPTIONS,
+        assistance_status_options=ASSISTANCE_STATUS_OPTIONS,
+        order_situation_options=ORDER_SITUATION_OPTIONS,
+        assistance_situation_options=ASSISTANCE_SITUATION_OPTIONS,
         production_lot_colors=lot_color_map,
         lot_color_legend=lot_color_legend,
         lot_color_legend_groups=lot_color_legend_groups,
@@ -7876,6 +8031,7 @@ def load_lot_route_planner_v2():
         separation_stage_options=SEPARATION_STAGE_OPTIONS,
         period_display=period_display,
         distribution_report_data=distribution_report_payload,
+        pending_items_report=pending_items_report,
         document_source_options=MAP_DOCUMENT_SOURCE_OPTIONS,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado'),
