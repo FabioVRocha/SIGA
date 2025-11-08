@@ -243,6 +243,52 @@
     .summary-card--amber .summary-value {
         color: #b45309;
     }
+    .status-kpi-red {
+        color: #dc2626;
+    }
+    .status-kpi-yellow {
+        color: #f59e0b;
+    }
+    .status-kpi-green {
+        color: #16a34a;
+    }
+    .status-kpi-blue {
+        color: #2563eb;
+    }
+    .status-legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.75rem;
+        margin-top: 1rem;
+        font-size: 0.75rem;
+        color: var(--clr-dark-blue);
+    }
+    .status-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 9999px;
+        background-color: var(--clr-light-gray);
+    }
+    .status-legend-color {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 9999px;
+    }
+    .status-legend-color.red {
+        background-color: #dc2626;
+    }
+    .status-legend-color.yellow {
+        background-color: #f59e0b;
+    }
+    .status-legend-color.green {
+        background-color: #16a34a;
+    }
+    .status-legend-color.blue {
+        background-color: #2563eb;
+    }
 </style>
 
 {% set list_url = (list_url | default(url_for('production_assistance_list'))) %}
@@ -274,16 +320,8 @@
                 {% for load_lot in filters.load_lots or [] %}<input type="hidden" name="load_lots" value="{{ load_lot }}">{% endfor %}
                 {% for production_lot in filters.production_lots or [] %}<input type="hidden" name="production_lots" value="{{ production_lot }}">{% endfor %}
                 {% for line in filters.lines or [] %}<input type="hidden" name="lines" value="{{ line }}">{% endfor %}
-
-                <div class="bg-slate-100 border border-slate-200 rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="flex flex-col gap-1 text-slate-muted">
-                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-600">Busca rápida</span>
-                        <span class="text-xs">Filtra apenas os resultados exibidos.</span>
-                    </div>
-                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-                        <input id="globalTableSearch" type="text" class="filter-input sm:w-72" placeholder="Digite para filtrar todos os campos">
-                        <button type="button" id="clearColumnFiltersBtn" class="text-xs text-red-600 hover:underline sm:ml-2">Limpar filtros</button>
-                    </div>
+                <div class="flex justify-end mb-4">
+                    <button type="button" id="clearColumnFiltersBtn" class="text-xs text-red-600 hover:underline">Limpar filtros</button>
                 </div>
 
                 <table class="min-w-full bg-white rounded-xl overflow-hidden">
@@ -335,8 +373,10 @@
                         {% if assistance_records %}
                         {% for assistance in assistance_records %}
                         {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
+                        {% set kpi_status = assistance.kpi_status %}
+                        {% set chamado_status_class = 'status-kpi-blue' if kpi_status == 3 else ('status-kpi-green' if kpi_status == 2 else ('status-kpi-yellow' if kpi_status == 1 else 'status-kpi-red')) %}
                         <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};" data-row="true">
-                            <td class="py-2 px-4 whitespace-nowrap font-semibold">{{ assistance.assistec or '—' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap font-semibold {{ chamado_status_class }}">{{ assistance.assistec or '—' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap">
                                 {% if assistance.assdata %}{{ assistance.assdata.strftime('%d/%m/%Y') }}{% else %}—{% endif %}
                             </td>
@@ -398,6 +438,24 @@
             <div class="summary-card summary-card--green">
                 <p class="summary-label">Valor Total</p>
                 <p class="summary-value">{{ totals.valor_total|format_currency_brl }}</p>
+            </div>
+        </div>
+        <div class="status-legend">
+            <div class="status-legend-item">
+                <span class="status-legend-color red"></span>
+                <span>Vermelho = Nada Separado</span>
+            </div>
+            <div class="status-legend-item">
+                <span class="status-legend-color yellow"></span>
+                <span>Amarelo = Parcialmente Separado</span>
+            </div>
+            <div class="status-legend-item">
+                <span class="status-legend-color green"></span>
+                <span>Verde = Totalmente Separado</span>
+            </div>
+            <div class="status-legend-item">
+                <span class="status-legend-color blue"></span>
+                <span>Azul = Totalmente Carregado</span>
             </div>
         </div>
         {% else %}
@@ -660,7 +718,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const sortableButtons = document.querySelectorAll('[data-sort-column]');
     const sortByInput = document.getElementById('columnSortByInput');
     const sortOrderInput = document.getElementById('columnSortOrderInput');
-    const globalSearchInput = document.getElementById('globalTableSearch');
     const visibleCountElement = document.getElementById('visibleRecordsCount');
     const noMatchingRows = document.getElementById('noMatchingRows');
     const assistanceDetailModal = document.getElementById('assistanceDetailModal');
@@ -1178,7 +1235,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return {
             element: row,
             fields,
-            combined: normalizeText(cells.map((cell) => cell.textContent).join(' ')),
         };
     });
 
@@ -1200,7 +1256,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const quickFilter = normalizeText(globalSearchInput ? globalSearchInput.value : '');
         const columnFilters = {};
 
         columnFilterInputs.forEach((input) => {
@@ -1225,10 +1280,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     matches = false;
                     break;
                 }
-            }
-
-            if (matches && quickFilter) {
-                matches = row.combined.includes(quickFilter);
             }
 
             row.element.style.display = matches ? '' : 'none';
@@ -1263,20 +1314,12 @@ document.addEventListener('DOMContentLoaded', () => {
         input.addEventListener('change', scheduleFilter);
     });
 
-    if (globalSearchInput) {
-        globalSearchInput.addEventListener('input', scheduleFilter);
-        globalSearchInput.addEventListener('change', scheduleFilter);
-    }
-
     if (clearColumnFiltersBtn) {
         clearColumnFiltersBtn.addEventListener('click', (event) => {
             event.preventDefault();
             columnFilterInputs.forEach((input) => {
                 input.value = '';
             });
-            if (globalSearchInput) {
-                globalSearchInput.value = '';
-            }
             applyFilters();
         });
     }

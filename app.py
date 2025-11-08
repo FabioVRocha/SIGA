@@ -4687,6 +4687,13 @@ def fetch_orders_from_integrated_view(filters):
                 approval_label = ORDER_APPROVAL_STATUS_LABELS.get(approval_code, 'Não Informado')
                 situation_label = ORDER_SITUATION_LABELS.get(situation_code, 'Não Informada')
 
+            city_value = (city or '').strip()
+            state_value = (state or '').strip()
+            if city_value and state_value:
+                cidade_uf_value = f"{city_value}/{state_value}"
+            else:
+                cidade_uf_value = city_value or state_value or ''
+
             orders.append({
                 'record_type': record_type,
                 'record_type_label': record_type_label,
@@ -4697,9 +4704,10 @@ def fetch_orders_from_integrated_view(filters):
                 'document_date': document_date,
                 'cliente_codigo': customer_code,
                 'cliente_nome': customer_name,
-                'cidade': (city or '').strip(),
-                'estado': (state or '').strip(),
-                'cidade_uf': '',
+                'cidade': city_value,
+                'estado': state_value,
+                'cidade_uf': cidade_uf_value,
+                'lcaseque': '',
                 'latitude': latitude_value,
                 'longitude': longitude_value,
                 'quantidade_total': quantidade,
@@ -4821,6 +4829,8 @@ def fetch_orders_from_integrated_view(filters):
                         order['production_lots_display'] = '; '.join(combined)
                     else:
                         order['production_lots_display'] = lot_display
+
+        enrich_orders_with_sequence_and_city(orders)
     except Error as exc:
         print(f"Erro ao carregar pedidos via view integrada: {exc}")
         error_message = f"Erro ao carregar pedidos via view integrada: {exc}"
@@ -4829,6 +4839,100 @@ def fetch_orders_from_integrated_view(filters):
             conn.close()
 
     return orders, error_message
+
+
+def enrich_orders_with_sequence_and_city(orders):
+    """
+    Complementa os pedidos carregados via view integrada com a sequência
+    (lcaseque) e com a melhor combinação Cidade/UF obtida diretamente do ERP.
+    """
+    if not orders:
+        return
+
+    order_map = {}
+    for order in orders:
+        record_type = (order.get('record_type') or '').strip().lower()
+        if record_type not in {'consulta_pedidos', 'pedidos_vendas'}:
+            continue
+        identifier = str(order.get('pedido') or order.get('document_id') or '').strip()
+        if not identifier:
+            continue
+        if identifier not in order_map:
+            order_map[identifier] = order
+
+    if not order_map:
+        return
+
+    conn = get_erp_db_connection()
+    if not conn:
+        return
+
+    cur = None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                CAST(p.pedido AS TEXT) AS pedido_id,
+                COALESCE(p.lcaseque::text, '') AS sequencia,
+                COALESCE(
+                    NULLIF(TRIM(c.cidnome), ''),
+                    NULLIF(TRIM(emp_city.cidnome), ''),
+                    NULLIF(TRIM(p.pedentcid::text), ''),
+                    ''
+                ) AS cidade,
+                COALESCE(
+                    NULLIF(TRIM(c.estado), ''),
+                    NULLIF(TRIM(emp_city.estado), ''),
+                    NULLIF(TRIM(p.pedentuf::text), ''),
+                    ''
+                ) AS estado
+            FROM pedido p
+            LEFT JOIN empresa emp ON emp.empresa = p.pedcliente
+            LEFT JOIN cidade c ON c.cidade = p.pedentcid
+            LEFT JOIN cidade emp_city ON emp_city.cidade = emp.empcidade
+            WHERE CAST(p.pedido AS TEXT) = ANY(%s)
+            """,
+            (list(order_map.keys()),)
+        )
+
+        for pedido_id, sequencia, cidade, estado in cur.fetchall():
+            key = (pedido_id or '').strip()
+            if not key:
+                continue
+            order = order_map.get(key)
+            if not order:
+                continue
+
+            sequence_value = (sequencia or '').strip()
+            order['lcaseque'] = sequence_value
+
+            city_value = (cidade or '').strip()
+            state_value = (estado or '').strip()
+
+            if city_value:
+                order['cidade'] = city_value
+            if state_value:
+                order['estado'] = state_value
+
+            if city_value and state_value:
+                order['cidade_uf'] = f"{city_value}/{state_value}"
+            elif city_value or state_value:
+                order['cidade_uf'] = city_value or state_value
+            else:
+                existing_city = (order.get('cidade') or '').strip()
+                existing_state = (order.get('estado') or '').strip()
+                if existing_city and existing_state:
+                    order['cidade_uf'] = f"{existing_city}/{existing_state}"
+                else:
+                    order['cidade_uf'] = existing_city or existing_state or ''
+    except Error as exc:
+        print(f"Não foi possível enriquecer pedidos com dados de sequência/cidade: {exc}")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 def fetch_assistance_production_lots(assistance_codes):
@@ -5349,6 +5453,12 @@ def fetch_technical_assistance(filters):
                 record['carregado'] = Decimal(record.get('carregado') or 0)
             except (TypeError, InvalidOperation):
                 record['carregado'] = Decimal('0')
+
+            record['kpi_status'] = calculate_order_kpi(
+                record.get('reservado'),
+                record.get('separado'),
+                record.get('carregado'),
+            )
 
             # Processar linha
             record['linha'] = (record.get('linha') or '').strip()
