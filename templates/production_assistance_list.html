@@ -79,6 +79,91 @@
         box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.15);
         outline: none;
     }
+    .checkbox-multi-select {
+        position: relative;
+    }
+    .checkbox-multi-select__trigger {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        background-color: var(--clr-white);
+        border: 1px solid var(--clr-border);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8rem;
+        color: var(--clr-dark-blue);
+        cursor: pointer;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .checkbox-multi-select__trigger:focus-visible {
+        border-color: var(--clr-light-blue);
+        box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.15);
+        outline: none;
+    }
+    .checkbox-multi-select__trigger-label {
+        flex: 1;
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .checkbox-multi-select__dropdown {
+        display: none;
+        position: absolute;
+        top: calc(100% + 0.25rem);
+        left: 0;
+        right: 0;
+        z-index: 20;
+        background-color: var(--clr-card-bg);
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.15);
+        padding: 0.75rem;
+    }
+    .checkbox-multi-select__search-input {
+        font-size: 0.8rem;
+    }
+    .checkbox-multi-select.is-open .checkbox-multi-select__dropdown {
+        display: block;
+    }
+    .checkbox-multi-select__options {
+        max-height: 14rem;
+        overflow-y: auto;
+        margin-top: 0.75rem;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        background-color: var(--clr-white);
+    }
+    .checkbox-multi-select__option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.25rem;
+        border-radius: 0.35rem;
+        cursor: pointer;
+    }
+    .checkbox-multi-select__option input {
+        accent-color: var(--clr-light-blue);
+    }
+    .checkbox-multi-select__option:hover {
+        background-color: rgba(79, 131, 204, 0.08);
+    }
+    .checkbox-multi-select__option-label {
+        font-size: 0.8rem;
+        color: var(--clr-dark-blue);
+    }
+    .checkbox-multi-select__empty-message {
+        font-size: 0.75rem;
+        color: var(--clr-text-secondary);
+        margin-top: 0.5rem;
+    }
+    .checkbox-multi-select__chevron {
+        font-size: 0.75rem;
+        color: var(--clr-text-secondary);
+    }
     .modal-content {
         background-color: var(--clr-card-bg);
         border: 1px solid var(--clr-border);
@@ -185,6 +270,10 @@
                 {% if filters.start_date %}<input type="hidden" name="start_date" value="{{ filters.start_date }}">{% endif %}
                 {% if filters.end_date %}<input type="hidden" name="end_date" value="{{ filters.end_date }}">{% endif %}
                 {% for status in filters.statuses or [] %}<input type="hidden" name="statuses" value="{{ status }}">{% endfor %}
+                {% for situation in filters.situations or [] %}<input type="hidden" name="situations" value="{{ situation }}">{% endfor %}
+                {% for load_lot in filters.load_lots or [] %}<input type="hidden" name="load_lots" value="{{ load_lot }}">{% endfor %}
+                {% for production_lot in filters.production_lots or [] %}<input type="hidden" name="production_lots" value="{{ production_lot }}">{% endfor %}
+                {% for line in filters.lines or [] %}<input type="hidden" name="lines" value="{{ line }}">{% endfor %}
 
                 <div class="bg-slate-100 border border-slate-200 rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex flex-col gap-1 text-slate-muted">
@@ -402,15 +491,152 @@
                            value="{{ filters.end_date }}">
                 </div>
                 <div>
-                    <label class="form-label" for="statuses">Status</label>
-                    <select id="statuses" name="statuses" multiple class="form-input min-h-[6rem]">
-                        {% for option in status_options %}
-                            <option value="{{ option.code }}" {% if option.code in filters.statuses %}selected{% endif %}>
-                                {{ option.label }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                    <p class="text-xs text-slate-500 mt-1">Use Ctrl/Cmd para selecionar mais de um.</p>
+                    <label class="form-label">Lote de Carga</label>
+                    <div class="checkbox-multi-select" data-field-name="load_lots" data-placeholder="Todos os lotes de carga">
+                        <button type="button" class="checkbox-multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="checkbox-multi-select__trigger-label">Todos os lotes de carga</span>
+                            <span class="checkbox-multi-select__chevron" aria-hidden="true">&#9662;</span>
+                        </button>
+                        <div class="checkbox-multi-select__dropdown">
+                            <div>
+                                <input type="text" class="filter-input checkbox-multi-select__search-input" placeholder="Pesquisar lotes..." aria-label="Pesquisar no campo Lote de Carga">
+                            </div>
+                            <div class="checkbox-multi-select__options" role="listbox" aria-multiselectable="true">
+                                {% for option in load_lot_options %}
+                                    {% set code = option.code %}
+                                    {% set description = option.description %}
+                                    {% if code or description %}
+                                        {% set option_id = 'load-lot-option-' ~ loop.index %}
+                                        {% if code and description %}
+                                            {% set display_label = code ~ ' - ' ~ description %}
+                                        {% elif code %}
+                                            {% set display_label = code %}
+                                        {% else %}
+                                            {% set display_label = description %}
+                                        {% endif %}
+                                        <label class="checkbox-multi-select__option" data-search-value="{{ display_label | lower }}" for="{{ option_id }}">
+                                            <input type="checkbox" id="{{ option_id }}" value="{{ code }}" {% if code in (filters.load_lots or []) %}checked{% endif %} data-label="{{ display_label }}">
+                                            <span class="checkbox-multi-select__option-label">{{ display_label }}</span>
+                                        </label>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                            <div class="checkbox-multi-select__empty-message" data-empty-message hidden>Nenhuma opção encontrada</div>
+                        </div>
+                        <div class="checkbox-multi-select__inputs" data-input-container></div>
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label">Lote de Produção</label>
+                    <div class="checkbox-multi-select" data-field-name="production_lots" data-placeholder="Todos os lotes de produção">
+                        <button type="button" class="checkbox-multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="checkbox-multi-select__trigger-label">Todos os lotes de produção</span>
+                            <span class="checkbox-multi-select__chevron" aria-hidden="true">&#9662;</span>
+                        </button>
+                        <div class="checkbox-multi-select__dropdown">
+                            <div>
+                                <input type="text" class="filter-input checkbox-multi-select__search-input" placeholder="Pesquisar lotes..." aria-label="Pesquisar no campo Lote de Produção">
+                            </div>
+                            <div class="checkbox-multi-select__options" role="listbox" aria-multiselectable="true">
+                                {% for option in production_lot_options %}
+                                    {% set code = option.code %}
+                                    {% set description = option.description %}
+                                    {% if code or description %}
+                                        {% set option_id = 'production-lot-option-' ~ loop.index %}
+                                        {% if code and description %}
+                                            {% set display_label = code ~ ' - ' ~ description %}
+                                        {% elif code %}
+                                            {% set display_label = code %}
+                                        {% else %}
+                                            {% set display_label = description %}
+                                        {% endif %}
+                                        <label class="checkbox-multi-select__option" data-search-value="{{ display_label | lower }}" for="{{ option_id }}">
+                                            <input type="checkbox" id="{{ option_id }}" value="{{ code }}" {% if code in (filters.production_lots or []) %}checked{% endif %} data-label="{{ display_label }}">
+                                            <span class="checkbox-multi-select__option-label">{{ display_label }}</span>
+                                        </label>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                            <div class="checkbox-multi-select__empty-message" data-empty-message hidden>Nenhuma opção encontrada</div>
+                        </div>
+                        <div class="checkbox-multi-select__inputs" data-input-container></div>
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label">Linha</label>
+                    <div class="checkbox-multi-select" data-field-name="lines" data-placeholder="Todas as linhas">
+                        <button type="button" class="checkbox-multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="checkbox-multi-select__trigger-label">Todas as linhas</span>
+                            <span class="checkbox-multi-select__chevron" aria-hidden="true">&#9662;</span>
+                        </button>
+                        <div class="checkbox-multi-select__dropdown">
+                            <div>
+                                <input type="text" class="filter-input checkbox-multi-select__search-input" placeholder="Pesquisar linhas..." aria-label="Pesquisar no campo Linha">
+                            </div>
+                            <div class="checkbox-multi-select__options" role="listbox" aria-multiselectable="true">
+                                {% for option in line_options %}
+                                    {% set option_id = 'line-option-' ~ loop.index %}
+                                    {% set display_label = option.label %}
+                                    <label class="checkbox-multi-select__option" data-search-value="{{ display_label | lower }}" for="{{ option_id }}">
+                                        <input type="checkbox" id="{{ option_id }}" value="{{ option.code }}" {% if option.code in (filters.lines or []) %}checked{% endif %} data-label="{{ display_label }}">
+                                        <span class="checkbox-multi-select__option-label">{{ display_label }}</span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                            <div class="checkbox-multi-select__empty-message" data-empty-message hidden>Nenhuma opção encontrada</div>
+                        </div>
+                        <div class="checkbox-multi-select__inputs" data-input-container></div>
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label">Status</label>
+                    <div class="checkbox-multi-select" data-field-name="statuses" data-placeholder="Todos os status">
+                        <button type="button" class="checkbox-multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="checkbox-multi-select__trigger-label">Todos os status</span>
+                            <span class="checkbox-multi-select__chevron" aria-hidden="true">&#9662;</span>
+                        </button>
+                        <div class="checkbox-multi-select__dropdown">
+                            <div>
+                                <input type="text" class="filter-input checkbox-multi-select__search-input" placeholder="Pesquisar status..." aria-label="Pesquisar no campo Status">
+                            </div>
+                            <div class="checkbox-multi-select__options" role="listbox" aria-multiselectable="true">
+                                {% for option in status_options %}
+                                    {% set option_id = 'status-option-' ~ loop.index %}
+                                    <label class="checkbox-multi-select__option" data-search-value="{{ option.label | lower }}" for="{{ option_id }}">
+                                        <input type="checkbox" id="{{ option_id }}" value="{{ option.code }}" {% if option.code in (filters.statuses or []) %}checked{% endif %} data-label="{{ option.label }}">
+                                        <span class="checkbox-multi-select__option-label">{{ option.label }}</span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                            <div class="checkbox-multi-select__empty-message" data-empty-message hidden>Nenhuma opção encontrada</div>
+                        </div>
+                        <div class="checkbox-multi-select__inputs" data-input-container></div>
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label">Situação</label>
+                    <div class="checkbox-multi-select" data-field-name="situations" data-placeholder="Todas as situações">
+                        <button type="button" class="checkbox-multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="checkbox-multi-select__trigger-label">Todas as situações</span>
+                            <span class="checkbox-multi-select__chevron" aria-hidden="true">&#9662;</span>
+                        </button>
+                        <div class="checkbox-multi-select__dropdown">
+                            <div>
+                                <input type="text" class="filter-input checkbox-multi-select__search-input" placeholder="Pesquisar situações..." aria-label="Pesquisar no campo Situação">
+                            </div>
+                            <div class="checkbox-multi-select__options" role="listbox" aria-multiselectable="true">
+                                {% for option in situation_options %}
+                                    {% set option_id = 'situation-option-' ~ loop.index %}
+                                    <label class="checkbox-multi-select__option" data-search-value="{{ option.label | lower }}" for="{{ option_id }}">
+                                        <input type="checkbox" id="{{ option_id }}" value="{{ option.code }}" {% if option.code in (filters.situations or []) %}checked{% endif %} data-label="{{ option.label }}">
+                                        <span class="checkbox-multi-select__option-label">{{ option.label }}</span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                            <div class="checkbox-multi-select__empty-message" data-empty-message hidden>Nenhuma opção encontrada</div>
+                        </div>
+                        <div class="checkbox-multi-select__inputs" data-input-container></div>
+                    </div>
                 </div>
             </div>
             <div class="flex justify-end space-x-4 mt-6">
@@ -460,6 +686,158 @@ document.addEventListener('DOMContentLoaded', () => {
         reservado: document.getElementById('assistanceDetailTotalReservado'),
         separado: document.getElementById('assistanceDetailTotalSeparado'),
         carregado: document.getElementById('assistanceDetailTotalCarregado'),
+    };
+    const multiSelectInstances = [];
+
+    class CheckboxMultiSelect {
+        constructor(element) {
+            this.element = element;
+            this.fieldName = element.dataset.fieldName || '';
+            this.placeholder = element.dataset.placeholder || 'Selecione';
+            this.trigger = element.querySelector('.checkbox-multi-select__trigger');
+            this.triggerLabel = this.trigger ? this.trigger.querySelector('.checkbox-multi-select__trigger-label') : null;
+            this.dropdown = element.querySelector('.checkbox-multi-select__dropdown');
+            this.inputContainer = element.querySelector('[data-input-container]');
+            this.searchInput = element.querySelector('.checkbox-multi-select__search-input');
+            this.optionCheckboxes = Array.from(
+                element.querySelectorAll('.checkbox-multi-select__option input[type="checkbox"]')
+            );
+            this.emptyMessage = element.querySelector('[data-empty-message]');
+            this.isOpen = false;
+
+            if (this.trigger) {
+                this.trigger.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    this.toggleDropdown();
+                });
+                this.trigger.setAttribute('aria-expanded', 'false');
+            }
+
+            this.optionCheckboxes.forEach((checkbox) => {
+                checkbox.addEventListener('change', () => {
+                    this.syncHiddenInputs();
+                    this.updateTriggerLabel();
+                });
+            });
+
+            if (this.searchInput) {
+                this.searchInput.addEventListener('input', () => {
+                    this.filterOptions(this.searchInput.value);
+                });
+            }
+
+            this.handleDocumentClick = (event) => {
+                if (!this.element.contains(event.target)) {
+                    this.closeDropdown();
+                }
+            };
+            document.addEventListener('click', this.handleDocumentClick);
+
+            this.syncHiddenInputs();
+            this.updateTriggerLabel();
+        }
+
+        toggleDropdown() {
+            if (this.isOpen) {
+                this.closeDropdown();
+            } else {
+                this.openDropdown();
+            }
+        }
+
+        openDropdown() {
+            this.isOpen = true;
+            this.element.classList.add('is-open');
+            if (this.trigger) {
+                this.trigger.setAttribute('aria-expanded', 'true');
+            }
+            if (this.searchInput) {
+                this.searchInput.focus();
+                this.searchInput.select();
+            }
+        }
+
+        closeDropdown() {
+            this.isOpen = false;
+            this.element.classList.remove('is-open');
+            if (this.trigger) {
+                this.trigger.setAttribute('aria-expanded', 'false');
+            }
+        }
+
+        syncHiddenInputs() {
+            if (!this.inputContainer || !this.fieldName) {
+                return;
+            }
+            this.inputContainer.innerHTML = '';
+            this.selectedLabels = [];
+            this.optionCheckboxes.forEach((checkbox) => {
+                if (!checkbox.checked) {
+                    return;
+                }
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = this.fieldName;
+                hiddenInput.value = checkbox.value;
+                this.inputContainer.appendChild(hiddenInput);
+
+                const optionLabel = checkbox.dataset.label || checkbox.value;
+                if (optionLabel) {
+                    this.selectedLabels.push(optionLabel);
+                }
+            });
+        }
+
+        updateTriggerLabel() {
+            if (!this.triggerLabel) {
+                return;
+            }
+            if (!this.selectedLabels || this.selectedLabels.length === 0) {
+                this.triggerLabel.textContent = this.placeholder;
+                return;
+            }
+            if (this.selectedLabels.length <= 2) {
+                this.triggerLabel.textContent = this.selectedLabels.join(', ');
+                return;
+            }
+            this.triggerLabel.textContent = `${this.selectedLabels.length} selecionados`;
+        }
+
+        filterOptions(query) {
+            const normalizedQuery = (query || '').toString().trim().toLowerCase();
+            let visibleCount = 0;
+            this.optionCheckboxes.forEach((checkbox) => {
+                const optionRow = checkbox.closest('.checkbox-multi-select__option');
+                if (!optionRow) {
+                    return;
+                }
+                const searchValue = (
+                    optionRow.dataset.searchValue ||
+                    checkbox.dataset.label ||
+                    checkbox.value ||
+                    ''
+                ).toLowerCase();
+                const matches = !normalizedQuery || searchValue.includes(normalizedQuery);
+                optionRow.style.display = matches ? '' : 'none';
+                if (matches) {
+                    visibleCount += 1;
+                }
+            });
+            if (this.emptyMessage) {
+                this.emptyMessage.hidden = visibleCount !== 0;
+            }
+        }
+    }
+
+    document.querySelectorAll('.checkbox-multi-select').forEach((element) => {
+        if (!element.dataset.fieldName) {
+            return;
+        }
+        multiSelectInstances.push(new CheckboxMultiSelect(element));
+    });
+
+    const closeAllMultiSelects = () => {
+        multiSelectInstances.forEach((instance) => instance.closeDropdown());
     };
     let lastFocusedAssistanceTrigger = null;
 
@@ -746,6 +1124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         closeFilterModalBtn.addEventListener('click', () => {
             if (filterModal) {
                 filterModal.style.display = 'none';
+                closeAllMultiSelects();
             }
         });
     }
@@ -758,6 +1137,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('click', (event) => {
             if (event.target === filterModal) {
                 filterModal.style.display = 'none';
+                closeAllMultiSelects();
             }
         });
     }
@@ -927,6 +1307,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.key !== 'Escape') {
             return;
         }
+        closeAllMultiSelects();
         if (filterModal && filterModal.style.display === 'flex') {
             filterModal.style.display = 'none';
         }

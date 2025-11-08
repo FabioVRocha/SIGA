@@ -5161,6 +5161,54 @@ def fetch_technical_assistance(filters):
             query += f" AND COALESCE(TRIM(UPPER(a.assstatus::text)), '') IN ({placeholders})"
             params.extend(normalized_statuses)
 
+        situations = filters.get('situations') or []
+        normalized_situations = [
+            normalize_lookup_code(value) for value in situations if value is not None
+        ]
+        if normalized_situations:
+            placeholders = ', '.join(['%s'] * len(normalized_situations))
+            query += f" AND COALESCE(TRIM(UPPER(a.asssitua::text)), '') IN ({placeholders})"
+            params.extend(normalized_situations)
+
+        load_lot_codes = [
+            (value or '').strip() for value in (filters.get('load_lots') or []) if value is not None
+        ]
+        load_lot_codes = [code for code in load_lot_codes if code]
+        if load_lot_codes:
+            placeholders = ', '.join(['%s'] * len(load_lot_codes))
+            query += f" AND COALESCE(TRIM(CAST(a.asslcacod AS TEXT)), '') IN ({placeholders})"
+            params.extend(load_lot_codes)
+
+        production_lot_codes = [
+            (value or '').strip()
+            for value in (filters.get('production_lots') or [])
+            if value is not None
+        ]
+        production_lot_codes = [code for code in production_lot_codes if code]
+        if production_lot_codes:
+            placeholders = ', '.join(['%s'] * len(production_lot_codes))
+            query += f"""
+                AND EXISTS (
+                    SELECT 1
+                    FROM acaorde4 apl
+                    JOIN ordem o ON o.ordem = apl.acaoorde
+                    WHERE TRIM(CAST(apl.acaorasco AS TEXT)) = TRIM(CAST(a.assistec AS TEXT))
+                      AND COALESCE(TRIM(CAST(o.lotcod AS TEXT)), '') IN ({placeholders})
+                )
+            """
+            params.extend(production_lot_codes)
+
+        line_filters = [
+            (value or '').strip().upper()
+            for value in (filters.get('lines') or [])
+            if value is not None
+        ]
+        line_filters = [value for value in line_filters if value]
+        if line_filters:
+            placeholders = ', '.join(['%s'] * len(line_filters))
+            query += f" AND COALESCE(li.linha, '') IN ({placeholders})"
+            params.extend(line_filters)
+
         code_filter = (filters.get('assistance_code') or '').strip()
         if code_filter:
             query += " AND CAST(a.assistec AS TEXT) ILIKE %s"
@@ -5770,6 +5818,58 @@ def get_technical_assistance_status_options():
     if not options:
         seen = set()
         for code, label in TECHNICAL_ASSISTANCE_STATUS_LABELS.items():
+            normalized = normalize_lookup_code(code)
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            options.append({'code': normalized, 'label': label})
+
+    options.sort(key=lambda item: item['label'])
+    return options
+
+
+def get_technical_assistance_situation_options():
+    """Retorna a lista de situações disponíveis para assistências técnicas."""
+    options = []
+    conn = get_erp_db_connection()
+    if not conn:
+        return options
+
+    cur = None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT COALESCE(TRIM(a.asssitua::text), '')
+            FROM assistec a
+            ORDER BY 1
+            """
+        )
+        seen = set()
+        for (raw_code,) in cur.fetchall():
+            normalized = normalize_lookup_code(raw_code)
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            options.append(
+                {
+                    'code': normalized,
+                    'label': get_technical_assistance_situation_label(normalized),
+                }
+            )
+    except UndefinedColumn:
+        pass
+    except (Exception, Error) as error:
+        print(f"Erro ao buscar situações de assistência técnica: {error}")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    if not options:
+        seen = set()
+        for code, label in TECHNICAL_ASSISTANCE_SITUATION_LABELS.items():
             normalized = normalize_lookup_code(code)
             if normalized in seen:
                 continue
@@ -8257,6 +8357,37 @@ def render_technical_assistance_list_page(list_endpoint_name, page_title, list_h
     ]
     selected_statuses = list(dict.fromkeys(selected_statuses))
 
+    selected_situations = [
+        normalize_lookup_code(value)
+        for value in request.args.getlist('situations')
+        if value is not None
+    ]
+    selected_situations = list(dict.fromkeys(selected_situations))
+
+    selected_load_lots = [
+        (value or '').strip()
+        for value in request.args.getlist('load_lots')
+        if value is not None
+    ]
+    selected_load_lots = [value for value in selected_load_lots if value]
+    selected_load_lots = list(dict.fromkeys(selected_load_lots))
+
+    selected_production_lots = [
+        (value or '').strip()
+        for value in request.args.getlist('production_lots')
+        if value is not None
+    ]
+    selected_production_lots = [value for value in selected_production_lots if value]
+    selected_production_lots = list(dict.fromkeys(selected_production_lots))
+
+    selected_lines = [
+        (value or '').strip().upper()
+        for value in request.args.getlist('lines')
+        if value is not None
+    ]
+    selected_lines = [value for value in selected_lines if value]
+    selected_lines = list(dict.fromkeys(selected_lines))
+
     assistance_code = (request.args.get('assistance_code') or '').strip()
     customer_filter = (request.args.get('customer') or '').strip()
     representative_filter = (request.args.get('representative') or '').strip()
@@ -8276,6 +8407,10 @@ def render_technical_assistance_list_page(list_endpoint_name, page_title, list_h
         'start_date': start_date,
         'end_date': end_date,
         'statuses': selected_statuses,
+        'situations': selected_situations,
+        'load_lots': selected_load_lots,
+        'production_lots': selected_production_lots,
+        'lines': selected_lines,
         'assistance_code': assistance_code,
         'customer': customer_filter,
         'representative': representative_filter,
@@ -8329,11 +8464,43 @@ def render_technical_assistance_list_page(list_endpoint_name, page_title, list_h
     }
 
     status_options = get_technical_assistance_status_options()
+    situation_options = get_technical_assistance_situation_options()
+
+    def _normalize_lot_options(raw_options):
+        cleaned = []
+        seen = set()
+        for option in raw_options or []:
+            code = (option.get('code') or '').strip()
+            description = (option.get('description') or '').strip()
+            if not code:
+                continue
+            key = (code, description)
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append({'code': code, 'description': description})
+        return cleaned
+
+    load_lot_options = _normalize_lot_options(get_distinct_load_lots())
+    production_lot_options = _normalize_lot_options(get_distinct_production_lots())
+
+    line_options = []
+    seen_lines = set()
+    for line_name in get_distinct_product_lines():
+        code = (line_name or '').strip().upper()
+        if not code or code in seen_lines:
+            continue
+        seen_lines.add(code)
+        line_options.append({'code': code, 'label': code})
 
     active_filters = {
         'start_date': start_date_param,
         'end_date': end_date_param,
         'statuses': selected_statuses,
+        'situations': selected_situations,
+        'load_lots': selected_load_lots,
+        'production_lots': selected_production_lots,
+        'lines': selected_lines,
         'assistance_code': assistance_code,
         'customer': customer_filter,
         'representative': representative_filter,
@@ -8346,6 +8513,10 @@ def render_technical_assistance_list_page(list_endpoint_name, page_title, list_h
         assistance_records=assistance_records,
         totals=totals,
         status_options=status_options,
+        situation_options=situation_options,
+        load_lot_options=load_lot_options,
+        production_lot_options=production_lot_options,
+        line_options=line_options,
         filters=active_filters,
         sort_by=requested_sort_by,
         sort_order=sort_order,
@@ -8397,6 +8568,37 @@ def render_production_assistance_list_page(list_endpoint_name, page_title, list_
     ]
     selected_statuses = list(dict.fromkeys(selected_statuses))
 
+    selected_situations = [
+        normalize_lookup_code(value)
+        for value in request.args.getlist('situations')
+        if value is not None
+    ]
+    selected_situations = list(dict.fromkeys(selected_situations))
+
+    selected_load_lots = [
+        (value or '').strip()
+        for value in request.args.getlist('load_lots')
+        if value is not None
+    ]
+    selected_load_lots = [value for value in selected_load_lots if value]
+    selected_load_lots = list(dict.fromkeys(selected_load_lots))
+
+    selected_production_lots = [
+        (value or '').strip()
+        for value in request.args.getlist('production_lots')
+        if value is not None
+    ]
+    selected_production_lots = [value for value in selected_production_lots if value]
+    selected_production_lots = list(dict.fromkeys(selected_production_lots))
+
+    selected_lines = [
+        (value or '').strip().upper()
+        for value in request.args.getlist('lines')
+        if value is not None
+    ]
+    selected_lines = [value for value in selected_lines if value]
+    selected_lines = list(dict.fromkeys(selected_lines))
+
     assistance_code = (request.args.get('assistance_code') or '').strip()
     customer_filter = (request.args.get('customer') or '').strip()
     representative_filter = (request.args.get('representative') or '').strip()
@@ -8416,6 +8618,10 @@ def render_production_assistance_list_page(list_endpoint_name, page_title, list_
         'start_date': start_date,
         'end_date': end_date,
         'statuses': selected_statuses,
+        'situations': selected_situations,
+        'load_lots': selected_load_lots,
+        'production_lots': selected_production_lots,
+        'lines': selected_lines,
         'assistance_code': assistance_code,
         'customer': customer_filter,
         'representative': representative_filter,
@@ -8469,11 +8675,43 @@ def render_production_assistance_list_page(list_endpoint_name, page_title, list_
     }
 
     status_options = get_technical_assistance_status_options()
+    situation_options = get_technical_assistance_situation_options()
+
+    def _normalize_lot_options(raw_options):
+        cleaned = []
+        seen = set()
+        for option in raw_options or []:
+            code = (option.get('code') or '').strip()
+            description = (option.get('description') or '').strip()
+            if not code:
+                continue
+            key = (code, description)
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append({'code': code, 'description': description})
+        return cleaned
+
+    load_lot_options = _normalize_lot_options(get_distinct_load_lots())
+    production_lot_options = _normalize_lot_options(get_distinct_production_lots())
+
+    line_options = []
+    seen_lines = set()
+    for line_name in get_distinct_product_lines():
+        code = (line_name or '').strip().upper()
+        if not code or code in seen_lines:
+            continue
+        seen_lines.add(code)
+        line_options.append({'code': code, 'label': code})
 
     active_filters = {
         'start_date': start_date_param,
         'end_date': end_date_param,
         'statuses': selected_statuses,
+        'situations': selected_situations,
+        'load_lots': selected_load_lots,
+        'production_lots': selected_production_lots,
+        'lines': selected_lines,
         'assistance_code': assistance_code,
         'customer': customer_filter,
         'representative': representative_filter,
@@ -8486,6 +8724,10 @@ def render_production_assistance_list_page(list_endpoint_name, page_title, list_
         assistance_records=assistance_records,
         totals=totals,
         status_options=status_options,
+        situation_options=situation_options,
+        load_lot_options=load_lot_options,
+        production_lot_options=production_lot_options,
+        line_options=line_options,
         filters=active_filters,
         sort_by=requested_sort_by,
         sort_order=sort_order,
