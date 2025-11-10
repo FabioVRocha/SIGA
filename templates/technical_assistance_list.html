@@ -158,6 +158,95 @@
     .summary-card--amber .summary-value {
         color: #b45309;
     }
+    .assistance-media-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.45rem 0.9rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+        background-color: var(--clr-white);
+        border: 1px solid var(--clr-border);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+        transition: color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+    .assistance-media-trigger:hover {
+        border-color: var(--clr-light-blue);
+        color: var(--clr-light-blue);
+        box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
+        transform: translateY(-1px);
+    }
+    .assistance-media-trigger i {
+        font-size: 0.9rem;
+    }
+    .assistance-media-modal-content {
+        width: 100%;
+        max-width: 60rem;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .assistance-media-viewer {
+        min-height: 22rem;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        background-color: var(--clr-white);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.5rem;
+    }
+    .assistance-media-viewer img,
+    .assistance-media-viewer video,
+    .assistance-media-viewer iframe {
+        width: 100%;
+        height: 100%;
+        max-height: 32rem;
+        object-fit: contain;
+        border-radius: 0.5rem;
+    }
+    .assistance-media-viewer iframe {
+        border: none;
+    }
+    .assistance-media-thumbnails {
+        display: flex;
+        gap: 0.75rem;
+        overflow-x: auto;
+        padding: 0.25rem 0.5rem;
+    }
+    .assistance-media-thumbnail {
+        width: 5rem;
+        height: 5rem;
+        border-radius: 0.5rem;
+        border: 2px solid transparent;
+        background-color: rgba(148, 163, 184, 0.12);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        cursor: pointer;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .assistance-media-thumbnail:hover {
+        transform: translateY(-2px);
+    }
+    .assistance-media-thumbnail.active {
+        border-color: var(--clr-light-blue);
+        box-shadow: 0 0 0 2px rgba(79, 131, 204, 0.25);
+    }
+    .assistance-media-thumbnail img,
+    .assistance-media-thumbnail video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 0.35rem;
+    }
+    .assistance-media-thumbnail__label {
+        font-size: 0.7rem;
+        text-align: center;
+        color: var(--clr-dark-blue);
+    }
 </style>
 
 {% set list_url = (list_url | default(url_for('technical_assistance_list'))) %}
@@ -186,15 +275,8 @@
                 {% if filters.end_date %}<input type="hidden" name="end_date" value="{{ filters.end_date }}">{% endif %}
                 {% for status in filters.statuses or [] %}<input type="hidden" name="statuses" value="{{ status }}">{% endfor %}
 
-                <div class="bg-slate-100 border border-slate-200 rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="flex flex-col gap-1 text-slate-muted">
-                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-600">Busca rápida</span>
-                        <span class="text-xs">Filtra apenas os resultados exibidos.</span>
-                    </div>
-                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-                        <input id="globalTableSearch" type="text" class="filter-input sm:w-72" placeholder="Digite para filtrar todos os campos">
-                        <button type="button" id="clearColumnFiltersBtn" class="text-xs text-red-600 hover:underline sm:ml-2">Limpar filtros</button>
-                    </div>
+                <div class="flex justify-end mb-4">
+                    <button type="button" id="clearColumnFiltersBtn" class="text-xs text-red-600 hover:underline">Limpar filtros rápidos</button>
                 </div>
 
                 <table class="min-w-full bg-white rounded-xl overflow-hidden">
@@ -205,40 +287,24 @@
                             <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'cliente_nome' %}active{% endif %}" data-sort-column="cliente_nome"><span>Cliente</span><i class="fas {% if sort_by == 'cliente_nome' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
                             <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'cidade_estado' %}active{% endif %}" data-sort-column="cidade_estado"><span>Cidade/UF</span><i class="fas {% if sort_by == 'cidade_estado' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
                             <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'quantidade_pecas' %}active{% endif %}" data-sort-column="quantidade_pecas"><span>Peças</span><i class="fas {% if sort_by == 'quantidade_pecas' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
-                            <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'reservado' %}active{% endif %}" data-sort-column="reservado"><span>Reservado</span><i class="fas {% if sort_by == 'reservado' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
-                            <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'separado' %}active{% endif %}" data-sort-column="separado"><span>Separado</span><i class="fas {% if sort_by == 'separado' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
-                            <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'carregado' %}active{% endif %}" data-sort-column="carregado"><span>Carregado</span><i class="fas {% if sort_by == 'carregado' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'valor_total' %}active{% endif %}" data-sort-column="valor_total"><span>Valor Total</span><i class="fas {% if sort_by == 'valor_total' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'responsavel_nome' %}active{% endif %}" data-sort-column="responsavel_nome"><span>Responsável</span><i class="fas {% if sort_by == 'responsavel_nome' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'status_label' %}active{% endif %}" data-sort-column="status_label"><span>Status</span><i class="fas {% if sort_by == 'status_label' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'situacao_label' %}active{% endif %}" data-sort-column="situacao_label"><span>Situação</span><i class="fas {% if sort_by == 'situacao_label' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
                             <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'linha' %}active{% endif %}" data-sort-column="linha"><span>Linha</span><i class="fas {% if sort_by == 'linha' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
                             <th scope="col" class="px-4 py-3 text-center rounded-tr-lg">Ações</th>
                         </tr>
                         <tr class="bg-slate-100 text-xs text-dark-blue">
-                            <th scope="col" class="px-4 py-2">
-                                <input type="text" name="assistance_code" value="{{ filters.get('assistance_code', '') }}" class="filter-input column-filter-input" data-field="assistance_code" placeholder="Chamado">
-                            </th>
-                            <th scope="col" class="px-4 py-2">
-                                <input type="text" name="assistance_date" value="{{ filters.get('assistance_date', '') }}" class="filter-input column-filter-input" data-field="date" placeholder="Data">
-                            </th>
-                            <th scope="col" class="px-4 py-2">
-                                <input type="text" name="customer" value="{{ filters.get('customer', '') }}" class="filter-input column-filter-input" data-field="customer" placeholder="Cliente">
-                            </th>
-                            <th scope="col" class="px-4 py-2">
-                                <input type="text" name="city" value="{{ filters.get('city', '') }}" class="filter-input column-filter-input" data-field="city" placeholder="Cidade/UF">
-                            </th>
-                            <th scope="col" class="px-4 py-2">
-                                <input type="text" name="pieces" value="{{ filters.get('pieces', '') }}" class="filter-input column-filter-input text-right" data-field="pieces" placeholder="Peças">
-                            </th>
-                            <th scope="col" class="px-4 py-2">
-                                <input type="text" name="reserved" value="{{ filters.get('reserved', '') }}" class="filter-input column-filter-input text-right" data-field="reserved" placeholder="Reservado">
-                            </th>
-                            <th scope="col" class="px-4 py-2">
-                                <input type="text" name="separated" value="{{ filters.get('separated', '') }}" class="filter-input column-filter-input text-right" data-field="separated" placeholder="Separado">
-                            </th>
-                            <th scope="col" class="px-4 py-2">
-                                <input type="text" name="loaded" value="{{ filters.get('loaded', '') }}" class="filter-input column-filter-input text-right" data-field="loaded" placeholder="Carregado">
-                            </th>
-                            <th scope="col" class="px-4 py-2">
-                                <input type="text" name="line" value="{{ filters.get('line', '') }}" class="filter-input column-filter-input" data-field="line" placeholder="Linha">
-                            </th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="assistance_code" value="{{ filters.get('assistance_code', '') }}" class="filter-input column-filter-input" data-field="assistance_code" placeholder="Chamado"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="assistance_date" value="{{ filters.get('assistance_date', '') }}" class="filter-input column-filter-input" data-field="date" placeholder="Data"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="customer" value="{{ filters.get('customer', '') }}" class="filter-input column-filter-input" data-field="customer" placeholder="Cliente"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="city" value="{{ filters.get('city', '') }}" class="filter-input column-filter-input" data-field="city" placeholder="Cidade/UF"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="pieces" value="{{ filters.get('pieces', '') }}" class="filter-input column-filter-input text-right" data-field="pieces" placeholder="Peças"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="valor_total" value="{{ filters.get('valor_total', '') }}" class="filter-input column-filter-input text-right" data-field="valor_total" placeholder="Valor Total"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="responsavel" value="{{ filters.get('responsavel', '') }}" class="filter-input column-filter-input" data-field="responsavel" placeholder="Responsável"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="status" value="{{ filters.get('status', '') }}" class="filter-input column-filter-input" data-field="status" placeholder="Status"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="situacao" value="{{ filters.get('situacao', '') }}" class="filter-input column-filter-input" data-field="situacao" placeholder="Situação"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="line" value="{{ filters.get('line', '') }}" class="filter-input column-filter-input" data-field="line" placeholder="Linha"></th>
                             <th scope="col" class="px-4 py-2 text-center"></th>
                         </tr>
                     </thead>
@@ -259,9 +325,10 @@
                             </td>
                             <td class="py-2 px-4 whitespace-nowrap">{{ assistance.cidade_estado or '—' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap text-right">{{ assistance.quantidade_pecas|format_decimal_br(0) }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ assistance.reservado|format_decimal_br }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ assistance.separado|format_decimal_br }}</td>
-                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ assistance.carregado|format_decimal_br }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-right">{{ assistance.valor_total|format_currency_brl }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ assistance.responsavel_nome or '—' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ assistance.status_label or '—' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ assistance.situacao_label or '—' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap">{{ assistance.linha or '—' }}</td>
                             <td class="py-2 px-4 text-center">
                                 {% if assistance.assistec %}
@@ -281,14 +348,14 @@
                         </tr>
                         {% endfor %}
                         <tr id="noMatchingRows" style="display: none;">
-                            <td colspan="10" class="py-6 px-4 text-center text-sm text-slate-muted">
+                            <td colspan="11" class="py-6 px-4 text-center text-sm text-slate-muted">
                                 Nenhum registro corresponde aos filtros digitados.
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="10" class="py-6 px-4 text-center text-sm text-slate-muted">
-                                Nenhum registro encontrado. Ajuste os filtros ou utilize os campos de busca acima.
+                            <td colspan="11" class="py-6 px-4 text-center text-sm text-slate-muted">
+                                Nenhum registro encontrado. Ajuste os filtros disponíveis na tabela.
                             </td>
                         </tr>
                         {% endif %}
@@ -329,7 +396,7 @@
     data-endpoint="{{ url_for('technical_assistance_details', assistance_identifier='__PLACEHOLDER__') }}"
 >
     <div class="modal-content assistance-detail-modal-content p-6 md:p-8 rounded-xl space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
             <h2 class="section-heading">Detalhes da Assistência</h2>
             <button id="closeAssistanceDetailModalBtn" class="close-button" aria-label="Fechar detalhes da assistência">&times;</button>
         </div>
@@ -346,6 +413,17 @@
                 <div><span class="font-semibold">Data do Pedido:</span> <span id="assistanceDetailDataPedido">--</span></div>
                 <div class="md:col-span-2"><span class="font-semibold">Lote de Produção:</span> <span id="assistanceDetailLoteProducao">--</span></div>
                 <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="assistanceDetailLoteCarga">--</span></div>
+            </div>
+            <div class="flex justify-end">
+                <button
+                    id="openAssistanceMediaBtn"
+                    type="button"
+                    class="assistance-media-trigger hidden"
+                    aria-label="Abrir mídias da assistência"
+                >
+                    <i class="fas fa-photo-video"></i>
+                    <span>Mídias</span>
+                </button>
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full bg-white rounded-xl overflow-hidden">
@@ -375,6 +453,37 @@
             <div id="assistanceDetailEmptyState" class="hidden text-sm text-center text-slate-muted">
                 Nenhum item encontrado para esta assistência.
             </div>
+        </div>
+    </div>
+</div>
+
+<div
+    id="assistanceMediaModal"
+    class="modal"
+    data-list-endpoint="{{ url_for('technical_assistance_media', assistance_identifier='__PLACEHOLDER__') }}"
+>
+    <div class="modal-content assistance-media-modal-content p-6 md:p-8 rounded-xl space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h2 class="section-heading">Mídias da Assistência</h2>
+                <p class="text-sm text-slate-muted" id="assistanceMediaModalSubtitle"></p>
+            </div>
+            <button id="closeAssistanceMediaModalBtn" class="close-button" aria-label="Fechar visualizador de mídias">&times;</button>
+        </div>
+        <div id="assistanceMediaLoading" class="py-6 text-center text-sm text-dark-blue hidden">
+            <i class="fas fa-spinner fa-spin mr-2"></i> Carregando mídias da assistência...
+        </div>
+        <div id="assistanceMediaError" class="py-4 text-center text-sm text-red-600 hidden"></div>
+        <div id="assistanceMediaEmpty" class="py-4 text-center text-sm text-slate-muted hidden">
+            Nenhuma mídia disponível para esta assistência.
+        </div>
+        <div id="assistanceMediaViewer" class="assistance-media-viewer text-sm text-slate-muted">
+            Selecione uma mídia para visualizar.
+        </div>
+        <p id="assistanceMediaSelectedName" class="text-sm text-center text-dark-blue hidden"></p>
+        <div>
+            <h3 class="text-sm font-semibold text-dark-blue mb-2">Miniaturas</h3>
+            <div id="assistanceMediaThumbnails" class="assistance-media-thumbnails"></div>
         </div>
     </div>
 </div>
@@ -430,7 +539,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const sortableButtons = document.querySelectorAll('[data-sort-column]');
     const sortByInput = document.getElementById('columnSortByInput');
     const sortOrderInput = document.getElementById('columnSortOrderInput');
-    const globalSearchInput = document.getElementById('globalTableSearch');
     const visibleCountElement = document.getElementById('visibleRecordsCount');
     const noMatchingRows = document.getElementById('noMatchingRows');
     const assistanceDetailModal = document.getElementById('assistanceDetailModal');
@@ -457,6 +565,20 @@ document.addEventListener('DOMContentLoaded', () => {
         valor: document.getElementById('assistanceDetailTotalValor'),
     };
     let lastFocusedAssistanceTrigger = null;
+    const openAssistanceMediaBtn = document.getElementById('openAssistanceMediaBtn');
+    const assistanceMediaModal = document.getElementById('assistanceMediaModal');
+    const closeAssistanceMediaModalBtn = document.getElementById('closeAssistanceMediaModalBtn');
+    const assistanceMediaLoading = document.getElementById('assistanceMediaLoading');
+    const assistanceMediaError = document.getElementById('assistanceMediaError');
+    const assistanceMediaEmpty = document.getElementById('assistanceMediaEmpty');
+    const assistanceMediaViewer = document.getElementById('assistanceMediaViewer');
+    const assistanceMediaThumbnails = document.getElementById('assistanceMediaThumbnails');
+    const assistanceMediaSubtitle = document.getElementById('assistanceMediaModalSubtitle');
+    const assistanceMediaSelectedName = document.getElementById('assistanceMediaSelectedName');
+    const assistanceMediaListEndpointTemplate = assistanceMediaModal ? assistanceMediaModal.dataset.listEndpoint || '' : '';
+    let assistanceMediaItems = [];
+    let assistanceMediaActiveIndex = -1;
+    let lastFocusedMediaTrigger = null;
 
     const safeText = (value, fallback = '—') => {
         if (value === null || value === undefined) {
@@ -544,6 +666,20 @@ document.addEventListener('DOMContentLoaded', () => {
         assistanceDetailTotalsContainer.classList.remove('hidden');
     };
 
+    const updateMediaButtonState = (code) => {
+        if (!openAssistanceMediaBtn) {
+            return;
+        }
+        if (code) {
+            openAssistanceMediaBtn.dataset.assistanceCode = code;
+            openAssistanceMediaBtn.classList.remove('hidden');
+            openAssistanceMediaBtn.disabled = false;
+        } else {
+            openAssistanceMediaBtn.dataset.assistanceCode = '';
+            openAssistanceMediaBtn.classList.add('hidden');
+        }
+    };
+
     const resetAssistanceDetail = () => {
         Object.values(assistanceDetailFields).forEach((element) => {
             if (element) {
@@ -565,6 +701,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (assistanceDetailTotalsContainer) {
             assistanceDetailTotalsContainer.classList.add('hidden');
         }
+        updateMediaButtonState('');
     };
 
     const showAssistanceDetailLoading = () => {
@@ -644,6 +781,223 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    const hideMediaFeedbackMessages = () => {
+        if (assistanceMediaError) {
+            assistanceMediaError.classList.add('hidden');
+            assistanceMediaError.textContent = '';
+        }
+        if (assistanceMediaEmpty) {
+            assistanceMediaEmpty.classList.add('hidden');
+        }
+    };
+
+    const resetAssistanceMediaModal = () => {
+        assistanceMediaItems = [];
+        assistanceMediaActiveIndex = -1;
+        hideMediaFeedbackMessages();
+        if (assistanceMediaViewer) {
+            assistanceMediaViewer.textContent = 'Selecione uma mídia para visualizar.';
+        }
+        if (assistanceMediaThumbnails) {
+            assistanceMediaThumbnails.innerHTML = '';
+        }
+        if (assistanceMediaSelectedName) {
+            assistanceMediaSelectedName.textContent = '';
+            assistanceMediaSelectedName.classList.add('hidden');
+        }
+    };
+
+    const showMediaLoading = () => {
+        if (assistanceMediaLoading) {
+            assistanceMediaLoading.classList.remove('hidden');
+        }
+        hideMediaFeedbackMessages();
+    };
+
+    const hideMediaLoading = () => {
+        if (assistanceMediaLoading) {
+            assistanceMediaLoading.classList.add('hidden');
+        }
+    };
+
+    const showMediaError = (message) => {
+        hideMediaFeedbackMessages();
+        if (assistanceMediaError) {
+            assistanceMediaError.textContent = message || 'Não foi possível carregar as mídias.';
+            assistanceMediaError.classList.remove('hidden');
+        }
+    };
+
+    const showMediaEmptyState = () => {
+        hideMediaFeedbackMessages();
+        if (assistanceMediaEmpty) {
+            assistanceMediaEmpty.classList.remove('hidden');
+        }
+    };
+
+    const updateThumbnailSelection = () => {
+        if (!assistanceMediaThumbnails) {
+            return;
+        }
+        const buttons = assistanceMediaThumbnails.querySelectorAll('.assistance-media-thumbnail');
+        buttons.forEach((button, index) => {
+            if (index === assistanceMediaActiveIndex) {
+                button.classList.add('active');
+            } else {
+                button.classList.remove('active');
+            }
+        });
+    };
+
+    const renderMediaViewer = (item) => {
+        if (!assistanceMediaViewer) {
+            return;
+        }
+        assistanceMediaViewer.innerHTML = '';
+        if (!item) {
+            assistanceMediaViewer.textContent = 'Selecione uma mídia para visualizar.';
+            return;
+        }
+        let element = null;
+        if (item.kind === 'image') {
+            element = document.createElement('img');
+            element.src = item.url;
+            element.alt = item.name || 'Mídia da assistência';
+            element.loading = 'lazy';
+        } else if (item.kind === 'video') {
+            element = document.createElement('video');
+            element.controls = true;
+            element.controlsList = 'nodownload';
+            element.preload = 'metadata';
+            element.src = item.url;
+        } else if (item.kind === 'pdf') {
+            element = document.createElement('iframe');
+            element.src = item.url;
+            element.title = item.name || 'Documento da assistência';
+        } else {
+            const fallback = document.createElement('p');
+            fallback.className = 'text-sm text-center text-slate-muted';
+            fallback.textContent = 'Tipo de mídia não suportado.';
+            assistanceMediaViewer.appendChild(fallback);
+            return;
+        }
+        assistanceMediaViewer.appendChild(element);
+        if (assistanceMediaSelectedName) {
+            assistanceMediaSelectedName.textContent = item.name || '';
+            assistanceMediaSelectedName.classList.remove('hidden');
+        }
+    };
+
+    const setActiveMedia = (index) => {
+        const item = assistanceMediaItems[index];
+        if (!item) {
+            return;
+        }
+        assistanceMediaActiveIndex = index;
+        renderMediaViewer(item);
+        updateThumbnailSelection();
+    };
+
+    const renderMediaThumbnails = () => {
+        if (!assistanceMediaThumbnails) {
+            return;
+        }
+        assistanceMediaThumbnails.innerHTML = '';
+        assistanceMediaItems.forEach((item, index) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'assistance-media-thumbnail';
+            button.dataset.mediaIndex = String(index);
+            if (item.kind === 'image') {
+                const thumb = document.createElement('img');
+                thumb.src = item.thumbnail_url || item.url;
+                thumb.alt = item.name || 'Miniatura';
+                thumb.loading = 'lazy';
+                button.appendChild(thumb);
+            } else {
+                const icon = document.createElement('i');
+                icon.className = item.kind === 'video' ? 'fas fa-video text-lg text-dark-blue' : 'fas fa-file-pdf text-lg text-dark-blue';
+                button.appendChild(icon);
+                const label = document.createElement('span');
+                label.className = 'assistance-media-thumbnail__label';
+                label.textContent = (item.extension || '').replace('.', '').toUpperCase() || item.kind.toUpperCase();
+                button.appendChild(label);
+            }
+            button.addEventListener('click', () => {
+                setActiveMedia(index);
+            });
+            assistanceMediaThumbnails.appendChild(button);
+        });
+        updateThumbnailSelection();
+    };
+
+    const setAssistanceMediaSubtitle = (code) => {
+        if (assistanceMediaSubtitle) {
+            assistanceMediaSubtitle.textContent = code ? `Assistência ${code}` : '';
+        }
+    };
+
+    const fetchAssistanceMedia = async (code) => {
+        if (!code || !assistanceMediaListEndpointTemplate) {
+            showMediaError('Código da assistência inválido.');
+            return;
+        }
+        showMediaLoading();
+        try {
+            const endpoint = assistanceMediaListEndpointTemplate.replace('__PLACEHOLDER__', encodeURIComponent(code));
+            const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (parseError) {
+                console.error('Não foi possível interpretar a lista de mídias:', parseError);
+            }
+            if (!response.ok) {
+                const message = payload && payload.error ? payload.error : 'Não foi possível carregar as mídias.';
+                throw new Error(message);
+            }
+            assistanceMediaItems = Array.isArray(payload && payload.files) ? payload.files : [];
+            if (!assistanceMediaItems.length) {
+                showMediaEmptyState();
+                return;
+            }
+            renderMediaThumbnails();
+            setActiveMedia(0);
+        } catch (error) {
+            console.error('Erro ao carregar mídias da assistência:', error);
+            showMediaError(error.message);
+        } finally {
+            hideMediaLoading();
+        }
+    };
+
+    const openAssistanceMediaModalFor = (code) => {
+        if (!assistanceMediaModal) {
+            return;
+        }
+        setAssistanceMediaSubtitle(code);
+        assistanceMediaModal.dataset.assistanceCode = code || '';
+        assistanceMediaModal.style.display = 'flex';
+        resetAssistanceMediaModal();
+        fetchAssistanceMedia(code);
+    };
+
+    const closeAssistanceMediaModal = () => {
+        if (assistanceMediaModal) {
+            assistanceMediaModal.style.display = 'none';
+            assistanceMediaModal.dataset.assistanceCode = '';
+        }
+        if (assistanceMediaViewer) {
+            assistanceMediaViewer.textContent = 'Selecione uma mídia para visualizar.';
+        }
+        if (assistanceMediaThumbnails) {
+            assistanceMediaThumbnails.innerHTML = '';
+        }
+        if (lastFocusedMediaTrigger) {
+            lastFocusedMediaTrigger.focus({ preventScroll: true });
+        }
+    };
+
     const closeAssistanceDetailModal = () => {
         if (assistanceDetailModal) {
             assistanceDetailModal.style.display = 'none';
@@ -684,6 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setFieldText(assistanceDetailFields.dataPedido, header.data_pedido);
             setFieldList(assistanceDetailFields.loteProducao, header.lote_producao);
             setFieldList(assistanceDetailFields.loteCarga, header.lote_carga);
+            updateMediaButtonState(header.assistencia);
             updateAssistanceTotals(data.totals);
             renderAssistanceItems(Array.isArray(data.items) ? data.items : []);
             showAssistanceDetailContent();
@@ -726,6 +1081,29 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    if (openAssistanceMediaBtn) {
+        openAssistanceMediaBtn.addEventListener('click', () => {
+            const code = (openAssistanceMediaBtn.dataset.assistanceCode || '').trim();
+            if (!code) {
+                return;
+            }
+            lastFocusedMediaTrigger = openAssistanceMediaBtn;
+            openAssistanceMediaModalFor(code);
+        });
+    }
+
+    if (closeAssistanceMediaModalBtn) {
+        closeAssistanceMediaModalBtn.addEventListener('click', closeAssistanceMediaModal);
+    }
+
+    if (assistanceMediaModal) {
+        assistanceMediaModal.addEventListener('click', (event) => {
+            if (event.target === assistanceMediaModal) {
+                closeAssistanceMediaModal();
+            }
+        });
+    }
+
     const columnFilterInputs = columnFilterForm ? Array.from(columnFilterForm.querySelectorAll('.column-filter-input')) : [];
     const dataRows = Array.from(document.querySelectorAll('tr[data-row=\"true\"]'));
 
@@ -767,10 +1145,11 @@ document.addEventListener('DOMContentLoaded', () => {
         customer: 2,
         city: 3,
         pieces: 4,
-        reserved: 5,
-        separated: 6,
-        loaded: 7,
-        line: 8,
+        valor_total: 5,
+        responsavel: 6,
+        status: 7,
+        situacao: 8,
+        line: 9,
     };
 
     const normalizeText = (value) => {
@@ -797,7 +1176,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return {
             element: row,
             fields,
-            combined: normalizeText(cells.map((cell) => cell.textContent).join(' ')),
         };
     });
 
@@ -819,7 +1197,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const quickFilter = normalizeText(globalSearchInput ? globalSearchInput.value : '');
         const columnFilters = {};
 
         columnFilterInputs.forEach((input) => {
@@ -844,10 +1221,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     matches = false;
                     break;
                 }
-            }
-
-            if (matches && quickFilter) {
-                matches = row.combined.includes(quickFilter);
             }
 
             row.element.style.display = matches ? '' : 'none';
@@ -882,20 +1255,12 @@ document.addEventListener('DOMContentLoaded', () => {
         input.addEventListener('change', scheduleFilter);
     });
 
-    if (globalSearchInput) {
-        globalSearchInput.addEventListener('input', scheduleFilter);
-        globalSearchInput.addEventListener('change', scheduleFilter);
-    }
-
     if (clearColumnFiltersBtn) {
         clearColumnFiltersBtn.addEventListener('click', (event) => {
             event.preventDefault();
             columnFilterInputs.forEach((input) => {
                 input.value = '';
             });
-            if (globalSearchInput) {
-                globalSearchInput.value = '';
-            }
             applyFilters();
         });
     }
@@ -931,6 +1296,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (assistanceDetailModal && assistanceDetailModal.style.display === 'flex') {
             closeAssistanceDetailModal();
+        }
+        if (assistanceMediaModal && assistanceMediaModal.style.display === 'flex') {
+            closeAssistanceMediaModal();
         }
     });
 });

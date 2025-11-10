@@ -1,5 +1,5 @@
 # Importa as classes e funções necessárias do Flask
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file, abort
 # Importa o módulo para conectar ao PostgreSQL
 import psycopg2
 # Importa o módulo para lidar com erros de banco de dados
@@ -19,6 +19,8 @@ import urllib.parse
 import urllib.request
 import urllib.error
 import itertools
+import base64
+import mimetypes
 import ssl
 from pathlib import Path
 import threading
@@ -42,6 +44,10 @@ AVAILABLE_PARAMETER_REPORTS = [
     ('invoices_mirror', 'Espelho de Notas Fiscais Faturadas'),
 ]
 
+REPORT_SALES_COMPARISON_FILTERS_PARAM = 'report_sales_orders_comparison_filters'
+REPORT_ORDERS_BY_STATE_FILTERS_PARAM = 'report_orders_by_state_filters'
+REPORT_ORDERS_LINE_FILTERS_PARAM = 'report_orders_by_line_filters'
+
 ORDER_APPROVAL_STATUS_OPTIONS = [
     {'code': 'S', 'label': 'Aprovado'},
     {'code': 'N', 'label': 'Não Aprovado'},
@@ -62,6 +68,8 @@ ORDER_SITUATION_OPTIONS = [
 ORDER_SITUATION_LABELS = {
     option['code']: option['label'] for option in ORDER_SITUATION_OPTIONS
 }
+
+REPORT_ORDERS_REP_FILTERS_PARAM = 'report_orders_by_representatives_filters'
 
 TECHNICAL_ASSISTANCE_STATUS_LABELS = {
     'A': 'Aberta',
@@ -186,6 +194,31 @@ RECORD_TYPE_LABELS = {
     'consulta_pedidos': 'Pedido',
     'pedidos_vendas': 'Pedido',
     'assistencia_tecnica': 'Assistência',
+}
+
+ASSISTANCE_MEDIA_PATH_PARAM = 'technical_assistance_media_base_path'
+ASSISTANCE_MEDIA_IMAGE_EXTENSIONS = {
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.bmp',
+    '.webp',
+    '.tif',
+    '.tiff',
+    '.heic',
+}
+ASSISTANCE_MEDIA_VIDEO_EXTENSIONS = {
+    '.mp4',
+    '.mov',
+    '.avi',
+    '.mkv',
+    '.wmv',
+    '.webm',
+    '.m4v',
+}
+ASSISTANCE_MEDIA_PDF_EXTENSIONS = {
+    '.pdf',
 }
 OSRM_TABLE_BASE_URL = 'https://router.project-osrm.org/table/v1/driving/'
 NOMINATIM_USER_AGENT = 'SIGA/1.0 (contato@siga.app)'
@@ -1255,6 +1288,139 @@ def save_user_parameters(user_id, param_name, param_value):
     return False
 
 
+def _is_subpath(child_path, parent_path):
+    """Verifica se child_path está contido dentro de parent_path."""
+    if not child_path or not parent_path:
+        return False
+    try:
+        child_path.relative_to(parent_path)
+        return True
+    except ValueError:
+        return False
+
+
+def _encode_media_token(value):
+    """Codifica o nome do arquivo em um token seguro para URLs."""
+    if value is None:
+        return ''
+    raw_bytes = str(value).encode('utf-8')
+    return base64.urlsafe_b64encode(raw_bytes).decode('ascii').rstrip('=')
+
+
+def _decode_media_token(token):
+    """Decodifica o token para recuperar o nome original do arquivo."""
+    if not token:
+        return None
+    padding = '=' * (-len(token) % 4)
+    try:
+        decoded = base64.urlsafe_b64decode(token + padding)
+        return decoded.decode('utf-8')
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def _get_media_kind_from_extension(extension):
+    """Classifica o tipo de mídia a partir da extensão do arquivo."""
+    ext = (extension or '').lower()
+    if ext in ASSISTANCE_MEDIA_IMAGE_EXTENSIONS:
+        return 'image'
+    if ext in ASSISTANCE_MEDIA_VIDEO_EXTENSIONS:
+        return 'video'
+    if ext in ASSISTANCE_MEDIA_PDF_EXTENSIONS:
+        return 'pdf'
+    return None
+
+
+def get_assistance_media_base_path():
+    """
+    Recupera o caminho base configurado para armazenamento das mídias das assistências.
+    """
+    user_id = session.get('user_id')
+    if not user_id:
+        return None, 'Usuário não autenticado.'
+    raw_path = get_user_parameters(user_id, ASSISTANCE_MEDIA_PATH_PARAM)
+    normalized_path = (raw_path or '').strip()
+    if not normalized_path:
+        return None, 'O caminho das mídias não foi configurado nos Parâmetros do Sistema.'
+    base_path = Path(normalized_path).expanduser()
+    try:
+        base_path = base_path.resolve()
+    except (FileNotFoundError, OSError):
+        base_path = base_path
+    if not base_path.exists():
+        return None, f"O caminho configurado para as mídias ({normalized_path}) não foi encontrado no servidor."
+    if not base_path.is_dir():
+        return None, f"O caminho configurado para as mídias ({normalized_path}) não é um diretório válido."
+    return base_path, None
+
+
+def resolve_assistance_media_directory(assistance_identifier):
+    """
+    Resolve o diretório configurado para as mídias de uma assistência específica.
+    """
+    base_path, error = get_assistance_media_base_path()
+    if error:
+        return None, None, error
+
+    assistance_code = str(assistance_identifier or '').strip()
+    if not assistance_code:
+        return base_path, None, 'Assistência inválida.'
+
+    try:
+        assistance_dir = (base_path / assistance_code).resolve(strict=False)
+    except (RuntimeError, OSError):
+        assistance_dir = base_path / assistance_code
+
+    if not _is_subpath(assistance_dir, base_path):
+        return base_path, None, 'Caminho de mídia inválido.'
+
+    return base_path, assistance_dir, None
+
+
+def build_assistance_media_payload(assistance_dir, assistance_identifier):
+    """
+    Monta a lista de mídias disponíveis para a assistência informada.
+    """
+    media_files = []
+    if not assistance_dir or not assistance_dir.exists() or not assistance_dir.is_dir():
+        return media_files
+
+    try:
+        entries = sorted(assistance_dir.iterdir(), key=lambda path: path.name.lower())
+    except OSError:
+        return media_files
+
+    for entry in entries:
+        if not entry.is_file():
+            continue
+        media_kind = _get_media_kind_from_extension(entry.suffix)
+        if not media_kind:
+            continue
+        token = _encode_media_token(entry.name)
+        file_size = None
+        try:
+            file_size = entry.stat().st_size
+        except OSError:
+            file_size = None
+        file_url = url_for(
+            'technical_assistance_media_file',
+            assistance_identifier=assistance_identifier,
+            token=token,
+        )
+        media_files.append(
+            {
+                'id': token,
+                'name': entry.name,
+                'extension': (entry.suffix or '').lower(),
+                'kind': media_kind,
+                'size': file_size,
+                'url': file_url,
+                'thumbnail_url': file_url,
+            }
+        )
+    return media_files
+
+
 def parse_transaction_signs(signs_str):
     """Converte string de sinais ('123:+,456:-') em dicionário."""
     signs = {}
@@ -1563,6 +1729,63 @@ def get_sales_order_vendors():
         finally:
             conn.close()
     return vendor_options
+
+
+def get_sales_order_customers():
+    """Retorna clientes presentes em pedidos de venda com seus códigos."""
+    conn = get_erp_db_connection()
+    customer_options = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT DISTINCT
+                    COALESCE(e.empresa::text, '') AS customer_code,
+                    COALESCE(e.empnome, '') AS customer_name
+                FROM pedido p
+                LEFT JOIN empresa e ON e.empresa = p.pedcliente
+                WHERE p.pedcliente IS NOT NULL
+                ORDER BY COALESCE(e.empnome, ''), COALESCE(e.empresa::text, '')
+                """
+            )
+            for code, name in cur.fetchall():
+                customer_options.append(
+                    {
+                        'code': code or '',
+                        'name': name or '',
+                    }
+                )
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar clientes de pedidos de venda: {e}')
+        finally:
+            conn.close()
+    return customer_options
+
+
+def get_sales_order_transactions():
+    """Retorna as transações cadastradas para uso em filtros de pedidos."""
+    conn = get_erp_db_connection()
+    transaction_options = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT transacao, trsnome FROM transa ORDER BY trsnome;")
+            for code, name in cur.fetchall():
+                normalized_code = (str(code).strip() if code is not None else '')
+                transaction_options.append(
+                    {
+                        'code': normalized_code,
+                        'label': (name or '').strip(),
+                    }
+                )
+            cur.close()
+        except Error as e:
+            print(f'Erro ao buscar transações comerciais: {e}')
+        finally:
+            conn.close()
+    return transaction_options
 
 def fetch_load_lots_summary(start_date=None, end_date=None):
     """Busca as informacoes agregadas dos lotes de carga, aplicando filtros opcionais de data."""
@@ -2002,6 +2225,628 @@ def fetch_monthly_revenue(year, filters):
             conn.close()
 
     return monthly_totals
+
+
+def fetch_monthly_sales_orders(year, filters):
+    """Retorna o valor total mensal dos pedidos de venda para o ano informado."""
+    conn = get_erp_db_connection()
+    monthly_totals = [0.0] * 12
+
+    if not conn:
+        return monthly_totals
+
+    try:
+        cur = conn.cursor()
+        has_peddesval_column = table_has_column(conn, 'pedido', 'peddesval')
+        valor_total_expression = (
+            "COALESCE(pedprod.valor_bruto_total, 0) - COALESCE(p.peddesval, 0)"
+            if has_peddesval_column else
+            "COALESCE(pedprod.valor_bruto_total, 0)"
+        )
+
+        state_expression = (
+            "CASE "
+            "WHEN COALESCE(c.estado, '') <> '' THEN c.estado "
+            "WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text "
+            "ELSE '' "
+            "END"
+        )
+
+        line_case_expression = (
+            "CASE "
+            "WHEN POSITION('MADRESILVA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* M.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'MADRESILVA' "
+            "WHEN POSITION('PETRA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* P.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'PETRA' "
+            "WHEN POSITION('GARLAND' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* G.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'GARLAND' "
+            "WHEN POSITION('GLASS' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* V.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'GLASSMADRE' "
+            "WHEN POSITION('CAVILHAS' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'CAVILHAS' "
+            "WHEN POSITION('SOLARE' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* S.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'SOLARE' "
+            "WHEN POSITION('ESPUMA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* ESPUMA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'ESPUMA' "
+            "ELSE 'OUTROS' "
+            "END"
+        )
+
+        query = f"""
+            WITH pedprod AS (
+                SELECT
+                    pedido,
+                    SUM(COALESCE(pprvlsoma, 0)) AS valor_bruto_total
+                FROM pedprodu
+                GROUP BY pedido
+            )
+            SELECT
+                EXTRACT(MONTH FROM p.peddata) AS mes,
+                SUM({valor_total_expression}) AS total
+            FROM pedido p
+            LEFT JOIN pedprod ON pedprod.pedido = p.pedido
+            LEFT JOIN cidade c ON c.cidade = p.pedentcid
+            LEFT JOIN empresa cli ON cli.empresa = p.pedcliente
+            LEFT JOIN opera op ON op.operacao = p.pedoperaca
+            WHERE p.peddata IS NOT NULL
+              AND EXTRACT(YEAR FROM p.peddata) = %s
+        """
+        params = [year]
+
+        months = filters.get('month')
+        if months:
+            month_values = []
+            for month in months:
+                try:
+                    month_int = int(month)
+                except (TypeError, ValueError):
+                    continue
+                if 1 <= month_int <= 12:
+                    month_values.append(month_int)
+            if month_values:
+                placeholders = ','.join(['%s'] * len(month_values))
+                query += f" AND EXTRACT(MONTH FROM p.peddata) IN ({placeholders})"
+                params.extend(month_values)
+
+        vendors = filters.get('vendor')
+        if vendors:
+            vendor_values = [str(v).strip() for v in vendors if str(v).strip()]
+            if vendor_values:
+                placeholders = ','.join(['%s'] * len(vendor_values))
+                query += f" AND CAST(p.pedrepres AS TEXT) IN ({placeholders})"
+                params.extend(vendor_values)
+
+        states = filters.get('state')
+        if states:
+            state_values = [str(s).strip() for s in states if str(s).strip()]
+            if state_values:
+                placeholders = ','.join(['%s'] * len(state_values))
+                query += f" AND {state_expression} IN ({placeholders})"
+                params.extend(state_values)
+
+        statuses = filters.get('status')
+        if statuses:
+            status_values = [str(s).strip().upper() for s in statuses if str(s).strip()]
+            if status_values:
+                placeholders = ','.join(['%s'] * len(status_values))
+                query += f" AND COALESCE(p.pedaprova, '') IN ({placeholders})"
+                params.extend(status_values)
+
+        situations = filters.get('situation')
+        if situations:
+            situation_values = [str(s).strip().upper() for s in situations if str(s).strip() or s == '']
+            if situation_values:
+                placeholders = ','.join(['%s'] * len(situation_values))
+                query += f" AND COALESCE(p.pedsitua, '') IN ({placeholders})"
+                params.extend(situation_values)
+
+        lines = filters.get('line')
+        if lines:
+            line_values = [str(l).strip().upper() for l in lines if str(l).strip()]
+            if line_values:
+                placeholders = ','.join(['%s'] * len(line_values))
+                query += (
+                    f" AND EXISTS ("
+                    f"     SELECT 1 FROM pedprodu pp_line"
+                    f"     LEFT JOIN produto prod_line ON prod_line.produto = pp_line.pprproduto"
+                    f"     LEFT JOIN grupo g ON g.grupo = prod_line.grupo"
+                    f"     WHERE pp_line.pedido = p.pedido"
+                    f"       AND {line_case_expression} IN ({placeholders})"
+                    f" )"
+                )
+                params.extend(line_values)
+
+        customers = filters.get('customer')
+        if customers:
+            customer_values = [str(c).strip() for c in customers if str(c).strip()]
+            if customer_values:
+                placeholders = ','.join(['%s'] * len(customer_values))
+                query += f" AND CAST(p.pedcliente AS TEXT) IN ({placeholders})"
+                params.extend(customer_values)
+
+        transactions = filters.get('transaction')
+        if transactions:
+            transaction_values = [str(t).strip() for t in transactions if str(t).strip()]
+            if transaction_values:
+                placeholders = ','.join(['%s'] * len(transaction_values))
+                query += f" AND COALESCE(op.opetransac::text, '') IN ({placeholders})"
+                params.extend(transaction_values)
+
+        query += " GROUP BY EXTRACT(MONTH FROM p.peddata)"
+        cur.execute(query, params)
+
+        for month, total in cur.fetchall():
+            try:
+                month_idx = int(month)
+            except (TypeError, ValueError):
+                continue
+            if 1 <= month_idx <= 12:
+                monthly_totals[month_idx - 1] = float(total or 0)
+
+        cur.close()
+    except Error as e:
+        print(f"Erro ao buscar totais mensais de pedidos de venda: {e}")
+    finally:
+        conn.close()
+
+    return monthly_totals
+
+
+def fetch_orders_by_representative(filters):
+    """Retorna o valor total dos pedidos agrupado por representante."""
+    conn = get_erp_db_connection()
+    data = []
+
+    if not conn:
+        return data
+
+    try:
+        cur = conn.cursor()
+        has_peddesval_column = table_has_column(conn, 'pedido', 'peddesval')
+        valor_total_expression = (
+            "COALESCE(pedprod.valor_bruto_total, 0) - COALESCE(p.peddesval, 0)"
+            if has_peddesval_column else
+            "COALESCE(pedprod.valor_bruto_total, 0)"
+        )
+
+        state_expression = (
+            "CASE "
+            "WHEN COALESCE(c.estado, '') <> '' THEN c.estado "
+            "WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text "
+            "ELSE '' "
+            "END"
+        )
+
+        line_case_expression = (
+            "CASE "
+            "WHEN POSITION('MADRESILVA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* M.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'MADRESILVA' "
+            "WHEN POSITION('PETRA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* P.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'PETRA' "
+            "WHEN POSITION('GARLAND' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* G.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'GARLAND' "
+            "WHEN POSITION('GLASS' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* V.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'GLASSMADRE' "
+            "WHEN POSITION('CAVILHAS' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'CAVILHAS' "
+            "WHEN POSITION('SOLARE' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* S.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'SOLARE' "
+            "WHEN POSITION('ESPUMA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* ESPUMA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'ESPUMA' "
+            "ELSE 'OUTROS' "
+            "END"
+        )
+
+        query = f"""
+            WITH pedprod AS (
+                SELECT
+                    pedido,
+                    SUM(COALESCE(pprvlsoma, 0)) AS valor_bruto_total
+                FROM pedprodu
+                GROUP BY pedido
+            )
+            SELECT
+                COALESCE(v.vennome, 'Sem Representante') AS representative,
+                COALESCE(CAST(p.pedrepres AS TEXT), '') AS representative_code,
+                SUM({valor_total_expression}) AS total
+            FROM pedido p
+            LEFT JOIN pedprod ON pedprod.pedido = p.pedido
+            LEFT JOIN vendedor v ON v.vendedor = p.pedrepres
+            LEFT JOIN empresa cli ON cli.empresa = p.pedcliente
+            LEFT JOIN cidade c ON c.cidade = p.pedentcid
+            LEFT JOIN opera op ON op.operacao = p.pedoperaca
+            WHERE p.peddata IS NOT NULL
+        """
+        params = []
+
+        if filters.get('start_date'):
+            query += " AND p.peddata >= %s"
+            params.append(filters['start_date'])
+        if filters.get('end_date'):
+            query += " AND p.peddata <= %s"
+            params.append(filters['end_date'])
+
+        vendors = filters.get('vendor')
+        if vendors:
+            vendor_values = [str(v).strip() for v in vendors if str(v).strip()]
+            if vendor_values:
+                placeholders = ','.join(['%s'] * len(vendor_values))
+                query += f" AND CAST(p.pedrepres AS TEXT) IN ({placeholders})"
+                params.extend(vendor_values)
+
+        states = filters.get('state')
+        if states:
+            state_values = [str(s).strip() for s in states if str(s).strip()]
+            if state_values:
+                placeholders = ','.join(['%s'] * len(state_values))
+                query += f" AND {state_expression} IN ({placeholders})"
+                params.extend(state_values)
+
+        statuses = filters.get('status')
+        if statuses:
+            status_values = [str(s).strip().upper() for s in statuses if str(s).strip()]
+            if status_values:
+                placeholders = ','.join(['%s'] * len(status_values))
+                query += f" AND COALESCE(p.pedaprova, '') IN ({placeholders})"
+                params.extend(status_values)
+
+        situations = filters.get('situation')
+        if situations:
+            situation_values = [str(s).strip().upper() for s in situations]
+            if situation_values:
+                placeholders = ','.join(['%s'] * len(situation_values))
+                query += f" AND COALESCE(p.pedsitua, '') IN ({placeholders})"
+                params.extend(situation_values)
+
+        lines = filters.get('line')
+        if lines:
+            line_values = [str(l).strip().upper() for l in lines if str(l).strip()]
+            if line_values:
+                placeholders = ','.join(['%s'] * len(line_values))
+                query += (
+                    f" AND EXISTS ("
+                    f"     SELECT 1 FROM pedprodu pp_line"
+                    f"     LEFT JOIN produto prod_line ON prod_line.produto = pp_line.pprproduto"
+                    f"     LEFT JOIN grupo g_line ON g_line.grupo = prod_line.grupo"
+                    f"     WHERE pp_line.pedido = p.pedido"
+                    f"       AND {line_case_expression} IN ({placeholders})"
+                    f" )"
+                )
+                params.extend(line_values)
+
+        customers = filters.get('customer')
+        if customers:
+            customer_values = [str(c).strip() for c in customers if str(c).strip()]
+            if customer_values:
+                placeholders = ','.join(['%s'] * len(customer_values))
+                query += f" AND CAST(p.pedcliente AS TEXT) IN ({placeholders})"
+                params.extend(customer_values)
+
+        transactions = filters.get('transaction')
+        if transactions:
+            transaction_values = [str(t).strip() for t in transactions if str(t).strip()]
+            if transaction_values:
+                placeholders = ','.join(['%s'] * len(transaction_values))
+                query += f" AND COALESCE(op.opetransac::text, '') IN ({placeholders})"
+                params.extend(transaction_values)
+
+        query += " GROUP BY representative, representative_code ORDER BY total DESC"
+        cur.execute(query, params)
+
+        for representative, representative_code, total in cur.fetchall():
+            rep_raw = (representative or '').strip()
+            rep_name = rep_raw or 'Sem Representante'
+            code_text = (str(representative_code) if representative_code is not None else '').strip()
+            label = rep_name
+            if code_text:
+                label = f"{rep_name} ({code_text})"
+            data.append({
+                'representative': rep_name,
+                'representative_code': code_text,
+                'label': label,
+                'total': float(total or 0),
+            })
+
+        cur.close()
+    except Error as e:
+        print(f'Erro ao buscar pedidos por representante: {e}')
+    finally:
+        conn.close()
+
+    return data
+
+
+def fetch_orders_by_state(filters):
+    """Retorna o valor total dos pedidos agrupado por estado."""
+    conn = get_erp_db_connection()
+    data = []
+
+    if not conn:
+        return data
+
+    try:
+        cur = conn.cursor()
+        has_peddesval_column = table_has_column(conn, 'pedido', 'peddesval')
+        valor_total_expression = (
+            "COALESCE(pedprod.valor_bruto_total, 0) - COALESCE(p.peddesval, 0)"
+            if has_peddesval_column else
+            "COALESCE(pedprod.valor_bruto_total, 0)"
+        )
+
+        state_expression = (
+            "CASE "
+            "WHEN COALESCE(c.estado, '') <> '' THEN c.estado "
+            "WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text "
+            "ELSE '' "
+            "END"
+        )
+
+        state_label_expression = f"COALESCE(NULLIF({state_expression}, ''), 'Sem Estado')"
+
+        line_case_expression = (
+            "CASE "
+            "WHEN POSITION('MADRESILVA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* M.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'MADRESILVA' "
+            "WHEN POSITION('PETRA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* P.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'PETRA' "
+            "WHEN POSITION('GARLAND' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* G.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'GARLAND' "
+            "WHEN POSITION('GLASS' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* V.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'GLASSMADRE' "
+            "WHEN POSITION('CAVILHAS' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'CAVILHAS' "
+            "WHEN POSITION('SOLARE' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* S.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'SOLARE' "
+            "WHEN POSITION('ESPUMA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 OR POSITION('* ESPUMA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'ESPUMA' "
+            "ELSE 'OUTROS' "
+            "END"
+        )
+
+        query = f"""
+            WITH pedprod AS (
+                SELECT
+                    pedido,
+                    SUM(COALESCE(pprvlsoma, 0)) AS valor_bruto_total
+                FROM pedprodu
+                GROUP BY pedido
+            )
+            SELECT
+                {state_label_expression} AS state,
+                SUM({valor_total_expression}) AS total
+            FROM pedido p
+            LEFT JOIN pedprod ON pedprod.pedido = p.pedido
+            LEFT JOIN cidade c ON c.cidade = p.pedentcid
+            LEFT JOIN opera op ON op.operacao = p.pedoperaca
+            WHERE p.peddata IS NOT NULL
+        """
+        params = []
+
+        if filters.get('start_date'):
+            query += " AND p.peddata >= %s"
+            params.append(filters['start_date'])
+        if filters.get('end_date'):
+            query += " AND p.peddata <= %s"
+            params.append(filters['end_date'])
+
+        vendors = filters.get('vendor')
+        if vendors:
+            vendor_values = [str(v).strip() for v in vendors if str(v).strip()]
+            if vendor_values:
+                placeholders = ','.join(['%s'] * len(vendor_values))
+                query += f" AND CAST(p.pedrepres AS TEXT) IN ({placeholders})"
+                params.extend(vendor_values)
+
+        states = filters.get('state')
+        if states:
+            state_values = [str(s).strip() for s in states if str(s).strip()]
+            if state_values:
+                placeholders = ','.join(['%s'] * len(state_values))
+                query += f" AND {state_expression} IN ({placeholders})"
+                params.extend(state_values)
+
+        statuses = filters.get('status')
+        if statuses:
+            status_values = [str(s).strip().upper() for s in statuses if str(s).strip()]
+            if status_values:
+                placeholders = ','.join(['%s'] * len(status_values))
+                query += f" AND COALESCE(p.pedaprova, '') IN ({placeholders})"
+                params.extend(status_values)
+
+        situations = filters.get('situation')
+        if situations:
+            situation_values = [str(s).strip().upper() for s in situations if s is not None]
+            if situation_values:
+                placeholders = ','.join(['%s'] * len(situation_values))
+                query += f" AND COALESCE(p.pedsitua, '') IN ({placeholders})"
+                params.extend(situation_values)
+
+        lines = filters.get('line')
+        if lines:
+            line_values = [str(l).strip().upper() for l in lines if str(l).strip()]
+            if line_values:
+                placeholders = ','.join(['%s'] * len(line_values))
+                query += (
+                    f" AND EXISTS ("
+                    f"     SELECT 1 FROM pedprodu pp_line"
+                    f"     LEFT JOIN produto prod_line ON prod_line.produto = pp_line.pprproduto"
+                    f"     LEFT JOIN grupo g_line ON g_line.grupo = prod_line.grupo"
+                    f"     WHERE pp_line.pedido = p.pedido"
+                    f"       AND {line_case_expression} IN ({placeholders})"
+                    f" )"
+                )
+                params.extend(line_values)
+
+        customers = filters.get('customer')
+        if customers:
+            customer_values = [str(c).strip() for c in customers if str(c).strip()]
+            if customer_values:
+                placeholders = ','.join(['%s'] * len(customer_values))
+                query += f" AND CAST(p.pedcliente AS TEXT) IN ({placeholders})"
+                params.extend(customer_values)
+
+        transactions = filters.get('transaction')
+        if transactions:
+            transaction_values = [str(t).strip() for t in transactions if str(t).strip()]
+            if transaction_values:
+                placeholders = ','.join(['%s'] * len(transaction_values))
+                query += f" AND COALESCE(op.opetransac::text, '') IN ({placeholders})"
+                params.extend(transaction_values)
+
+        query += f" GROUP BY {state_label_expression}"
+        query += " ORDER BY state"
+
+        cur.execute(query, params)
+
+        for state, total in cur.fetchall():
+            label = (state or 'Sem Estado')
+            data.append({
+                'state': label,
+                'total': float(total or 0),
+            })
+
+        cur.close()
+    except Error as e:
+        print(f'Erro ao buscar pedidos por estado: {e}')
+    finally:
+        conn.close()
+
+    return data
+
+
+def fetch_orders_by_line(filters):
+    """Retorna o valor total dos pedidos agrupado por linha."""
+    conn = get_erp_db_connection()
+    data = []
+
+    if not conn:
+        return data
+
+    try:
+        cur = conn.cursor()
+        has_peddesval_column = table_has_column(conn, 'pedido', 'peddesval')
+        discount_expression = "COALESCE(p.peddesval, 0)" if has_peddesval_column else "0"
+
+        state_expression = (
+            "CASE "
+            "WHEN COALESCE(c.estado, '') <> '' THEN c.estado "
+            "WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text "
+            "ELSE '' "
+            "END"
+        )
+
+        line_case_expression = (
+            "CASE "
+            "WHEN POSITION('MADRESILVA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 "
+            "     OR POSITION('* M.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'MADRESILVA' "
+            "WHEN POSITION('PETRA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 "
+            "     OR POSITION('* P.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'PETRA' "
+            "WHEN POSITION('GARLAND' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 "
+            "     OR POSITION('* G.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'GARLAND' "
+            "WHEN POSITION('GLASS' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 "
+            "     OR POSITION('* V.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'GLASSMADRE' "
+            "WHEN POSITION('CAVILHAS' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'CAVILHAS' "
+            "WHEN POSITION('SOLARE' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 "
+            "     OR POSITION('* S.' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'SOLARE' "
+            "WHEN POSITION('ESPUMA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 "
+            "     OR POSITION('* ESPUMA' IN UPPER(COALESCE(g_line.grunome, ''))) > 0 THEN 'ESPUMA' "
+            "ELSE 'OUTROS' "
+            "END"
+        )
+
+        query = f"""
+            WITH line_values AS (
+                SELECT
+                    p.pedido,
+                    {line_case_expression} AS line,
+                    SUM(COALESCE(pp.pprvlsoma, 0)) AS line_total
+                FROM pedido p
+                LEFT JOIN pedprodu pp ON pp.pedido = p.pedido
+                LEFT JOIN produto prod_line ON prod_line.produto = pp.pprproduto
+                LEFT JOIN grupo g_line ON g_line.grupo = prod_line.grupo
+                LEFT JOIN cidade c ON c.cidade = p.pedentcid
+                LEFT JOIN opera op ON op.operacao = p.pedoperaca
+                WHERE p.peddata IS NOT NULL
+        """
+        params = []
+
+        if filters.get('start_date'):
+            query += " AND p.peddata >= %s"
+            params.append(filters['start_date'])
+        if filters.get('end_date'):
+            query += " AND p.peddata <= %s"
+            params.append(filters['end_date'])
+
+        vendors = filters.get('vendor')
+        if vendors:
+            vendor_values = [str(v).strip() for v in vendors if str(v).strip()]
+            if vendor_values:
+                placeholders = ','.join(['%s'] * len(vendor_values))
+                query += f" AND CAST(p.pedrepres AS TEXT) IN ({placeholders})"
+                params.extend(vendor_values)
+
+        states = filters.get('state')
+        if states:
+            state_values = [str(s).strip().upper() for s in states if str(s).strip()]
+            if state_values:
+                placeholders = ','.join(['%s'] * len(state_values))
+                query += f" AND {state_expression} IN ({placeholders})"
+                params.extend(state_values)
+
+        statuses = filters.get('status')
+        if statuses:
+            status_values = [str(s).strip().upper() for s in statuses if str(s).strip()]
+            if status_values:
+                placeholders = ','.join(['%s'] * len(status_values))
+                query += f" AND COALESCE(p.pedaprova, '') IN ({placeholders})"
+                params.extend(status_values)
+
+        situations = filters.get('situation')
+        if situations:
+            situation_values = [str(s).strip().upper() for s in situations if s is not None]
+            if situation_values:
+                placeholders = ','.join(['%s'] * len(situation_values))
+                query += f" AND COALESCE(p.pedsitua, '') IN ({placeholders})"
+                params.extend(situation_values)
+
+        lines = filters.get('line')
+        if lines:
+            line_values = [str(l).strip().upper() for l in lines if str(l).strip()]
+            if line_values:
+                placeholders = ','.join(['%s'] * len(line_values))
+                query += f" AND {line_case_expression} IN ({placeholders})"
+                params.extend(line_values)
+
+        customers = filters.get('customer')
+        if customers:
+            customer_values = [str(c).strip() for c in customers if str(c).strip()]
+            if customer_values:
+                placeholders = ','.join(['%s'] * len(customer_values))
+                query += f" AND COALESCE(p.pedcliente::text, '') IN ({placeholders})"
+                params.extend(customer_values)
+
+        transactions = filters.get('transaction')
+        if transactions:
+            transaction_values = [str(t).strip() for t in transactions if str(t).strip()]
+            if transaction_values:
+                placeholders = ','.join(['%s'] * len(transaction_values))
+                query += f" AND COALESCE(op.opetransac::text, '') IN ({placeholders})"
+                params.extend(transaction_values)
+
+        query += f" GROUP BY p.pedido, {line_case_expression}"
+        query += """
+            ),
+            order_totals AS (
+                SELECT pedido, SUM(line_total) AS order_total
+                FROM line_values
+                GROUP BY pedido
+            )
+            SELECT
+                lv.line,
+                SUM(
+                    lv.line_total
+                    - CASE
+                        WHEN order_totals.order_total > 0 THEN
+                            (""" + discount_expression + """ * lv.line_total / order_totals.order_total)
+                        ELSE 0
+                      END
+                ) AS total
+            FROM line_values lv
+            LEFT JOIN order_totals ON order_totals.pedido = lv.pedido
+            LEFT JOIN pedido p ON p.pedido = lv.pedido
+            GROUP BY lv.line
+            ORDER BY lv.line
+        """
+
+        cur.execute(query, tuple(params))
+        for line, total in cur.fetchall():
+            data.append({'line': line or 'Sem Linha', 'total': float(total or 0)})
+        cur.close()
+    except Error as e:
+        print(f'Erro ao buscar pedidos por linha: {e}')
+    finally:
+        conn.close()
+
+    return data
 
 
 def get_dashboard_sales_summary():
@@ -9056,6 +9901,59 @@ def technical_assistance_details(assistance_identifier):
     return jsonify(details)
 
 
+@app.route('/technical_assistance/<path:assistance_identifier>/media')
+@login_required
+def technical_assistance_media(assistance_identifier):
+    """
+    Retorna a lista de mídias disponíveis para a assistência selecionada.
+    """
+    _, assistance_dir, error = resolve_assistance_media_directory(assistance_identifier)
+    if error:
+        return jsonify({'error': error}), 400
+
+    if not assistance_dir.exists() or not assistance_dir.is_dir():
+        return jsonify({'files': []})
+
+    files_payload = build_assistance_media_payload(assistance_dir, assistance_identifier)
+    return jsonify({'files': files_payload})
+
+
+@app.route('/technical_assistance/<path:assistance_identifier>/media/file')
+@login_required
+def technical_assistance_media_file(assistance_identifier):
+    """
+    Fornece o conteúdo do arquivo selecionado para a assistência.
+    """
+    token = request.args.get('token', '').strip()
+    if not token:
+        abort(404)
+
+    _, assistance_dir, error = resolve_assistance_media_directory(assistance_identifier)
+    if error or not assistance_dir:
+        abort(404)
+
+    file_name = _decode_media_token(token)
+    if not file_name:
+        abort(404)
+
+    file_path = (assistance_dir / file_name)
+    try:
+        file_path = file_path.resolve(strict=False)
+    except (RuntimeError, OSError):
+        abort(404)
+
+    if not _is_subpath(file_path, assistance_dir) or not file_path.is_file():
+        abort(404)
+
+    media_kind = _get_media_kind_from_extension(file_path.suffix)
+    if not media_kind:
+        abort(404)
+
+    mimetype = mimetypes.guess_type(file_path.name)[0] or 'application/octet-stream'
+    # conditional=True habilita suporte a Range Requests para vídeos.
+    return send_file(file_path, mimetype=mimetype, as_attachment=False, conditional=True)
+
+
 @app.route('/production_assistance/<path:assistance_identifier>/details')
 @login_required
 def production_assistance_details(assistance_identifier):
@@ -9299,6 +10197,1267 @@ def report_revenue_by_vendor():
         usuario_logado=session.get('username', 'Convidado')
     )
 
+
+@app.route('/commercial_reports')
+@login_required
+def commercial_reports():
+    """Página de seleção dos relatórios comerciais."""
+    return render_template(
+        'commercial_reports.html',
+        page_title="Relatórios Comerciais",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/report_sales_orders_comparison')
+@login_required
+def report_sales_orders_comparison():
+    """Exibe o comparativo mensal de pedidos de venda entre dois anos consecutivos."""
+    current_year = datetime.date.today().year
+    requested_year = (request.args.get('year') or '').strip()
+    filter_applied_flag = (request.args.get('filter_applied') or '').strip() == '1'
+    ignore_saved_flag = (request.args.get('ignore_saved') or '').strip() == '1'
+    user_id = session.get('user_id')
+
+    saved_filters = {}
+    if user_id:
+        saved_filters_raw = get_user_parameters(user_id, REPORT_SALES_COMPARISON_FILTERS_PARAM)
+        if saved_filters_raw:
+            try:
+                saved_filters = json.loads(saved_filters_raw) or {}
+            except (TypeError, ValueError):
+                saved_filters = {}
+
+    if requested_year:
+        try:
+            current_year = int(requested_year)
+        except (TypeError, ValueError):
+            current_year = datetime.date.today().year
+    elif not ignore_saved_flag:
+        saved_year = saved_filters.get('year')
+        if saved_year is not None:
+            try:
+                current_year = int(saved_year)
+            except (TypeError, ValueError):
+                current_year = datetime.date.today().year
+
+    filters = {
+        'year': current_year,
+        'month': request.args.getlist('month'),
+        'vendor': request.args.getlist('vendor'),
+        'state': request.args.getlist('state'),
+        'status': request.args.getlist('status'),
+        'situation': request.args.getlist('situation'),
+        'line': request.args.getlist('line'),
+        'customer': request.args.getlist('customer'),
+        'transaction': request.args.getlist('transaction'),
+    }
+
+    use_saved_defaults = bool(saved_filters) and not filter_applied_flag and not ignore_saved_flag
+    if use_saved_defaults:
+        list_keys = ['month', 'vendor', 'state', 'status', 'situation', 'line', 'customer', 'transaction']
+        allow_blank_keys = {'situation'}
+        for key in list_keys:
+            if filters.get(key):
+                continue
+            saved_value = saved_filters.get(key)
+            if not saved_value:
+                continue
+            if isinstance(saved_value, list):
+                cleaned = []
+                for item in saved_value:
+                    if item is None:
+                        continue
+                    text = str(item).strip()
+                    if text or key in allow_blank_keys:
+                        cleaned.append(text)
+                if cleaned:
+                    filters[key] = cleaned
+            else:
+                text = str(saved_value).strip()
+                if text or key in allow_blank_keys:
+                    filters[key] = [text]
+
+    months_selected = []
+    for month in filters['month']:
+        try:
+            month_int = int(month)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= month_int <= 12:
+            months_selected.append(month_int)
+    if not months_selected:
+        months_selected = list(range(1, 13))
+    else:
+        months_selected = sorted(set(months_selected))
+
+    current_data_all = fetch_monthly_sales_orders(current_year, filters)
+    prev_year = current_year - 1
+    previous_data_all = fetch_monthly_sales_orders(prev_year, filters)
+
+    chart_labels = [f"{str(m).zfill(2)}/{current_year}" for m in months_selected]
+    current_data = [current_data_all[m - 1] for m in months_selected]
+    previous_data = [previous_data_all[m - 1] for m in months_selected]
+
+    current_total = sum(current_data)
+    previous_total = sum(previous_data)
+    totals = {
+        'current_total': current_total,
+        'current_average': current_total / len(months_selected) if months_selected else 0,
+        'previous_total': previous_total,
+        'previous_average': previous_total / len(months_selected) if months_selected else 0,
+        'variation_percent': ((current_total - previous_total) / previous_total * 100) if previous_total else 0,
+    }
+
+    vendor_options = get_sales_order_vendors()
+    vendor_label_map = {(opt.get('code') or '').strip(): (opt.get('name') or '') for opt in vendor_options}
+    customer_options = get_sales_order_customers()
+    customer_label_map = {(opt.get('code') or '').strip(): (opt.get('name') or '') for opt in customer_options}
+    status_options = ORDER_APPROVAL_STATUS_OPTIONS
+    status_label_map = {opt['code']: opt['label'] for opt in status_options}
+    situation_options = ORDER_SITUATION_OPTIONS
+    situation_label_map = {opt['code']: opt['label'] for opt in situation_options}
+    line_options = get_distinct_product_lines()
+    transaction_options = get_sales_order_transactions()
+    transaction_label_map = {(opt.get('code') or '').strip(): (opt.get('label') or '') for opt in transaction_options}
+
+    selected_vendor_labels = []
+    for code in filters['vendor']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = vendor_label_map.get(normalized, '')
+        if name and normalized:
+            label = f"{name} ({normalized})"
+        elif name:
+            label = name
+        else:
+            label = normalized
+        if label not in selected_vendor_labels:
+            selected_vendor_labels.append(label)
+
+    selected_state_labels = list(dict.fromkeys(filters['state'])) if filters['state'] else []
+
+    selected_status_labels = []
+    for code in filters['status']:
+        normalized = (code or '').strip().upper()
+        if not normalized:
+            continue
+        label = status_label_map.get(normalized, normalized)
+        if label not in selected_status_labels:
+            selected_status_labels.append(label)
+
+    selected_situation_labels = []
+    for code in filters['situation']:
+        normalized = (code or '').strip().upper()
+        if not normalized:
+            continue
+        label = situation_label_map.get(normalized, normalized)
+        if label not in selected_situation_labels:
+            selected_situation_labels.append(label)
+
+    selected_line_labels = []
+    for name in filters['line']:
+        label = (name or '').strip()
+        if not label:
+            continue
+        if label not in selected_line_labels:
+            selected_line_labels.append(label)
+
+    selected_customer_labels = []
+    for code in filters['customer']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = customer_label_map.get(normalized, '')
+        if name and normalized:
+            label = f"{name} ({normalized})"
+        elif name:
+            label = name
+        else:
+            label = normalized
+        if label not in selected_customer_labels:
+            selected_customer_labels.append(label)
+
+    selected_transaction_labels = []
+    for code in filters['transaction']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = transaction_label_map.get(normalized, '')
+        if name and normalized:
+            label = f"{name} ({normalized})"
+        elif name:
+            label = name
+        else:
+            label = normalized
+        if label not in selected_transaction_labels:
+            selected_transaction_labels.append(label)
+
+    return render_template(
+        'report_sales_orders_comparison.html',
+        chart_labels=chart_labels,
+        current_year_data=current_data,
+        previous_year_data=previous_data,
+        current_year_label=str(current_year),
+        previous_year_label=str(prev_year),
+        totals=totals,
+        filters=filters,
+        vendor_options=vendor_options,
+        status_options=status_options,
+        situation_options=situation_options,
+        line_options=line_options,
+        customer_options=customer_options,
+        transaction_options=transaction_options,
+        selected_vendor_labels=selected_vendor_labels,
+        selected_state_labels=selected_state_labels,
+        selected_status_labels=selected_status_labels,
+        selected_situation_labels=selected_situation_labels,
+        selected_line_labels=selected_line_labels,
+        selected_customer_labels=selected_customer_labels,
+        selected_transaction_labels=selected_transaction_labels,
+        state_options=get_distinct_states(),
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/report_orders_by_representatives')
+@login_required
+def report_orders_by_representatives():
+    def normalize_values(values, allow_blank=False, uppercase=False):
+        normalized = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text and not allow_blank:
+                continue
+            if uppercase and text:
+                text = text.upper()
+            normalized.append(text)
+        return normalized
+
+    def parse_date(value):
+        if not value:
+            return None
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return None
+
+    today = datetime.date.today()
+    current_first_day = today.replace(day=1)
+    current_last_day = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+
+    user_id = session.get('user_id')
+    saved_filters = {}
+    if user_id:
+        saved_filters_raw = get_user_parameters(user_id, REPORT_ORDERS_REP_FILTERS_PARAM)
+        if saved_filters_raw:
+            try:
+                saved_filters = json.loads(saved_filters_raw) or {}
+            except (TypeError, ValueError):
+                saved_filters = {}
+
+    filter_applied_flag = bool(request.args.get('filter_applied'))
+    ignore_saved_flag = (request.args.get('ignore_saved') or '').strip() == '1'
+    use_saved_defaults = bool(saved_filters) and not filter_applied_flag and not ignore_saved_flag
+
+    def saved_list(key):
+        value = saved_filters.get(key)
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    start_date_raw = (request.args.get('start_date') or '').strip()
+    end_date_raw = (request.args.get('end_date') or '').strip()
+
+    if use_saved_defaults:
+        if not start_date_raw:
+            start_date_raw = str(saved_filters.get('start_date') or '').strip()
+        if not end_date_raw:
+            end_date_raw = str(saved_filters.get('end_date') or '').strip()
+
+    vendor_values = normalize_values(request.args.getlist('vendor'))
+    if use_saved_defaults and not vendor_values:
+        vendor_values = normalize_values(saved_list('vendor'))
+
+    state_values = normalize_values(request.args.getlist('state'), uppercase=True)
+    if use_saved_defaults and not state_values:
+        state_values = normalize_values(saved_list('state'), uppercase=True)
+
+    customer_values = normalize_values(request.args.getlist('customer'))
+    if use_saved_defaults and not customer_values:
+        customer_values = normalize_values(saved_list('customer'))
+
+    line_values = normalize_values(request.args.getlist('line'), uppercase=True)
+    if use_saved_defaults and not line_values:
+        line_values = normalize_values(saved_list('line'), uppercase=True)
+
+    status_values = normalize_values(request.args.getlist('status'), uppercase=True)
+    if use_saved_defaults and not status_values:
+        status_values = normalize_values(saved_list('status'), uppercase=True)
+
+    situation_values = normalize_values(request.args.getlist('situation'), allow_blank=True, uppercase=True)
+    if use_saved_defaults and not situation_values:
+        situation_values = normalize_values(saved_list('situation'), allow_blank=True, uppercase=True)
+
+    transaction_values = normalize_values(request.args.getlist('transaction'))
+    if use_saved_defaults and not transaction_values:
+        transaction_values = normalize_values(saved_list('transaction'))
+
+    if not start_date_raw:
+        start_date_raw = current_first_day.strftime('%Y-%m-%d')
+    if not end_date_raw:
+        end_date_raw = current_last_day.strftime('%Y-%m-%d')
+
+    start_date_obj = parse_date(start_date_raw)
+    end_date_obj = parse_date(end_date_raw)
+
+    filters_template = {
+        'start_date': start_date_raw,
+        'end_date': end_date_raw,
+        'vendor': vendor_values,
+        'state': state_values,
+        'customer': customer_values,
+        'line': line_values,
+        'status': status_values,
+        'situation': situation_values,
+        'transaction': transaction_values,
+    }
+    query_filters = {
+        'start_date': start_date_obj,
+        'end_date': end_date_obj,
+        'vendor': vendor_values,
+        'state': state_values,
+        'customer': customer_values,
+        'line': line_values,
+        'status': status_values,
+        'situation': situation_values,
+        'transaction': transaction_values,
+    }
+
+    data = fetch_orders_by_representative(query_filters)
+    chart_labels = [row['representative'] for row in data]
+    chart_values = [row['total'] for row in data]
+    total_value = sum(chart_values)
+
+    vendor_options = get_sales_order_vendors()
+    vendor_label_map = {(opt.get('code') or '').strip(): (opt.get('name') or '').strip() for opt in vendor_options}
+    customer_options = get_sales_order_customers()
+    customer_label_map = {(opt.get('code') or '').strip(): (opt.get('name') or '').strip() for opt in customer_options}
+    transaction_options = get_sales_order_transactions()
+    transaction_label_map = {(opt.get('code') or '').strip(): (opt.get('label') or '').strip() for opt in transaction_options}
+    status_options = ORDER_APPROVAL_STATUS_OPTIONS
+    status_label_map = ORDER_APPROVAL_STATUS_LABELS
+    situation_options = ORDER_SITUATION_OPTIONS
+    situation_label_map = ORDER_SITUATION_LABELS
+
+    selected_vendor_labels = []
+    for code in filters_template['vendor']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = vendor_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_vendor_labels:
+            selected_vendor_labels.append(label)
+
+    selected_state_labels = []
+    for state in filters_template['state']:
+        label = (state or '').strip()
+        if not label:
+            continue
+        if label not in selected_state_labels:
+            selected_state_labels.append(label)
+
+    selected_status_labels = []
+    for code in filters_template['status']:
+        normalized = (code or '').strip().upper()
+        if not normalized:
+            continue
+        label = status_label_map.get(normalized, normalized)
+        if label not in selected_status_labels:
+            selected_status_labels.append(label)
+
+    selected_situation_labels = []
+    for code in filters_template['situation']:
+        normalized = (code or '').strip().upper()
+        if normalized or code == '':
+            label = situation_label_map.get(normalized, normalized)
+            if label not in selected_situation_labels:
+                selected_situation_labels.append(label)
+
+    selected_line_labels = []
+    for line in filters_template['line']:
+        label = (line or '').strip()
+        if not label:
+            continue
+        if label not in selected_line_labels:
+            selected_line_labels.append(label)
+
+    selected_customer_labels = []
+    for code in filters_template['customer']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = customer_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_customer_labels:
+            selected_customer_labels.append(label)
+
+    selected_transaction_labels = []
+    for code in filters_template['transaction']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = transaction_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_transaction_labels:
+            selected_transaction_labels.append(label)
+
+    def format_date_label(date_str):
+        if not date_str:
+            return ''
+        try:
+            return datetime.datetime.strptime(date_str, '%Y-%m-%d').strftime('%d/%m/%Y')
+        except (ValueError, TypeError):
+            return date_str
+
+    start_label = format_date_label(start_date_raw)
+    end_label = format_date_label(end_date_raw)
+    period_label = ''
+    if start_label and end_label:
+        period_label = f"{start_label} → {end_label}"
+    elif start_label:
+        period_label = f"A partir de {start_label}"
+    elif end_label:
+        period_label = f"Até {end_label}"
+
+    return render_template(
+        'report_orders_by_representatives.html',
+        chart_labels=chart_labels,
+        chart_values=chart_values,
+        total_value=total_value,
+        filters=filters_template,
+        period_label=period_label,
+        vendor_options=vendor_options,
+        customer_options=customer_options,
+        transaction_options=transaction_options,
+        status_options=status_options,
+        situation_options=situation_options,
+        line_options=get_distinct_product_lines(),
+        state_options=get_distinct_states(),
+        selected_vendor_labels=selected_vendor_labels,
+        selected_state_labels=selected_state_labels,
+        selected_status_labels=selected_status_labels,
+        selected_situation_labels=selected_situation_labels,
+        selected_line_labels=selected_line_labels,
+        selected_customer_labels=selected_customer_labels,
+        selected_transaction_labels=selected_transaction_labels,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/report_orders_by_representatives/save_filters', methods=['POST'])
+@login_required
+def save_report_orders_by_representatives_filters():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def ensure_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def deduplicate_preserve_order(values):
+        seen = set()
+        ordered = []
+        for value in values:
+            if value in seen:
+                continue
+            seen.add(value)
+            ordered.append(value)
+        return ordered
+
+    def sanitize_multi(field_name, uppercase=False, allow_blank=False):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text and not allow_blank:
+                continue
+            if uppercase and text:
+                text = text.upper()
+            cleaned.append(text)
+        return deduplicate_preserve_order(cleaned)
+
+    def sanitize_date(value):
+        if not value:
+            return ''
+        text = str(value).strip()
+        try:
+            parsed = datetime.datetime.strptime(text, '%Y-%m-%d').date()
+            return parsed.strftime('%Y-%m-%d')
+        except (ValueError, TypeError):
+            return ''
+
+    sanitized_filters = {
+        'start_date': sanitize_date(payload.get('start_date')),
+        'end_date': sanitize_date(payload.get('end_date')),
+        'vendor': sanitize_multi('vendor'),
+        'state': sanitize_multi('state', uppercase=True),
+        'customer': sanitize_multi('customer'),
+        'line': sanitize_multi('line', uppercase=True),
+        'status': sanitize_multi('status', uppercase=True),
+        'situation': sanitize_multi('situation', uppercase=True, allow_blank=True),
+        'transaction': sanitize_multi('transaction'),
+    }
+
+    try:
+        saved = save_user_parameters(user_id, REPORT_ORDERS_REP_FILTERS_PARAM, json.dumps(sanitized_filters))
+        if not saved:
+            raise RuntimeError('Não foi possível salvar os filtros.')
+        return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
+    except Exception as err:
+        print(f'Erro ao salvar filtros de Pedidos por Representantes: {err}')
+        return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
+
+
+@app.route('/report_orders_by_state')
+@login_required
+def report_orders_by_state():
+    def normalize_values(values, allow_blank=False, uppercase=False):
+        normalized = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text and not allow_blank:
+                continue
+            if uppercase and text:
+                text = text.upper()
+            normalized.append(text)
+        return normalized
+
+    def normalize_saved_values(value, allow_blank=False, uppercase=False):
+        if value is None:
+            return []
+        source = value if isinstance(value, list) else [value]
+        return normalize_values(source, allow_blank=allow_blank, uppercase=uppercase)
+
+    def parse_date(value):
+        if not value:
+            return None
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return None
+
+    filter_applied_flag = (request.args.get('filter_applied') or '').strip() == '1'
+    ignore_saved_flag = (request.args.get('ignore_saved') or '').strip() == '1'
+    user_id = session.get('user_id')
+
+    saved_filters = {}
+    if user_id:
+        saved_raw = get_user_parameters(user_id, REPORT_ORDERS_BY_STATE_FILTERS_PARAM)
+        if saved_raw:
+            try:
+                saved_filters = json.loads(saved_raw) or {}
+            except (TypeError, ValueError):
+                saved_filters = {}
+
+    today = datetime.date.today()
+    first_day = today.replace(day=1)
+    last_day = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+
+    start_date_raw = (request.args.get('start_date') or '').strip()
+    end_date_raw = (request.args.get('end_date') or '').strip()
+    start_date_obj = parse_date(start_date_raw)
+    end_date_obj = parse_date(end_date_raw)
+
+    vendor_values = normalize_values(request.args.getlist('vendor'))
+    state_values = normalize_values(request.args.getlist('state'), uppercase=True)
+    customer_values = normalize_values(request.args.getlist('customer'))
+    line_values = normalize_values(request.args.getlist('line'), uppercase=True)
+    status_values = normalize_values(request.args.getlist('status'), uppercase=True)
+    situation_values = normalize_values(request.args.getlist('situation'), allow_blank=True, uppercase=True)
+    transaction_values = normalize_values(request.args.getlist('transaction'))
+
+    filters_template = {
+        'start_date': start_date_raw,
+        'end_date': end_date_raw,
+        'vendor': vendor_values,
+        'state': state_values,
+        'customer': customer_values,
+        'line': line_values,
+        'status': status_values,
+        'situation': situation_values,
+        'transaction': transaction_values,
+    }
+
+    use_saved_defaults = bool(saved_filters) and not filter_applied_flag and not ignore_saved_flag
+    if use_saved_defaults:
+        multi_fields = [
+            ('vendor', False, False),
+            ('state', True, False),
+            ('customer', False, False),
+            ('line', True, False),
+            ('status', True, False),
+            ('situation', True, True),
+            ('transaction', False, False),
+        ]
+        for key, uppercase, allow_blank in multi_fields:
+            if filters_template.get(key):
+                continue
+            saved_value = saved_filters.get(key)
+            restored = normalize_saved_values(saved_value, uppercase=uppercase, allow_blank=allow_blank)
+            if restored:
+                filters_template[key] = restored
+        if not filters_template['start_date']:
+            saved_start = saved_filters.get('start_date')
+            if saved_start:
+                filters_template['start_date'] = str(saved_start).strip()
+        if not filters_template['end_date']:
+            saved_end = saved_filters.get('end_date')
+            if saved_end:
+                filters_template['end_date'] = str(saved_end).strip()
+
+    start_date_raw = filters_template['start_date'] or ''
+    end_date_raw = filters_template['end_date'] or ''
+    start_date_obj = parse_date(start_date_raw)
+    end_date_obj = parse_date(end_date_raw)
+
+    if not start_date_raw or not start_date_obj:
+        start_date_obj = first_day
+        start_date_raw = first_day.strftime('%Y-%m-%d')
+    if not end_date_raw or not end_date_obj:
+        end_date_obj = last_day
+        end_date_raw = last_day.strftime('%Y-%m-%d')
+
+    filters_template['start_date'] = start_date_raw
+    filters_template['end_date'] = end_date_raw
+
+    query_filters = {
+        'start_date': start_date_obj,
+        'end_date': end_date_obj,
+        'vendor': filters_template['vendor'],
+        'state': filters_template['state'],
+        'customer': filters_template['customer'],
+        'line': filters_template['line'],
+        'status': filters_template['status'],
+        'situation': filters_template['situation'],
+        'transaction': filters_template['transaction'],
+    }
+
+    data = fetch_orders_by_state(query_filters)
+    chart_labels = [row['state'] for row in data]
+    chart_values = [row['total'] for row in data]
+    total_value = sum(chart_values)
+
+    vendor_options = get_sales_order_vendors()
+    vendor_label_map = {(opt.get('code') or '').strip(): (opt.get('name') or '').strip() for opt in vendor_options}
+    customer_options = get_sales_order_customers()
+    customer_label_map = {(opt.get('code') or '').strip(): (opt.get('name') or '').strip() for opt in customer_options}
+    transaction_options = get_sales_order_transactions()
+    transaction_label_map = {(opt.get('code') or '').strip(): (opt.get('label') or '').strip() for opt in transaction_options}
+    status_options = ORDER_APPROVAL_STATUS_OPTIONS
+    status_label_map = ORDER_APPROVAL_STATUS_LABELS
+    situation_options = ORDER_SITUATION_OPTIONS
+    situation_label_map = ORDER_SITUATION_LABELS
+
+    selected_vendor_labels = []
+    for code in filters_template['vendor']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = vendor_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_vendor_labels:
+            selected_vendor_labels.append(label)
+
+    selected_state_labels = []
+    for state in filters_template['state']:
+        label = (state or '').strip()
+        if not label:
+            continue
+        if label not in selected_state_labels:
+            selected_state_labels.append(label)
+
+    selected_status_labels = []
+    for code in filters_template['status']:
+        normalized = (code or '').strip().upper()
+        if not normalized:
+            continue
+        label = status_label_map.get(normalized, normalized)
+        if label not in selected_status_labels:
+            selected_status_labels.append(label)
+
+    selected_situation_labels = []
+    for code in filters_template['situation']:
+        normalized = (code or '').strip().upper()
+        if normalized or code == '':
+            label = situation_label_map.get(normalized, normalized)
+            if label not in selected_situation_labels:
+                selected_situation_labels.append(label)
+
+    selected_line_labels = []
+    for line in filters_template['line']:
+        label = (line or '').strip()
+        if not label:
+            continue
+        if label not in selected_line_labels:
+            selected_line_labels.append(label)
+
+    selected_customer_labels = []
+    for code in filters_template['customer']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = customer_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_customer_labels:
+            selected_customer_labels.append(label)
+
+    selected_transaction_labels = []
+    for code in filters_template['transaction']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        label_base = transaction_label_map.get(normalized, '')
+        label = f"{label_base} ({normalized})" if label_base and normalized else label_base or normalized
+        if label not in selected_transaction_labels:
+            selected_transaction_labels.append(label)
+
+    def format_date_label(value):
+        if not value:
+            return ''
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').strftime('%d/%m/%Y')
+        except (ValueError, TypeError):
+            return value
+
+    start_label = format_date_label(start_date_raw)
+    end_label = format_date_label(end_date_raw)
+    period_label = ''
+    if start_label and end_label:
+        period_label = f"{start_label} → {end_label}"
+    elif start_label:
+        period_label = f"A partir de {start_label}"
+    elif end_label:
+        period_label = f"Até {end_label}"
+
+    return render_template(
+        'report_orders_by_state.html',
+        chart_labels=chart_labels,
+        chart_values=chart_values,
+        total_value=total_value,
+        filters=filters_template,
+        period_label=period_label,
+        vendor_options=vendor_options,
+        customer_options=customer_options,
+        transaction_options=transaction_options,
+        line_options=get_distinct_product_lines(),
+        state_options=get_distinct_states(),
+        status_options=status_options,
+        situation_options=situation_options,
+        selected_vendor_labels=selected_vendor_labels,
+        selected_state_labels=selected_state_labels,
+        selected_status_labels=selected_status_labels,
+        selected_situation_labels=selected_situation_labels,
+        selected_line_labels=selected_line_labels,
+        selected_customer_labels=selected_customer_labels,
+        selected_transaction_labels=selected_transaction_labels,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+
+@app.route('/report_orders_by_state/save_filters', methods=['POST'])
+@login_required
+def save_report_orders_by_state_filters():
+    """Salva a configuração de filtros dos pedidos por estado para o usuário."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def ensure_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def deduplicate_preserve_order(values):
+        seen = set()
+        ordered = []
+        for value in values:
+            if value not in seen:
+                seen.add(value)
+                ordered.append(value)
+        return ordered
+
+    def sanitize_multi(field_name, allow_blank=False, uppercase=False):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if uppercase and text:
+                text = text.upper()
+            if text or allow_blank:
+                cleaned.append(text)
+        return deduplicate_preserve_order(cleaned)
+
+    def sanitize_date(value):
+        if not value:
+            return ''
+        try:
+            return datetime.datetime.strptime(str(value).strip(), '%Y-%m-%d').strftime('%Y-%m-%d')
+        except (ValueError, TypeError):
+            return ''
+
+    sanitized_filters = {
+        'start_date': sanitize_date(payload.get('start_date')),
+        'end_date': sanitize_date(payload.get('end_date')),
+        'vendor': sanitize_multi('vendor'),
+        'state': sanitize_multi('state', uppercase=True),
+        'customer': sanitize_multi('customer'),
+        'line': sanitize_multi('line', uppercase=True),
+        'status': sanitize_multi('status', uppercase=True),
+        'situation': sanitize_multi('situation', allow_blank=True, uppercase=True),
+        'transaction': sanitize_multi('transaction'),
+    }
+
+    try:
+        saved = save_user_parameters(
+            user_id,
+            REPORT_ORDERS_BY_STATE_FILTERS_PARAM,
+            json.dumps(sanitized_filters)
+        )
+    except (TypeError, ValueError) as error:
+        return jsonify({'success': False, 'message': f'Não foi possível processar os filtros: {error}'}), 400
+
+    if not saved:
+        return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
+
+    return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
+
+
+@app.route('/report_orders_by_line')
+@login_required
+def report_orders_by_line():
+    def normalize_values(values, allow_blank=False, uppercase=False):
+        normalized = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text and not allow_blank:
+                continue
+            if uppercase and text:
+                text = text.upper()
+            normalized.append(text)
+        return normalized
+
+    def normalize_saved_values(value, allow_blank=False, uppercase=False):
+        if value is None:
+            return []
+        source = value if isinstance(value, list) else [value]
+        return normalize_values(source, allow_blank=allow_blank, uppercase=uppercase)
+
+    def parse_date(value):
+        if not value:
+            return None
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return None
+
+    user_id = session.get('user_id')
+    saved_filters = {}
+    if user_id:
+        saved_filters_raw = get_user_parameters(user_id, REPORT_ORDERS_LINE_FILTERS_PARAM)
+        if saved_filters_raw:
+            try:
+                saved_filters = json.loads(saved_filters_raw) or {}
+            except (TypeError, ValueError):
+                saved_filters = {}
+
+    filter_applied_flag = (request.args.get('filter_applied') or '').strip() == '1'
+    ignore_saved_flag = (request.args.get('ignore_saved') or '').strip() == '1'
+    use_saved_defaults = bool(saved_filters) and not filter_applied_flag and not ignore_saved_flag
+
+    today = datetime.date.today()
+    first_day = today.replace(day=1)
+    last_day = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+
+    start_date_raw = (request.args.get('start_date') or '').strip()
+    end_date_raw = (request.args.get('end_date') or '').strip()
+
+    if use_saved_defaults:
+        if not start_date_raw:
+            start_date_raw = str(saved_filters.get('start_date') or '').strip()
+        if not end_date_raw:
+            end_date_raw = str(saved_filters.get('end_date') or '').strip()
+
+    vendor_values = normalize_values(request.args.getlist('vendor'))
+    if use_saved_defaults and not vendor_values:
+        vendor_values = normalize_saved_values(saved_filters.get('vendor'))
+
+    state_values = normalize_values(request.args.getlist('state'), uppercase=True)
+    if use_saved_defaults and not state_values:
+        state_values = normalize_saved_values(saved_filters.get('state'), uppercase=True)
+
+    customer_values = normalize_values(request.args.getlist('customer'))
+    if use_saved_defaults and not customer_values:
+        customer_values = normalize_saved_values(saved_filters.get('customer'))
+
+    line_values = normalize_values(request.args.getlist('line'), uppercase=True)
+    if use_saved_defaults and not line_values:
+        line_values = normalize_saved_values(saved_filters.get('line'), uppercase=True)
+
+    status_values = normalize_values(request.args.getlist('status'), uppercase=True)
+    if use_saved_defaults and not status_values:
+        status_values = normalize_saved_values(saved_filters.get('status'), uppercase=True)
+
+    situation_values = normalize_values(request.args.getlist('situation'), allow_blank=True, uppercase=True)
+    if use_saved_defaults and not situation_values:
+        situation_values = normalize_saved_values(saved_filters.get('situation'), allow_blank=True, uppercase=True)
+
+    transaction_values = normalize_values(request.args.getlist('transaction'))
+    if use_saved_defaults and not transaction_values:
+        transaction_values = normalize_saved_values(saved_filters.get('transaction'))
+
+    if not start_date_raw:
+        start_date_raw = first_day.strftime('%Y-%m-%d')
+    if not end_date_raw:
+        end_date_raw = last_day.strftime('%Y-%m-%d')
+
+    start_date_obj = parse_date(start_date_raw)
+    end_date_obj = parse_date(end_date_raw)
+
+    filters_template = {
+        'start_date': start_date_raw,
+        'end_date': end_date_raw,
+        'vendor': vendor_values,
+        'state': state_values,
+        'customer': customer_values,
+        'line': line_values,
+        'status': status_values,
+        'situation': situation_values,
+        'transaction': transaction_values,
+    }
+
+    query_filters = {
+        'start_date': start_date_obj,
+        'end_date': end_date_obj,
+        'vendor': vendor_values,
+        'state': state_values,
+        'customer': customer_values,
+        'line': line_values,
+        'status': status_values,
+        'situation': situation_values,
+        'transaction': transaction_values,
+    }
+
+    data = fetch_orders_by_line(query_filters)
+    chart_labels = [row['line'] for row in data]
+    chart_values = [row['total'] for row in data]
+    total_value = sum(chart_values)
+
+    vendor_options = get_sales_order_vendors()
+    vendor_label_map = {(opt.get('code') or '').strip(): (opt.get('name') or '').strip() for opt in vendor_options}
+    customer_options = get_sales_order_customers()
+    customer_label_map = {(opt.get('code') or '').strip(): (opt.get('name') or '').strip() for opt in customer_options}
+    transaction_options = get_sales_order_transactions()
+    transaction_label_map = {(opt.get('code') or '').strip(): (opt.get('label') or '').strip() for opt in transaction_options}
+    status_options = ORDER_APPROVAL_STATUS_OPTIONS
+    status_label_map = ORDER_APPROVAL_STATUS_LABELS
+    situation_options = ORDER_SITUATION_OPTIONS
+    situation_label_map = ORDER_SITUATION_LABELS
+
+    selected_vendor_labels = []
+    for code in filters_template['vendor']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = vendor_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_vendor_labels:
+            selected_vendor_labels.append(label)
+
+    selected_state_labels = []
+    for state in filters_template['state']:
+        label = (state or '').strip()
+        if not label:
+            continue
+        if label not in selected_state_labels:
+            selected_state_labels.append(label)
+
+    selected_status_labels = []
+    for code in filters_template['status']:
+        normalized = (code or '').strip().upper()
+        if not normalized:
+            continue
+        label = status_label_map.get(normalized, normalized)
+        if label not in selected_status_labels:
+            selected_status_labels.append(label)
+
+    selected_situation_labels = []
+    for code in filters_template['situation']:
+        normalized = (code or '').strip().upper()
+        if normalized or code == '':
+            label = situation_label_map.get(normalized, normalized)
+            if label not in selected_situation_labels:
+                selected_situation_labels.append(label)
+
+    selected_line_labels = []
+    for line in filters_template['line']:
+        label = (line or '').strip()
+        if not label:
+            continue
+        if label not in selected_line_labels:
+            selected_line_labels.append(label)
+
+    selected_customer_labels = []
+    for code in filters_template['customer']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = customer_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_customer_labels:
+            selected_customer_labels.append(label)
+
+    selected_transaction_labels = []
+    for code in filters_template['transaction']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = transaction_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_transaction_labels:
+            selected_transaction_labels.append(label)
+
+    def format_date_label(value):
+        if not value:
+            return ''
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').strftime('%d/%m/%Y')
+        except (ValueError, TypeError):
+            return value
+
+    start_label = format_date_label(start_date_raw)
+    end_label = format_date_label(end_date_raw)
+    period_label = ''
+    if start_label and end_label:
+        period_label = f"{start_label} → {end_label}"
+    elif start_label:
+        period_label = f"A partir de {start_label}"
+    elif end_label:
+        period_label = f"Até {end_label}"
+
+    return render_template(
+        'report_orders_by_line.html',
+        chart_labels=chart_labels,
+        chart_values=chart_values,
+        total_value=total_value,
+        filters=filters_template,
+        period_label=period_label,
+        vendor_options=vendor_options,
+        customer_options=customer_options,
+        transaction_options=transaction_options,
+        status_options=status_options,
+        situation_options=situation_options,
+        line_options=get_distinct_product_lines(),
+        state_options=get_distinct_states(),
+        selected_vendor_labels=selected_vendor_labels,
+        selected_state_labels=selected_state_labels,
+        selected_status_labels=selected_status_labels,
+        selected_situation_labels=selected_situation_labels,
+        selected_line_labels=selected_line_labels,
+        selected_customer_labels=selected_customer_labels,
+        selected_transaction_labels=selected_transaction_labels,
+        save_filters_url=url_for('save_report_orders_by_line_filters'),
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/report_orders_by_line/save_filters', methods=['POST'])
+@login_required
+def save_report_orders_by_line_filters():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def ensure_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def deduplicate_preserve_order(values):
+        seen = set()
+        ordered = []
+        for value in values:
+            if value in seen:
+                continue
+            seen.add(value)
+            ordered.append(value)
+        return ordered
+
+    def sanitize_multi(field_name, allow_blank=False, uppercase=False):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if uppercase and text:
+                text = text.upper()
+            if text or allow_blank:
+                cleaned.append(text)
+        return deduplicate_preserve_order(cleaned)
+
+    def sanitize_date(value):
+        if not value:
+            return ''
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').strftime('%Y-%m-%d')
+        except (ValueError, TypeError):
+            return ''
+
+    sanitized_filters = {
+        'start_date': sanitize_date(payload.get('start_date')),
+        'end_date': sanitize_date(payload.get('end_date')),
+        'vendor': sanitize_multi('vendor'),
+        'state': sanitize_multi('state', uppercase=True),
+        'customer': sanitize_multi('customer'),
+        'line': sanitize_multi('line', uppercase=True),
+        'status': sanitize_multi('status', uppercase=True),
+        'situation': sanitize_multi('situation', uppercase=True, allow_blank=True),
+        'transaction': sanitize_multi('transaction'),
+    }
+
+    try:
+        saved = save_user_parameters(
+            user_id,
+            REPORT_ORDERS_LINE_FILTERS_PARAM,
+            json.dumps(sanitized_filters)
+        )
+        if not saved:
+            raise RuntimeError('Não foi possível salvar os filtros.')
+        return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
+    except Exception as err:
+        print(f'Erro ao salvar filtros de Pedidos por Linha: {err}')
+        return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
+
+
+@app.route('/report_sales_orders_comparison/save_filters', methods=['POST'])
+@login_required
+def save_report_sales_orders_comparison_filters():
+    """Salva os filtros escolhidos no comparativo mensal para reutilização futura."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def ensure_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def deduplicate_preserve_order(values):
+        seen = set()
+        ordered = []
+        for value in values:
+            if value not in seen:
+                seen.add(value)
+                ordered.append(value)
+        return ordered
+
+    def sanitize_multi(field_name, allow_blank=False, numeric_range=None):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if numeric_range:
+                if not text:
+                    continue
+                try:
+                    number = int(text)
+                except (TypeError, ValueError):
+                    continue
+                min_allowed, max_allowed = numeric_range
+                if number < min_allowed or number > max_allowed:
+                    continue
+                cleaned.append(str(number))
+                continue
+            if text or allow_blank:
+                cleaned.append(text)
+        return deduplicate_preserve_order(cleaned)
+
+    def sanitize_year(value):
+        if value is None:
+            return datetime.date.today().year
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return datetime.date.today().year
+
+    sanitized_filters = {
+        'year': sanitize_year(payload.get('year')),
+        'month': sanitize_multi('month', numeric_range=(1, 12)),
+        'vendor': sanitize_multi('vendor'),
+        'state': sanitize_multi('state'),
+        'status': sanitize_multi('status'),
+        'situation': sanitize_multi('situation', allow_blank=True),
+        'line': sanitize_multi('line'),
+        'customer': sanitize_multi('customer'),
+        'transaction': sanitize_multi('transaction'),
+    }
+
+    try:
+        saved = save_user_parameters(
+            user_id,
+            REPORT_SALES_COMPARISON_FILTERS_PARAM,
+            json.dumps(sanitized_filters)
+        )
+    except (TypeError, ValueError) as error:
+        return jsonify({'success': False, 'message': f'Não foi possível processar os filtros: {error}'}), 400
+
+    if not saved:
+        return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
+
+    return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
+
+
 # Página intermediária para relatórios de faturamento
 @app.route('/revenue_reports')
 @login_required
@@ -9434,10 +11593,13 @@ def gerencial_parameters():
             success = False
         if not save_user_parameters(user_id, f'{selected_report}_selected_report_cfops', selected_cfops_str):
             success = False
+        media_base_path = request.form.get('assistance_media_base_path', '').strip()
+        if not save_user_parameters(user_id, ASSISTANCE_MEDIA_PATH_PARAM, media_base_path):
+            success = False
         if success:
-            flash('Parâmetros de transação e CFOP salvos com sucesso!', 'success')
+            flash('Parâmetros salvos com sucesso!', 'success')
         else:
-            flash('Falha ao salvar parâmetros de transação ou CFOP.', 'danger')
+            flash('Falha ao salvar os parâmetros solicitados.', 'danger')
         return redirect(url_for('gerencial_parameters', report=selected_report))
     
     # GET request: Load current selected transactions and signs
@@ -9454,6 +11616,8 @@ def gerencial_parameters():
     current_selected_cfops = []
     if selected_cfops_str:
         current_selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
+
+    assistance_media_base_path = get_user_parameters(user_id, ASSISTANCE_MEDIA_PATH_PARAM) or ''
 
     # Marcar as transações e CFOPs que já estão selecionados
     for trans in all_transactions:
@@ -9473,7 +11637,8 @@ def gerencial_parameters():
         all_transactions=all_transactions,
         all_cfops=cfops_data,
         available_reports=available_reports,
-        selected_report=selected_report
+        selected_report=selected_report,
+        assistance_media_base_path=assistance_media_base_path,
     )
 
 

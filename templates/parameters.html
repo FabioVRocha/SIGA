@@ -50,6 +50,22 @@
             </div>
         </div>
 
+        <h2 class="text-xl font-semibold text-gray-800">Mídias das Assistências</h2>
+        <div class="form-group">
+            <label for="assistance_media_base_path" class="form-label text-lg font-medium">Diretório base das mídias:</label>
+            <input
+                type="text"
+                id="assistance_media_base_path"
+                name="assistance_media_base_path"
+                class="form-input mt-2"
+                placeholder="Ex.: /mnt/arquivos/assistencias"
+                value="{{ assistance_media_base_path or '' }}"
+            >
+            <p class="text-sm text-gray-500 mt-2">
+                Informe o caminho completo no servidor para a pasta onde cada assistência possui suas mídias (imagens, vídeos e PDFs).
+            </p>
+        </div>
+
         <div class="flex justify-end mt-6">
             <button type="submit" class="btn btn-primary">Salvar Parâmetros</button>
         </div>

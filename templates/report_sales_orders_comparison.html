@@ -1,0 +1,583 @@
+{% extends "base.html" %}
+
+{% block title %}Comparativo Mensal de Pedidos{% endblock %}
+
+{% block page_title %}Comparativo Mensal de Pedidos{% endblock %}
+
+{% block header_action %}
+<a href="{{ url_for('commercial_reports') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+    <i class="fas fa-arrow-left mr-2"></i> Voltar
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 w-full">
+        <div class="flex flex-wrap items-center gap-4 mb-6">
+            <div>
+                <h2 class="text-2xl font-semibold text-gray-800">{{ current_year_label }} x {{ previous_year_label }}</h2>
+                <p class="text-sm text-gray-500">Comparativo mensal do valor total dos pedidos de venda.</p>
+            </div>
+            <div class="flex-1"></div>
+            <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+                <i class="fas fa-filter mr-2"></i> Filtrar
+            </button>
+        </div>
+        <div class="flex flex-wrap gap-3 mb-6 text-sm">
+            {% if selected_vendor_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Vendedores:</span>
+                {% for label in selected_vendor_labels %}
+                <span class="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-200">{{ label }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_state_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Estados:</span>
+                {% for state in selected_state_labels %}
+                <span class="bg-green-50 text-green-700 px-3 py-1 rounded-full border border-green-200">{{ state }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_transaction_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Transações:</span>
+                {% for transaction in selected_transaction_labels %}
+                <span class="bg-orange-50 text-orange-700 px-3 py-1 rounded-full border border-orange-200">{{ transaction }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_status_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Status:</span>
+                {% for status in selected_status_labels %}
+                <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">{{ status }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_situation_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Situação:</span>
+                {% for status in selected_situation_labels %}
+                <span class="bg-amber-50 text-amber-700 px-3 py-1 rounded-full border border-amber-200">{{ status }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_line_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Linhas:</span>
+                {% for line in selected_line_labels %}
+                <span class="bg-purple-50 text-purple-700 px-3 py-1 rounded-full border border-purple-200">{{ line }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_customer_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Clientes:</span>
+                {% for customer in selected_customer_labels %}
+                <span class="bg-pink-50 text-pink-700 px-3 py-1 rounded-full border border-pink-200">{{ customer }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        <div class="w-full min-h-[360px] md:min-h-[420px]">
+            <canvas id="ordersChart" class="w-full h-full"></canvas>
+        </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col">
+            <span class="text-sm text-gray-500">Total {{ current_year_label }}</span>
+            <span class="text-2xl font-semibold text-gray-800">{{ totals.current_total | format_currency_brl }}</span>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col">
+            <span class="text-sm text-gray-500">Média Mensal {{ current_year_label }}</span>
+            <span class="text-2xl font-semibold text-gray-800">{{ totals.current_average | format_currency_brl }}</span>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col">
+            <span class="text-sm text-gray-500">Total {{ previous_year_label }}</span>
+            <span class="text-2xl font-semibold text-gray-800">{{ totals.previous_total | format_currency_brl }}</span>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col">
+            <span class="text-sm text-gray-500">Média Mensal {{ previous_year_label }}</span>
+            <span class="text-2xl font-semibold text-gray-800">{{ totals.previous_average | format_currency_brl }}</span>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col">
+            <span class="text-sm text-gray-500">Variação</span>
+            <span class="text-2xl font-semibold text-gray-800">{{ '%.2f'|format(totals.variation_percent) }}%</span>
+        </div>
+    </div>
+</div>
+
+<div id="filterModal" class="fixed z-40 inset-0 hidden">
+  <div class="flex items-center justify-center min-h-screen px-4 py-8">
+    <div class="absolute inset-0 bg-gray-800/70" id="filterModalBackdrop"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl">
+      <form id="filterForm" method="get" action="{{ url_for('report_sales_orders_comparison') }}" class="p-6 space-y-4">
+        <input type="hidden" name="filter_applied" value="1">
+        <div class="grid grid-cols-1 gap-4">
+            <div>
+                <label for="year" class="block text-sm font-medium text-gray-700">Ano</label>
+                <input type="number" name="year" id="year" value="{{ filters.year }}" class="mt-1 p-2 border rounded w-full">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Meses</label>
+                <div class="relative w-full">
+                    <button type="button" id="month-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="month-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="month-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="month-options" data-combobox-panel="month" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar meses" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="month">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for m in range(1,13) %}
+                            {% set label_text = "%02d"|format(m) %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }}">
+                                <input type="checkbox" name="month" value="{{ m }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.month and (m|string) in filters.month %}checked{% endif %}>
+                                <span class="text-gray-700">{{ label_text }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Vendedores</label>
+                <div class="relative w-full">
+                    <button type="button" id="vendor-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="vendor-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="vendor-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="vendor-options" data-combobox-panel="vendor" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar vendedores" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="vendor">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for vendor in vendor_options %}
+                            {% set code = vendor.code %}
+                            {% set label_text = (vendor.name or 'Sem Nome') %}
+                            {% if code %}
+                                {% set label_text = label_text ~ ' (' ~ code ~ ')' %}
+                            {% endif %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }}">
+                                <input type="checkbox" name="vendor" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.vendor and code in filters.vendor %}checked{% endif %}>
+                                <span class="text-gray-700">{{ label_text }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Estados</label>
+                <div class="relative w-full">
+                    <button type="button" id="state-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="state-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="state-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="state-options" data-combobox-panel="state" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar estados" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="state">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-56 overflow-y-auto">
+                            {% for uf in state_options %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ uf }}">
+                                <input type="checkbox" name="state" value="{{ uf }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.state and uf in filters.state %}checked{% endif %}>
+                                <span class="text-gray-700">{{ uf }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <div class="relative w-full">
+                    <button type="button" id="status-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="status-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="status-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="status-options" data-combobox-panel="status" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar status" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="status">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-56 overflow-y-auto">
+                            {% for option in status_options %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ option.label }}">
+                                <input type="checkbox" name="status" value="{{ option.code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.status and option.code in filters.status %}checked{% endif %}>
+                                <span class="text-gray-700">{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Situação</label>
+                <div class="relative w-full">
+                    <button type="button" id="situation-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="situation-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="situation-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="situation-options" data-combobox-panel="situation" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar situações" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="situation">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-56 overflow-y-auto">
+                            {% for option in situation_options %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ option.label }}">
+                                <input type="checkbox" name="situation" value="{{ option.code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.situation and option.code in filters.situation %}checked{% endif %}>
+                                <span class="text-gray-700">{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Linhas</label>
+                <div class="relative w-full">
+                    <button type="button" id="line-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="line-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="line-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="line-options" data-combobox-panel="line" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar linhas" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="line">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-56 overflow-y-auto">
+                            {% for line in line_options %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ line }}">
+                                <input type="checkbox" name="line" value="{{ line }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.line and line in filters.line %}checked{% endif %}>
+                                <span class="text-gray-700">{{ line }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Clientes</label>
+                <div class="relative w-full">
+                    <button type="button" id="customer-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="customer-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="customer-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="customer-options" data-combobox-panel="customer" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar clientes" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="customer">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for customer in customer_options %}
+                            {% set code = customer.code %}
+                            {% set label_text = customer.name or 'Sem Nome' %}
+                            {% if code %}
+                                {% set label_text = label_text ~ ' (' ~ code ~ ')' %}
+                            {% endif %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }}">
+                                <input type="checkbox" name="customer" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.customer and code in filters.customer %}checked{% endif %}>
+                                <span class="text-gray-700">{{ label_text }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Transações</label>
+                <div class="relative w-full">
+                    <button type="button" id="transaction-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="transaction-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="transaction-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="transaction-options" data-combobox-panel="transaction" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar transações" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="transaction">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for option in transaction_options %}
+                            {% set code = option.code %}
+                            {% set base_label = option.label or 'Sem descrição' %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ base_label }}{% if code %} ({{ code }}){% endif %}">
+                                <input type="checkbox" name="transaction" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.transaction and code in filters.transaction %}checked{% endif %}>
+                                <span class="text-gray-700">{{ base_label }}{% if code %} ({{ code }}){% endif %}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="flex flex-col gap-2 pt-4 border-t border-slate-200">
+            <div class="flex flex-wrap justify-end gap-3">
+                <a href="{{ url_for('report_sales_orders_comparison', ignore_saved='1') }}" class="btn-secondary px-4 py-2 rounded-lg text-center">Limpar</a>
+                <button type="button" id="saveFiltersBtn" class="btn-secondary px-4 py-2 rounded-lg">Salvar filtros</button>
+                <button type="button" id="closeFilterModalBtn" class="btn-secondary px-4 py-2 rounded-lg">Cancelar</button>
+                <button type="submit" class="btn-primary px-4 py-2 rounded-lg">Aplicar</button>
+            </div>
+            <p id="saveFiltersFeedback" class="text-sm text-right text-slate-500 mt-1"></p>
+        </div>
+      </form>
+      <button type="button" id="filterModalCloseIcon" class="absolute top-4 right-4 text-slate-500 hover:text-slate-700">
+        <i class="fas fa-times text-lg"></i>
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const filterModal = document.getElementById('filterModal');
+    const openFilterModalBtn = document.getElementById('openFilterModalBtn');
+    const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+    const closeIcon = document.getElementById('filterModalCloseIcon');
+    const modalBackdrop = document.getElementById('filterModalBackdrop');
+    const filterForm = document.getElementById('filterForm');
+    const saveFiltersBtn = document.getElementById('saveFiltersBtn');
+    const saveFiltersFeedback = document.getElementById('saveFiltersFeedback');
+    const saveFiltersUrl = "{{ url_for('save_report_sales_orders_comparison_filters') }}";
+
+    const showModal = () => filterModal.classList.remove('hidden');
+    const hideModal = () => filterModal.classList.add('hidden');
+
+    if (openFilterModalBtn) openFilterModalBtn.addEventListener('click', showModal);
+    if (closeFilterModalBtn) closeFilterModalBtn.addEventListener('click', hideModal);
+    if (closeIcon) closeIcon.addEventListener('click', hideModal);
+
+    filterModal.addEventListener('click', (event) => {
+        if (event.target === filterModal || event.target === modalBackdrop) {
+            hideModal();
+        }
+    });
+
+    const closeAllComboboxPanels = () => {
+        document.querySelectorAll('[data-combobox-panel]').forEach(panel => {
+            panel.classList.add('hidden');
+            const name = panel.getAttribute('data-combobox-panel');
+            const arrow = document.getElementById(`${name}-arrow`);
+            if (arrow) {
+                arrow.classList.remove('rotate-180');
+            }
+        });
+    };
+
+    const setupCombobox = (name, placeholderText) => {
+        const button = document.getElementById(`${name}-button`);
+        const panel = document.getElementById(`${name}-options`);
+        const text = document.getElementById(`${name}-text`);
+        const arrow = document.getElementById(`${name}-arrow`);
+        if (!button || !panel || !text) {
+            return;
+        }
+
+        const checkboxes = panel.querySelectorAll('input[type="checkbox"]');
+        const searchInput = panel.querySelector(`[data-combobox-search="${name}"]`);
+        const items = panel.querySelectorAll('[data-combobox-item]');
+
+        const updateSelectedText = () => {
+            const selected = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => {
+                    const labelEl = cb.parentElement.querySelector('span');
+                    return labelEl ? labelEl.textContent.trim() : cb.value;
+                });
+            text.textContent = selected.length ? selected.join(', ') : placeholderText;
+        };
+
+        const filterItems = () => {
+            const term = (searchInput?.value || '').toLowerCase();
+            items.forEach(item => {
+                const label = (item.getAttribute('data-label') || '').toLowerCase();
+                const isMatch = label.includes(term);
+                item.classList.toggle('hidden', !isMatch);
+            });
+        };
+
+        button.addEventListener('click', () => {
+            const isHidden = panel.classList.contains('hidden');
+            closeAllComboboxPanels();
+            if (isHidden) {
+                panel.classList.remove('hidden');
+                if (arrow) arrow.classList.add('rotate-180');
+                setTimeout(() => searchInput?.focus(), 50);
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!panel.contains(event.target) && !button.contains(event.target)) {
+                panel.classList.add('hidden');
+                if (arrow) arrow.classList.remove('rotate-180');
+            }
+        });
+
+        checkboxes.forEach(cb => cb.addEventListener('change', updateSelectedText));
+        if (searchInput) {
+            searchInput.addEventListener('input', filterItems);
+        }
+        filterItems();
+        updateSelectedText();
+    };
+
+    const showSaveFeedback = (message, type = 'info') => {
+        if (!saveFiltersFeedback) return;
+        const classes = ['text-sm', 'text-right', 'mt-1'];
+        let colorClass = 'text-slate-500';
+        if (type === 'success') {
+            colorClass = 'text-emerald-600';
+        } else if (type === 'error') {
+            colorClass = 'text-rose-600';
+        }
+        saveFiltersFeedback.className = [...classes, colorClass].join(' ');
+        saveFiltersFeedback.textContent = message;
+    };
+
+    setupCombobox('month', 'Selecione uma ou mais opções');
+    setupCombobox('vendor', 'Selecione uma ou mais opções');
+    setupCombobox('state', 'Selecione uma ou mais opções');
+    setupCombobox('status', 'Selecione uma ou mais opções');
+    setupCombobox('situation', 'Selecione uma ou mais opções');
+    setupCombobox('line', 'Selecione uma ou mais opções');
+    setupCombobox('customer', 'Selecione uma ou mais opções');
+    setupCombobox('transaction', 'Selecione uma ou mais opções');
+
+    if (saveFiltersBtn && filterForm) {
+        saveFiltersBtn.addEventListener('click', async () => {
+            const formData = new FormData(filterForm);
+            const payload = {};
+            formData.forEach((value, key) => {
+                if (key === 'filter_applied' || key === 'ignore_saved') {
+                    return;
+                }
+                if (payload[key]) {
+                    if (!Array.isArray(payload[key])) {
+                        payload[key] = [payload[key]];
+                    }
+                    payload[key].push(value);
+                } else {
+                    payload[key] = value;
+                }
+            });
+
+            const multiValueFields = ['month', 'vendor', 'state', 'status', 'situation', 'line', 'customer', 'transaction'];
+            multiValueFields.forEach(field => {
+                if (!(field in payload)) {
+                    payload[field] = [];
+                } else if (!Array.isArray(payload[field])) {
+                    payload[field] = [payload[field]];
+                }
+            });
+
+            try {
+                const response = await fetch(saveFiltersUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json().catch(() => ({}));
+                if (response.ok && result?.success) {
+                    showSaveFeedback(result.message || 'Filtros salvos com sucesso.', 'success');
+                } else if (response.status === 401) {
+                    showSaveFeedback('Sessão expirada. Faça login novamente para salvar os filtros.', 'error');
+                } else {
+                    const message = (result && result.message) || 'Não foi possível salvar os filtros.';
+                    showSaveFeedback(message, 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao salvar filtros do comparativo mensal:', error);
+                showSaveFeedback('Erro de comunicação ao salvar os filtros.', 'error');
+            }
+        });
+    }
+
+    const ctx = document.getElementById('ordersChart').getContext('2d');
+    const labels = {{ chart_labels | tojson }};
+    const dataCurrent = {{ current_year_data | tojson }};
+    const dataPrev = {{ previous_year_data | tojson }};
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '{{ current_year_label }}',
+                    backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                    borderColor: 'rgba(99, 102, 241, 1)',
+                    data: dataCurrent
+                },
+                {
+                    label: '{{ previous_year_label }}',
+                    backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                    borderColor: 'rgba(16, 185, 129, 1)',
+                    data: dataPrev
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        afterBody: function(ctx){
+                            const i = ctx[0].dataIndex;
+                            const curr = dataCurrent[i];
+                            const prev = dataPrev[i];
+                            const diff = prev ? ((curr - prev) / prev) * 100 : 0;
+                            return 'Variação: ' + diff.toFixed(2) + '%';
+                        }
+                    }
+                },
+                legend: { display: true }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Mês/Ano' } },
+                y: {
+                    title: { display: true, text: 'Valor Total de Pedidos (R$)' },
+                    ticks: {
+                        callback: function(value) {
+                            return new Intl.NumberFormat('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL',
+                                maximumFractionDigits: 0
+                            }).format(value);
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
