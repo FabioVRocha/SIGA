@@ -2861,19 +2861,7 @@ def fetch_decomposition_tree(filters):
     try:
         cur = conn.cursor()
         has_peddesval_column = table_has_column(conn, 'pedido', 'peddesval')
-
-        pp_value_expr = "COALESCE(pp.pprvlsoma, 0)"
-        order_gross_expression = "COALESCE(pedprod.valor_bruto_total, 0)"
-        if has_peddesval_column:
-            order_net_expression = f"{order_gross_expression} - COALESCE(p.peddesval, 0)"
-        else:
-            order_net_expression = order_gross_expression
-
-        ratio_expr = (
-            f"CASE WHEN {order_gross_expression} = 0 THEN 0 "
-            f"ELSE {pp_value_expr} / NULLIF({order_gross_expression}, 0) END"
-        )
-        value_expression = f"({order_net_expression}) * {ratio_expr}"
+        discount_expression = "COALESCE(p.peddesval, 0)" if has_peddesval_column else "0"
 
         state_expression = (
             "CASE "
@@ -2909,7 +2897,6 @@ def fetch_decomposition_tree(filters):
             "ELSE 'OUTROS' "
             "END"
         )
-        line_filter_expression = f"UPPER({line_label_expression})"
         sub_group_expression = "COALESCE(NULLIF(subg1.subnome, ''), 'Sem SubGrupo')"
         product_name_expression = "COALESCE(NULLIF(prod.pronome::text, ''), 'Sem Produto')"
         product_code_expression = "COALESCE(prod.produto::text, '')"
@@ -2923,37 +2910,74 @@ def fetch_decomposition_tree(filters):
                 SELECT pedido, SUM(COALESCE(pprvlsoma, 0)) AS valor_bruto_total
                 FROM pedprodu
                 GROUP BY pedido
+            ),
+            order_dimensions AS (
+                SELECT
+                    p.pedido,
+                    MAX(p.peddata) AS peddata,
+                    MAX({vendor_code_expression}) AS vendor_code,
+                    MAX({vendor_name_expression}) AS vendor_name,
+                    MAX({customer_code_expression}) AS customer_code,
+                    MAX({customer_name_expression}) AS customer_name,
+                    MAX({city_expression}) AS city,
+                    MAX({state_expression}) AS state,
+                    MAX({discount_expression}) AS peddesval,
+                    MAX(COALESCE(p.pedaprova, '')) AS approval_status,
+                    MAX(COALESCE(p.pedsitua, '')) AS situation,
+                    MAX(COALESCE(op.opetransac::text, '')) AS transaction_code
+                FROM pedido p
+                LEFT JOIN cidade c ON c.cidade = p.pedentcid
+                LEFT JOIN empresa e ON e.empresa = p.pedcliente
+                LEFT JOIN vendedor v ON v.vendedor = p.pedrepres
+                LEFT JOIN opera op ON op.operacao = p.pedoperaca
+                GROUP BY p.pedido
+            ),
+            product_values AS (
+                SELECT
+                    pp.pedido,
+                    {line_label_expression} AS line,
+                    {sub_group_expression} AS sub_group,
+                    {product_name_expression} AS product_name,
+                    {product_code_expression} AS product_code,
+                    SUM(COALESCE(pp.pprvlsoma, 0)) AS product_value
+                FROM pedprodu pp
+                LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+                LEFT JOIN grupo g ON g.grupo = prod.grupo
+                LEFT JOIN grupo1 subg1 ON subg1.subgrupo = prod.subgrupo
+                WHERE pp.pedido IS NOT NULL
+                GROUP BY pp.pedido, line, sub_group, product_name, product_code
             )
             SELECT
-                {vendor_code_expression} AS vendor_code,
-                {vendor_name_expression} AS vendor_name,
-                {customer_code_expression} AS customer_code,
-                {customer_name_expression} AS customer_name,
-                {city_expression} AS city,
-                {line_label_expression} AS line,
-                {sub_group_expression} AS sub_group,
-                {product_name_expression} AS product_name,
-                {product_code_expression} AS product_code,
-                SUM({value_expression}) AS total_value
-            FROM pedido p
-            LEFT JOIN pedprodu pp ON pp.pedido = p.pedido
-            LEFT JOIN produto prod ON prod.produto = pp.pprproduto
-            LEFT JOIN grupo g ON g.grupo = prod.grupo
-            LEFT JOIN grupo1 subg1 ON subg1.subgrupo = prod.subgrupo
-            LEFT JOIN cidade c ON c.cidade = p.pedentcid
-            LEFT JOIN empresa e ON e.empresa = p.pedcliente
-            LEFT JOIN vendedor v ON v.vendedor = p.pedrepres
-            LEFT JOIN opera op ON op.operacao = p.pedoperaca
-            LEFT JOIN pedprod ON pedprod.pedido = p.pedido
-            WHERE p.peddata IS NOT NULL
+                od.vendor_code AS vendor_code,
+                od.vendor_name AS vendor_name,
+                od.customer_code AS customer_code,
+                od.customer_name AS customer_name,
+                COALESCE(od.city, 'Sem Cidade') AS city,
+                pv.line AS line,
+                pv.sub_group AS sub_group,
+                pv.product_name AS product_name,
+                pv.product_code AS product_code,
+                SUM(
+                    CASE
+                        WHEN COALESCE(pedprod.valor_bruto_total, 0) = 0 THEN 0
+                        ELSE (
+                            COALESCE(pedprod.valor_bruto_total, 0)
+                            - COALESCE(od.peddesval, 0)
+                        ) * (pv.product_value / NULLIF(COALESCE(pedprod.valor_bruto_total, 0), 0))
+                    END
+                ) AS total_value
+            FROM order_dimensions od
+            JOIN product_values pv ON pv.pedido = od.pedido
+            LEFT JOIN pedprod ON pedprod.pedido = od.pedido
+            WHERE od.peddata IS NOT NULL
         """
         params = []
 
         if filters.get('start_date'):
-            query += " AND p.peddata >= %s"
+            query += " AND od.peddata >= %s"
             params.append(filters['start_date'])
         if filters.get('end_date'):
-            query += " AND p.peddata <= %s"
+            query += " AND od.peddata <= %s"
             params.append(filters['end_date'])
 
         vendors = filters.get('vendor')
@@ -2961,7 +2985,7 @@ def fetch_decomposition_tree(filters):
             vendor_values = [str(v).strip() for v in vendors if str(v).strip()]
             if vendor_values:
                 placeholders = ','.join(['%s'] * len(vendor_values))
-                query += f" AND {vendor_code_expression} IN ({placeholders})"
+                query += f" AND od.vendor_code IN ({placeholders})"
                 params.extend(vendor_values)
 
         states = filters.get('state')
@@ -2969,7 +2993,7 @@ def fetch_decomposition_tree(filters):
             state_values = [str(s).strip() for s in states if str(s).strip()]
             if state_values:
                 placeholders = ','.join(['%s'] * len(state_values))
-                query += f" AND {state_expression} IN ({placeholders})"
+                query += f" AND od.state IN ({placeholders})"
                 params.extend(state_values)
 
         customers = filters.get('customer')
@@ -2977,7 +3001,7 @@ def fetch_decomposition_tree(filters):
             customer_values = [str(c).strip() for c in customers if str(c).strip()]
             if customer_values:
                 placeholders = ','.join(['%s'] * len(customer_values))
-                query += f" AND {customer_code_expression} IN ({placeholders})"
+                query += f" AND od.customer_code IN ({placeholders})"
                 params.extend(customer_values)
 
         statuses = filters.get('status')
@@ -2985,7 +3009,7 @@ def fetch_decomposition_tree(filters):
             status_values = [str(s).strip().upper() for s in statuses if str(s).strip()]
             if status_values:
                 placeholders = ','.join(['%s'] * len(status_values))
-                query += f" AND COALESCE(p.pedaprova, '') IN ({placeholders})"
+                query += f" AND COALESCE(od.approval_status, '') IN ({placeholders})"
                 params.extend(status_values)
 
         situations = filters.get('situation')
@@ -2993,7 +3017,7 @@ def fetch_decomposition_tree(filters):
             situation_values = [str(s).strip().upper() for s in situations if s is not None]
             if situation_values:
                 placeholders = ','.join(['%s'] * len(situation_values))
-                query += f" AND COALESCE(p.pedsitua, '') IN ({placeholders})"
+                query += f" AND COALESCE(od.situation, '') IN ({placeholders})"
                 params.extend(situation_values)
 
         lines = filters.get('line')
@@ -3001,7 +3025,7 @@ def fetch_decomposition_tree(filters):
             line_values = [str(l).strip().upper() for l in lines if str(l).strip()]
             if line_values:
                 placeholders = ','.join(['%s'] * len(line_values))
-                query += f" AND {line_filter_expression} IN ({placeholders})"
+                query += f" AND UPPER(pv.line) IN ({placeholders})"
                 params.extend(line_values)
 
         transactions = filters.get('transaction')
@@ -3009,7 +3033,7 @@ def fetch_decomposition_tree(filters):
             transaction_values = [str(t).strip() for t in transactions if str(t).strip()]
             if transaction_values:
                 placeholders = ','.join(['%s'] * len(transaction_values))
-                query += f" AND COALESCE(op.opetransac::text, '') IN ({placeholders})"
+                query += f" AND COALESCE(od.transaction_code, '') IN ({placeholders})"
                 params.extend(transaction_values)
 
         query += " GROUP BY 1,2,3,4,5,6,7,8,9"
@@ -10642,10 +10666,17 @@ def report_orders_by_representatives():
     def parse_date(value):
         if not value:
             return None
-        try:
-            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
-        except (ValueError, TypeError):
-            return None
+        if isinstance(value, datetime.datetime):
+            return value.date()
+        if isinstance(value, datetime.date):
+            return value
+        normalized = str(value).strip()
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+            try:
+                return datetime.datetime.strptime(normalized, fmt).date()
+            except (ValueError, TypeError):
+                continue
+        return None
 
     today = datetime.date.today()
     current_first_day = today.replace(day=1)
@@ -10717,6 +10748,11 @@ def report_orders_by_representatives():
 
     start_date_obj = parse_date(start_date_raw)
     end_date_obj = parse_date(end_date_raw)
+
+    if start_date_obj:
+        start_date_raw = start_date_obj.strftime('%Y-%m-%d')
+    if end_date_obj:
+        end_date_raw = end_date_obj.strftime('%Y-%m-%d')
 
     filters_template = {
         'start_date': start_date_raw,
@@ -11614,6 +11650,10 @@ def report_decomposition_tree():
             except (TypeError, ValueError):
                 saved_filters = {}
 
+    saved_start_raw = str(saved_filters.get('start_date') or '').strip()
+    saved_end_raw = str(saved_filters.get('end_date') or '').strip()
+    saved_dates_present = bool(saved_start_raw or saved_end_raw)
+
     filter_applied_flag = (request.args.get('filter_applied') or '').strip() == '1'
     ignore_saved_flag = (request.args.get('ignore_saved') or '').strip() == '1'
     use_saved_defaults = bool(saved_filters) and not filter_applied_flag and not ignore_saved_flag
@@ -11624,6 +11664,7 @@ def report_decomposition_tree():
 
     start_date_raw = (request.args.get('start_date') or '').strip()
     end_date_raw = (request.args.get('end_date') or '').strip()
+    date_params_present = 'start_date' in request.args or 'end_date' in request.args
 
     if use_saved_defaults:
         if not start_date_raw:
@@ -11667,10 +11708,15 @@ def report_decomposition_tree():
     if use_saved_defaults and not transaction_values:
         transaction_values = normalize_saved_values(saved_filters.get('transaction'))
 
-    if not start_date_raw:
-        start_date_raw = first_day.strftime('%Y-%m-%d')
-    if not end_date_raw:
-        end_date_raw = last_day.strftime('%Y-%m-%d')
+    should_default_period = (
+        not date_params_present
+        and not (use_saved_defaults and saved_dates_present)
+    )
+    if should_default_period:
+        if not start_date_raw:
+            start_date_raw = first_day.strftime('%Y-%m-%d')
+        if not end_date_raw:
+            end_date_raw = last_day.strftime('%Y-%m-%d')
 
     start_date_obj = parse_date(start_date_raw)
     end_date_obj = parse_date(end_date_raw)
