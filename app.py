@@ -47,6 +47,7 @@ AVAILABLE_PARAMETER_REPORTS = [
 REPORT_SALES_COMPARISON_FILTERS_PARAM = 'report_sales_orders_comparison_filters'
 REPORT_ORDERS_BY_STATE_FILTERS_PARAM = 'report_orders_by_state_filters'
 REPORT_ORDERS_LINE_FILTERS_PARAM = 'report_orders_by_line_filters'
+REPORT_DECOMPOSITION_TREE_FILTERS_PARAM = 'report_decomposition_tree_filters'
 
 ORDER_APPROVAL_STATUS_OPTIONS = [
     {'code': 'S', 'label': 'Aprovado'},
@@ -2793,7 +2794,7 @@ def fetch_orders_by_line(filters):
             line_values = [str(l).strip().upper() for l in lines if str(l).strip()]
             if line_values:
                 placeholders = ','.join(['%s'] * len(line_values))
-                query += f" AND {line_case_expression} IN ({placeholders})"
+                query += f" AND {line_filter_expression} IN ({placeholders})"
                 params.extend(line_values)
 
         customers = filters.get('customer')
@@ -2843,6 +2844,205 @@ def fetch_orders_by_line(filters):
         cur.close()
     except Error as e:
         print(f'Erro ao buscar pedidos por linha: {e}')
+    finally:
+        conn.close()
+
+    return data
+
+
+def fetch_decomposition_tree(filters):
+    """Retorna as linhas necessárias para montar a árvore de decomposição dos pedidos."""
+    conn = get_erp_db_connection()
+    data = []
+
+    if not conn:
+        return data
+
+    try:
+        cur = conn.cursor()
+        has_peddesval_column = table_has_column(conn, 'pedido', 'peddesval')
+
+        pp_value_expr = "COALESCE(pp.pprvlsoma, 0)"
+        order_gross_expression = "COALESCE(pedprod.valor_bruto_total, 0)"
+        if has_peddesval_column:
+            order_net_expression = f"{order_gross_expression} - COALESCE(p.peddesval, 0)"
+        else:
+            order_net_expression = order_gross_expression
+
+        ratio_expr = (
+            f"CASE WHEN {order_gross_expression} = 0 THEN 0 "
+            f"ELSE {pp_value_expr} / NULLIF({order_gross_expression}, 0) END"
+        )
+        value_expression = f"({order_net_expression}) * {ratio_expr}"
+
+        state_expression = (
+            "CASE "
+            "WHEN COALESCE(c.estado, '') <> '' THEN c.estado "
+            "WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text "
+            "ELSE '' "
+            "END"
+        )
+
+        city_expression = (
+            "CASE "
+            "WHEN COALESCE(c.cidnome, '') <> '' THEN c.cidnome "
+            "WHEN COALESCE(p.pedentcid::text, '') <> '' THEN p.pedentcid::text "
+            "ELSE 'Sem Cidade' "
+            "END"
+        )
+
+        line_label_expression = (
+            "CASE "
+            "WHEN POSITION('MADRESILVA' IN UPPER(COALESCE(g.grunome, ''))) > 0 "
+            "     OR POSITION('* M.' IN UPPER(COALESCE(g.grunome, ''))) > 0 THEN 'MADRESILVA' "
+            "WHEN POSITION('PETRA' IN UPPER(COALESCE(g.grunome, ''))) > 0 "
+            "     OR POSITION('* P.' IN UPPER(COALESCE(g.grunome, ''))) > 0 THEN 'PETRA' "
+            "WHEN POSITION('GARLAND' IN UPPER(COALESCE(g.grunome, ''))) > 0 "
+            "     OR POSITION('* G.' IN UPPER(COALESCE(g.grunome, ''))) > 0 THEN 'GARLAND' "
+            "WHEN POSITION('GLASS' IN UPPER(COALESCE(g.grunome, ''))) > 0 "
+            "     OR POSITION('* V.' IN UPPER(COALESCE(g.grunome, ''))) > 0 THEN 'GLASSMADRE' "
+            "WHEN POSITION('CAVILHAS' IN UPPER(COALESCE(g.grunome, ''))) > 0 THEN 'CAVILHAS' "
+            "WHEN POSITION('SOLARE' IN UPPER(COALESCE(g.grunome, ''))) > 0 "
+            "     OR POSITION('* S.' IN UPPER(COALESCE(g.grunome, ''))) > 0 THEN 'SOLARE' "
+            "WHEN POSITION('ESPUMA' IN UPPER(COALESCE(g.grunome, ''))) > 0 "
+            "     OR POSITION('* ESPUMA' IN UPPER(COALESCE(g.grunome, ''))) > 0 THEN 'ESPUMA' "
+            "ELSE 'OUTROS' "
+            "END"
+        )
+        line_filter_expression = f"UPPER({line_label_expression})"
+        sub_group_expression = "COALESCE(NULLIF(subg1.subnome, ''), 'Sem SubGrupo')"
+        product_name_expression = "COALESCE(NULLIF(prod.pronome::text, ''), 'Sem Produto')"
+        product_code_expression = "COALESCE(prod.produto::text, '')"
+        vendor_code_expression = "COALESCE(p.pedrepres::text, '')"
+        vendor_name_expression = "COALESCE(v.vennome, '')"
+        customer_code_expression = "COALESCE(p.pedcliente::text, '')"
+        customer_name_expression = "COALESCE(e.empnome, '')"
+
+        query = f"""
+            WITH pedprod AS (
+                SELECT pedido, SUM(COALESCE(pprvlsoma, 0)) AS valor_bruto_total
+                FROM pedprodu
+                GROUP BY pedido
+            )
+            SELECT
+                {vendor_code_expression} AS vendor_code,
+                {vendor_name_expression} AS vendor_name,
+                {customer_code_expression} AS customer_code,
+                {customer_name_expression} AS customer_name,
+                {city_expression} AS city,
+                {line_label_expression} AS line,
+                {sub_group_expression} AS sub_group,
+                {product_name_expression} AS product_name,
+                {product_code_expression} AS product_code,
+                SUM({value_expression}) AS total_value
+            FROM pedido p
+            LEFT JOIN pedprodu pp ON pp.pedido = p.pedido
+            LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+            LEFT JOIN grupo g ON g.grupo = prod.grupo
+            LEFT JOIN grupo1 subg1 ON subg1.subgrupo = prod.subgrupo
+            LEFT JOIN cidade c ON c.cidade = p.pedentcid
+            LEFT JOIN empresa e ON e.empresa = p.pedcliente
+            LEFT JOIN vendedor v ON v.vendedor = p.pedrepres
+            LEFT JOIN opera op ON op.operacao = p.pedoperaca
+            LEFT JOIN pedprod ON pedprod.pedido = p.pedido
+            WHERE p.peddata IS NOT NULL
+        """
+        params = []
+
+        if filters.get('start_date'):
+            query += " AND p.peddata >= %s"
+            params.append(filters['start_date'])
+        if filters.get('end_date'):
+            query += " AND p.peddata <= %s"
+            params.append(filters['end_date'])
+
+        vendors = filters.get('vendor')
+        if vendors:
+            vendor_values = [str(v).strip() for v in vendors if str(v).strip()]
+            if vendor_values:
+                placeholders = ','.join(['%s'] * len(vendor_values))
+                query += f" AND {vendor_code_expression} IN ({placeholders})"
+                params.extend(vendor_values)
+
+        states = filters.get('state')
+        if states:
+            state_values = [str(s).strip() for s in states if str(s).strip()]
+            if state_values:
+                placeholders = ','.join(['%s'] * len(state_values))
+                query += f" AND {state_expression} IN ({placeholders})"
+                params.extend(state_values)
+
+        customers = filters.get('customer')
+        if customers:
+            customer_values = [str(c).strip() for c in customers if str(c).strip()]
+            if customer_values:
+                placeholders = ','.join(['%s'] * len(customer_values))
+                query += f" AND {customer_code_expression} IN ({placeholders})"
+                params.extend(customer_values)
+
+        statuses = filters.get('status')
+        if statuses:
+            status_values = [str(s).strip().upper() for s in statuses if str(s).strip()]
+            if status_values:
+                placeholders = ','.join(['%s'] * len(status_values))
+                query += f" AND COALESCE(p.pedaprova, '') IN ({placeholders})"
+                params.extend(status_values)
+
+        situations = filters.get('situation')
+        if situations:
+            situation_values = [str(s).strip().upper() for s in situations if s is not None]
+            if situation_values:
+                placeholders = ','.join(['%s'] * len(situation_values))
+                query += f" AND COALESCE(p.pedsitua, '') IN ({placeholders})"
+                params.extend(situation_values)
+
+        lines = filters.get('line')
+        if lines:
+            line_values = [str(l).strip().upper() for l in lines if str(l).strip()]
+            if line_values:
+                placeholders = ','.join(['%s'] * len(line_values))
+                query += f" AND {line_filter_expression} IN ({placeholders})"
+                params.extend(line_values)
+
+        transactions = filters.get('transaction')
+        if transactions:
+            transaction_values = [str(t).strip() for t in transactions if str(t).strip()]
+            if transaction_values:
+                placeholders = ','.join(['%s'] * len(transaction_values))
+                query += f" AND COALESCE(op.opetransac::text, '') IN ({placeholders})"
+                params.extend(transaction_values)
+
+        query += " GROUP BY 1,2,3,4,5,6,7,8,9"
+        query += " ORDER BY vendor_name, customer_name, city, line, sub_group, product_name"
+
+        cur.execute(query, params)
+        for (
+            vendor_code,
+            vendor_name,
+            customer_code,
+            customer_name,
+            city,
+            line,
+            sub_group,
+            product_name,
+            product_code,
+            total_value,
+        ) in cur.fetchall():
+            data.append({
+                'vendor_code': vendor_code or '',
+                'vendor_name': vendor_name or '',
+                'customer_code': customer_code or '',
+                'customer_name': customer_name or '',
+                'city': city or 'Sem Cidade',
+                'line': line or 'OUTROS',
+                'sub_group': sub_group or 'Sem SubGrupo',
+                'product_name': product_name or '',
+                'product_code': product_code or '',
+                'total_value': float(total_value or 0),
+            })
+        cur.close()
+    except Error as e:
+        print(f'Erro ao buscar dados da árvore de decomposição: {e}')
     finally:
         conn.close()
 
@@ -11371,6 +11571,385 @@ def save_report_orders_by_line_filters():
         return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
     except Exception as err:
         print(f'Erro ao salvar filtros de Pedidos por Linha: {err}')
+        return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
+
+
+@app.route('/report_decomposition_tree')
+@login_required
+def report_decomposition_tree():
+    def normalize_values(values, allow_blank=False, uppercase=False):
+        normalized = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if uppercase and text:
+                text = text.upper()
+            if not text and not allow_blank:
+                continue
+            normalized.append(text)
+        return normalized
+
+    def normalize_saved_values(value, allow_blank=False, uppercase=False):
+        if value is None:
+            return []
+        source = value if isinstance(value, list) else [value]
+        return normalize_values(source, allow_blank=allow_blank, uppercase=uppercase)
+
+    def parse_date(value):
+        if not value:
+            return None
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return None
+
+    user_id = session.get('user_id')
+    saved_filters = {}
+    if user_id:
+        saved_filters_raw = get_user_parameters(user_id, REPORT_DECOMPOSITION_TREE_FILTERS_PARAM)
+        if saved_filters_raw:
+            try:
+                saved_filters = json.loads(saved_filters_raw) or {}
+            except (TypeError, ValueError):
+                saved_filters = {}
+
+    filter_applied_flag = (request.args.get('filter_applied') or '').strip() == '1'
+    ignore_saved_flag = (request.args.get('ignore_saved') or '').strip() == '1'
+    use_saved_defaults = bool(saved_filters) and not filter_applied_flag and not ignore_saved_flag
+
+    today = datetime.date.today()
+    first_day = today.replace(day=1)
+    last_day = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+
+    start_date_raw = (request.args.get('start_date') or '').strip()
+    end_date_raw = (request.args.get('end_date') or '').strip()
+
+    if use_saved_defaults:
+        if not start_date_raw:
+            start_date_raw = str(saved_filters.get('start_date') or '').strip()
+        if not end_date_raw:
+            end_date_raw = str(saved_filters.get('end_date') or '').strip()
+
+    vendor_values = normalize_values(request.args.getlist('vendor'))
+    if use_saved_defaults and not vendor_values:
+        vendor_values = normalize_saved_values(saved_filters.get('vendor'))
+
+    state_values = normalize_values(request.args.getlist('state'), uppercase=True)
+    if use_saved_defaults and not state_values:
+        state_values = normalize_saved_values(saved_filters.get('state'), uppercase=True)
+
+    customer_values = normalize_values(request.args.getlist('customer'))
+    if use_saved_defaults and not customer_values:
+        customer_values = normalize_saved_values(saved_filters.get('customer'))
+
+    line_values = normalize_values(request.args.getlist('line'), uppercase=True)
+    if use_saved_defaults and not line_values:
+        line_values = normalize_saved_values(saved_filters.get('line'), uppercase=True)
+
+    status_values = normalize_values(request.args.getlist('status'), uppercase=True)
+    if use_saved_defaults and not status_values:
+        status_values = normalize_saved_values(saved_filters.get('status'), uppercase=True)
+
+    situation_values = normalize_values(
+        request.args.getlist('situation'),
+        allow_blank=True,
+        uppercase=True,
+    )
+    if use_saved_defaults and not situation_values:
+        situation_values = normalize_saved_values(
+            saved_filters.get('situation'),
+            allow_blank=True,
+            uppercase=True,
+        )
+
+    transaction_values = normalize_values(request.args.getlist('transaction'))
+    if use_saved_defaults and not transaction_values:
+        transaction_values = normalize_saved_values(saved_filters.get('transaction'))
+
+    if not start_date_raw:
+        start_date_raw = first_day.strftime('%Y-%m-%d')
+    if not end_date_raw:
+        end_date_raw = last_day.strftime('%Y-%m-%d')
+
+    start_date_obj = parse_date(start_date_raw)
+    end_date_obj = parse_date(end_date_raw)
+
+    filters_template = {
+        'start_date': start_date_raw,
+        'end_date': end_date_raw,
+        'vendor': vendor_values,
+        'state': state_values,
+        'customer': customer_values,
+        'line': line_values,
+        'status': status_values,
+        'situation': situation_values,
+        'transaction': transaction_values,
+    }
+
+    query_filters = {
+        'start_date': start_date_obj,
+        'end_date': end_date_obj,
+        'vendor': vendor_values,
+        'state': state_values,
+        'customer': customer_values,
+        'line': line_values,
+        'status': status_values,
+        'situation': situation_values,
+        'transaction': transaction_values,
+    }
+
+    rows = fetch_decomposition_tree(query_filters)
+    tree_map = {}
+    total_value = 0.0
+
+    def format_label(name, code, fallback):
+        name_text = (name or '').strip()
+        code_text = (code or '').strip()
+        if name_text and code_text:
+            return f"{name_text} ({code_text})"
+        if name_text:
+            return name_text
+        if code_text:
+            return code_text
+        return fallback
+
+    def ensure_node(mapping, label):
+        node = mapping.get(label)
+        if not node:
+            node = {'label': label, 'value': 0.0, 'children': {}}
+            mapping[label] = node
+        return node
+
+    for row in rows:
+        value = float(row.get('total_value') or 0)
+        total_value += value
+
+        vendor_label = format_label(row.get('vendor_name'), row.get('vendor_code'), 'Sem Representante')
+        vendor_node = ensure_node(tree_map, vendor_label)
+        vendor_node['value'] += value
+
+        city_label = row.get('city') or 'Sem Cidade'
+        city_node = ensure_node(vendor_node['children'], city_label)
+        city_node['value'] += value
+
+        customer_label = format_label(row.get('customer_name'), row.get('customer_code'), 'Sem Cliente')
+        customer_node = ensure_node(city_node['children'], customer_label)
+        customer_node['value'] += value
+
+        line_label = (row.get('line') or 'OUTROS').strip() or 'OUTROS'
+        line_node = ensure_node(customer_node['children'], line_label)
+        line_node['value'] += value
+
+        sub_group_label = row.get('sub_group') or 'Sem SubGrupo'
+        sub_group_node = ensure_node(line_node['children'], sub_group_label)
+        sub_group_node['value'] += value
+
+        product_label = format_label(row.get('product_name'), row.get('product_code'), 'Sem Produto')
+        product_node = ensure_node(sub_group_node['children'], product_label)
+        product_node['value'] += value
+
+    def map_to_list(mapping):
+        nodes = []
+        for node in mapping.values():
+            children = map_to_list(node['children']) if node['children'] else []
+            nodes.append({
+                'label': node['label'],
+                'value': round(node['value'], 2),
+                'children': children,
+            })
+        return nodes
+
+    tree_data = map_to_list(tree_map)
+
+    vendor_options = get_sales_order_vendors()
+    vendor_label_map = {(opt.get('code') or '').strip(): (opt.get('name') or '').strip() for opt in vendor_options}
+    customer_options = get_sales_order_customers()
+    customer_label_map = {(opt.get('code') or '').strip(): (opt.get('name') or '').strip() for opt in customer_options}
+    transaction_options = get_sales_order_transactions()
+    transaction_label_map = {(opt.get('code') or '').strip(): (opt.get('label') or '').strip() for opt in transaction_options}
+    status_options = ORDER_APPROVAL_STATUS_OPTIONS
+    status_label_map = ORDER_APPROVAL_STATUS_LABELS
+    situation_options = ORDER_SITUATION_OPTIONS
+    situation_label_map = ORDER_SITUATION_LABELS
+
+    selected_vendor_labels = []
+    for code in filters_template['vendor']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = vendor_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_vendor_labels:
+            selected_vendor_labels.append(label)
+
+    selected_state_labels = []
+    for state in filters_template['state']:
+        label = (state or '').strip()
+        if not label:
+            continue
+        if label not in selected_state_labels:
+            selected_state_labels.append(label)
+
+    selected_customer_labels = []
+    for code in filters_template['customer']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = customer_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_customer_labels:
+            selected_customer_labels.append(label)
+
+    selected_line_labels = []
+    for line in filters_template['line']:
+        label = (line or '').strip()
+        if not label:
+            continue
+        if label not in selected_line_labels:
+            selected_line_labels.append(label)
+
+    selected_status_labels = []
+    for code in filters_template['status']:
+        normalized = (code or '').strip().upper()
+        if not normalized:
+            continue
+        label = status_label_map.get(normalized, normalized)
+        if label not in selected_status_labels:
+            selected_status_labels.append(label)
+
+    selected_situation_labels = []
+    for code in filters_template['situation']:
+        normalized = (code or '').strip().upper()
+        if normalized or code == '':
+            label = situation_label_map.get(normalized, normalized)
+            if label not in selected_situation_labels:
+                selected_situation_labels.append(label)
+
+    selected_transaction_labels = []
+    for code in filters_template['transaction']:
+        normalized = (code or '').strip()
+        if not normalized:
+            continue
+        name = transaction_label_map.get(normalized, '')
+        label = f"{name} ({normalized})" if name and normalized else name or normalized
+        if label not in selected_transaction_labels:
+            selected_transaction_labels.append(label)
+
+    def format_date_label(value):
+        if not value:
+            return ''
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').strftime('%d/%m/%Y')
+        except (ValueError, TypeError):
+            return value
+
+    start_label = format_date_label(start_date_raw)
+    end_label = format_date_label(end_date_raw)
+    period_label = ''
+    if start_label and end_label:
+        period_label = f"{start_label} → {end_label}"
+    elif start_label:
+        period_label = f"A partir de {start_label}"
+    elif end_label:
+        period_label = f"Até {end_label}"
+
+    return render_template(
+        'report_decomposition_tree.html',
+        tree_data=tree_data,
+        total_value=round(total_value, 2),
+        filters=filters_template,
+        period_label=period_label,
+        vendor_options=vendor_options,
+        customer_options=customer_options,
+        transaction_options=transaction_options,
+        status_options=status_options,
+        situation_options=situation_options,
+        line_options=get_distinct_product_lines(),
+        state_options=get_distinct_states(),
+        selected_vendor_labels=selected_vendor_labels,
+        selected_state_labels=selected_state_labels,
+        selected_customer_labels=selected_customer_labels,
+        selected_line_labels=selected_line_labels,
+        selected_status_labels=selected_status_labels,
+        selected_situation_labels=selected_situation_labels,
+        selected_transaction_labels=selected_transaction_labels,
+        save_filters_url=url_for('save_report_decomposition_tree_filters'),
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
+    )
+
+
+@app.route('/report_decomposition_tree/save_filters', methods=['POST'])
+@login_required
+def save_report_decomposition_tree_filters():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def ensure_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def deduplicate_preserve_order(values):
+        seen = set()
+        ordered = []
+        for value in values:
+            if value in seen:
+                continue
+            seen.add(value)
+            ordered.append(value)
+        return ordered
+
+    def sanitize_multi(field_name, allow_blank=False, uppercase=False):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if uppercase and text:
+                text = text.upper()
+            if text or allow_blank:
+                cleaned.append(text)
+        return deduplicate_preserve_order(cleaned)
+
+    def sanitize_date(value):
+        if not value:
+            return ''
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').strftime('%Y-%m-%d')
+        except (ValueError, TypeError):
+            return ''
+
+    sanitized_filters = {
+        'start_date': sanitize_date(payload.get('start_date')),
+        'end_date': sanitize_date(payload.get('end_date')),
+        'vendor': sanitize_multi('vendor'),
+        'state': sanitize_multi('state', uppercase=True),
+        'customer': sanitize_multi('customer'),
+        'line': sanitize_multi('line', uppercase=True),
+        'status': sanitize_multi('status', uppercase=True),
+        'situation': sanitize_multi('situation', allow_blank=True, uppercase=True),
+        'transaction': sanitize_multi('transaction'),
+    }
+
+    try:
+        saved = save_user_parameters(
+            user_id,
+            REPORT_DECOMPOSITION_TREE_FILTERS_PARAM,
+            json.dumps(sanitized_filters)
+        )
+        if not saved:
+            raise RuntimeError('Não foi possível salvar os filtros.')
+        return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
+    except Exception as err:
+        print(f'Erro ao salvar filtros da Árvore de Decomposição: {err}')
         return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
 
 

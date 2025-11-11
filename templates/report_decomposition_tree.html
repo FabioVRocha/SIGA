@@ -1,0 +1,670 @@
+{% extends "base.html" %}
+
+{% block title %}Árvore de Decomposição{% endblock %}
+
+{% block page_title %}Árvore de Decomposição{% endblock %}
+
+{% block header_action %}
+<a href="{{ url_for('commercial_reports') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+    <i class="fas fa-arrow-left mr-2"></i> Voltar
+</a>
+{% endblock %}
+
+{% block content %}
+<style>
+.decomposition-summary {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 1.25rem;
+    padding: 1.5rem;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+}
+.decomposition-layout {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 1.75rem;
+    align-items: flex-start;
+}
+.root-card {
+    min-width: 220px;
+    border: 1px solid #e2e8f0;
+    border-radius: 1.25rem;
+    padding: 1.1rem;
+    background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+.root-title {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    font-weight: 600;
+    color: #1f3a5f;
+}
+.root-value {
+    margin-top: 0.5rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0d3b73;
+}
+.root-subtitle {
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+.columns-wrapper {
+    flex: 1;
+    display: flex;
+    gap: 1.25rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+}
+.column {
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+}
+.column-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #0f172a;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+.column-body {
+    margin-top: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.node-card {
+    position: relative;
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    padding: 0.9rem 1rem;
+    background: #fff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+.node-card.with-connector::after {
+    content: '';
+    position: absolute;
+    right: -18px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(29, 78, 216, 0), rgba(29, 78, 216, 0.4));
+    border-radius: 999px;
+}
+.node-card:hover {
+    border-color: #0d3b73;
+    transform: translateY(-1px);
+}
+.node-card.selected {
+    border-color: #0d3b73;
+    box-shadow: 0 18px 32px rgba(13, 59, 115, 0.25);
+}
+.node-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    color: #0f172a;
+}
+.node-heading span:first-child {
+    font-weight: 600;
+    line-height: 1.25rem;
+    display: inline-block;
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.node-heading span:last-child {
+    font-size: 0.8rem;
+    color: #475569;
+}
+.node-progress {
+    margin-top: 0.35rem;
+    height: 4px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+.node-progress span {
+    display: block;
+    height: 100%;
+    width: var(--progress-width, 0%);
+    background: linear-gradient(90deg, #0d3b73, #1f3a5f);
+    border-radius: inherit;
+}
+.column-empty {
+    font-size: 0.7rem;
+    color: #94a3b8;
+}
+@media (max-width: 1150px) {
+    .decomposition-layout {
+        flex-direction: column;
+    }
+}
+</style>
+<div class="space-y-6">
+    <div class="decomposition-summary">
+        <div class="flex flex-wrap items-center gap-4">
+            <div>
+                <h2 class="text-2xl font-semibold text-gray-800">Árvore de Decomposição</h2>
+                <p class="text-sm text-gray-500">Visualize a decomposição do Valor Total dos Pedidos através das hierarquias definidas.</p>
+            </div>
+            <div class="flex-1"></div>
+            <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+                <i class="fas fa-filter mr-2"></i> Filtrar
+            </button>
+        </div>
+        <div class="flex flex-wrap gap-3 mt-4 text-sm">
+            {% if period_label %}
+            <div class="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-100">
+                <span class="font-semibold">Período:</span>
+                <span>{{ period_label }}</span>
+            </div>
+            {% endif %}
+            {% if selected_vendor_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Representantes:</span>
+                {% for label in selected_vendor_labels %}
+                <span class="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-200">{{ label }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_state_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Estados:</span>
+                {% for state in selected_state_labels %}
+                <span class="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200">{{ state }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_line_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Linhas:</span>
+                {% for line in selected_line_labels %}
+                <span class="bg-purple-50 text-purple-700 px-3 py-1 rounded-full border border-purple-200">{{ line }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_customer_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Clientes:</span>
+                {% for customer in selected_customer_labels %}
+                <span class="bg-pink-50 text-pink-700 px-3 py-1 rounded-full border border-pink-200">{{ customer }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        <div class="decomposition-layout">
+            <div class="root-card">
+                <div class="root-title">Pedidos Total</div>
+                <div class="root-value">R$ {{ '{:,.2f}'.format(total_value).replace(',', 'X').replace('.', ',').replace('X', '.') }}</div>
+                <div class="root-subtitle">Base atual dos filtros aplicados.</div>
+            </div>
+            <div class="columns-wrapper">
+                <div class="column">
+                    <div class="column-title">Vendedor</div>
+                    <div class="column-body" id="columnBody0"></div>
+                </div>
+                <div class="column">
+                    <div class="column-title">Cidade</div>
+                    <div class="column-body" id="columnBody1"></div>
+                </div>
+                <div class="column">
+                    <div class="column-title">Cliente</div>
+                    <div class="column-body" id="columnBody2"></div>
+                </div>
+                <div class="column">
+                    <div class="column-title">Linha</div>
+                    <div class="column-body" id="columnBody3"></div>
+                </div>
+                <div class="column">
+                    <div class="column-title">SubGrupo</div>
+                    <div class="column-body" id="columnBody4"></div>
+                </div>
+                <div class="column">
+                    <div class="column-title">Produto</div>
+                    <div class="column-body" id="columnBody5"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="filterModal" class="fixed z-10 inset-0 overflow-y-auto hidden">
+  <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+    <div class="fixed inset-0 transition-opacity" aria-hidden="true">
+      <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
+    </div>
+    <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full">
+      <form id="filterForm" method="get" action="{{ url_for('report_decomposition_tree') }}" class="bg-white p-6 space-y-6">
+        <input type="hidden" name="filter_applied" value="1">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="space-y-3">
+                <p class="text-sm font-medium text-gray-700">Intervalo de Data</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="block">
+                        <span class="text-xs text-gray-500">Data inicial</span>
+                        <input type="date" name="start_date" value="{{ filters.start_date }}" class="mt-1 p-2 border rounded w-full">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs text-gray-500">Data final</span>
+                        <input type="date" name="end_date" value="{{ filters.end_date }}" class="mt-1 p-2 border rounded w-full">
+                    </label>
+                </div>
+            </div>
+            <div class="space-y-3">
+                <p class="text-sm font-medium text-gray-700">Filtros adicionais</p>
+                <p class="text-xs text-gray-500">Selecione os valores desejados nos combobox abaixo.</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <!-- combobox fields similar to earlier template -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Representantes</label>
+                <div class="mt-2 relative">
+                    <button type="button" id="vendorComboboxBtn" class="combobox-button w-full px-4 py-2 text-left rounded-lg border border-slate-200 bg-white flex justify-between items-center">
+                        <span id="vendorComboboxSelection" class="text-sm text-slate-500">Selecione uma ou mais opções</span>
+                        <i class="fas fa-chevron-down text-slate-400" id="vendorComboboxArrow"></i>
+                    </button>
+                    <div id="vendorComboboxPanel" class="hidden absolute z-10 w-full mt-2 rounded-lg border border-slate-200 bg-white shadow-lg max-h-72 overflow-auto">
+                        <div class="p-3 border-b border-slate-100">
+                            <input type="text" id="vendorComboboxSearch" class="w-full p-2 border border-slate-200 rounded" placeholder="Buscar representante">
+                        </div>
+                        <div class="p-3 space-y-2">
+                            {% for option in vendor_options %}
+                            <label class="flex items-center gap-2 text-sm" data-label="{{ (option.name or '') }} {{ (option.code or '') }}">
+                                <input type="checkbox" name="vendor" value="{{ option.code }}" class="rounded border-slate-300" {% if option.code in filters.vendor %}checked{% endif %}>
+                                <span class="text-slate-700">{{ option.name or '—' }}{% if option.code %} ({{ option.code }}){% endif %}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Estados</label>
+                <div class="mt-2 relative">
+                    <button type="button" id="stateComboboxBtn" class="combobox-button w-full px-4 py-2 text-left rounded-lg border border-slate-200 bg-white flex justify-between items-center">
+                        <span id="stateComboboxSelection" class="text-sm text-slate-500">Selecione uma ou mais opções</span>
+                        <i class="fas fa-chevron-down text-slate-400" id="stateComboboxArrow"></i>
+                    </button>
+                    <div id="stateComboboxPanel" class="hidden absolute z-10 w-full mt-2 rounded-lg border border-slate-200 bg-white shadow-lg max-h-72 overflow-auto">
+                        <div class="p-3 border-b border-slate-100">
+                            <input type="text" id="stateComboboxSearch" class="w-full p-2 border border-slate-200 rounded" placeholder="Buscar estado">
+                        </div>
+                        <div class="p-3 space-y-2">
+                            {% for option in state_options %}
+                            {% set normalized = option.upper() if option else '' %}
+                            <label class="flex items-center gap-2 text-sm" data-label="{{ option }}">
+                                <input type="checkbox" name="state" value="{{ option }}" class="rounded border-slate-300" {% if normalized in filters.state %}checked{% endif %}>
+                                <span class="text-slate-700">{{ option }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Clientes</label>
+                <div class="mt-2 relative">
+                    <button type="button" id="customerComboboxBtn" class="combobox-button w-full px-4 py-2 text-left rounded-lg border border-slate-200 bg-white flex justify-between items-center">
+                        <span id="customerComboboxSelection" class="text-sm text-slate-500">Selecione uma ou mais opções</span>
+                        <i class="fas fa-chevron-down text-slate-400" id="customerComboboxArrow"></i>
+                    </button>
+                    <div id="customerComboboxPanel" class="hidden absolute z-10 w-full mt-2 rounded-lg border border-slate-200 bg-white shadow-lg max-h-72 overflow-auto">
+                        <div class="p-3 border-b border-slate-100">
+                            <input type="text" id="customerComboboxSearch" class="w-full p-2 border border-slate-200 rounded" placeholder="Buscar cliente">
+                        </div>
+                        <div class="p-3 space-y-2">
+                            {% for option in customer_options %}
+                            <label class="flex items-center gap-2 text-sm" data-label="{{ (option.name or '') }} {{ (option.code or '') }}">
+                                <input type="checkbox" name="customer" value="{{ option.code }}" class="rounded border-slate-300" {% if option.code in filters.customer %}checked{% endif %}>
+                                <span class="text-slate-700">{{ option.name or '—' }}{% if option.code %} ({{ option.code }}){% endif %}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Linhas</label>
+                <div class="mt-2 relative">
+                    <button type="button" id="lineComboboxBtn" class="combobox-button w-full px-4 py-2 text-left rounded-lg border border-slate-200 bg-white flex justify-between items-center">
+                        <span id="lineComboboxSelection" class="text-sm text-slate-500">Selecione uma ou mais opções</span>
+                        <i class="fas fa-chevron-down text-slate-400" id="lineComboboxArrow"></i>
+                    </button>
+                    <div id="lineComboboxPanel" class="hidden absolute z-10 w-full mt-2 rounded-lg border border-slate-200 bg-white shadow-lg max-h-72 overflow-auto">
+                        <div class="p-3 border-b border-slate-100">
+                            <input type="text" id="lineComboboxSearch" class="w-full p-2 border border-slate-200 rounded" placeholder="Buscar linha">
+                        </div>
+                        <div class="p-3 space-y-2">
+                            {% for option in line_options %}
+                            {% set label = option or 'Sem Linha' %}
+                            <label class="flex items-center gap-2 text-sm" data-label="{{ label }}">
+                                <input type="checkbox" name="line" value="{{ option }}" class="rounded border-slate-300" {% if option in filters.line %}checked{% endif %}>
+                                <span class="text-slate-700">{{ label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Status</label>
+                <div class="mt-2 relative">
+                    <button type="button" id="statusComboboxBtn" class="combobox-button w-full px-4 py-2 text-left rounded-lg border border-slate-200 bg-white flex justify-between items-center">
+                        <span id="statusComboboxSelection" class="text-sm text-slate-500">Selecione uma ou mais opções</span>
+                        <i class="fas fa-chevron-down text-slate-400" id="statusComboboxArrow"></i>
+                    </button>
+                    <div id="statusComboboxPanel" class="hidden absolute z-10 w-full mt-2 rounded-lg border border-slate-200 bg-white shadow-lg max-h-72 overflow-auto">
+                        <div class="p-3 border-b border-slate-100">
+                            <input type="text" id="statusComboboxSearch" class="w-full p-2 border border-slate-200 rounded" placeholder="Buscar status">
+                        </div>
+                        <div class="p-3 space-y-2">
+                            {% for option in status_options %}
+                            <label class="flex items-center gap-2 text-sm" data-label="{{ option.label }}">
+                                <input type="checkbox" name="status" value="{{ option.code }}" class="rounded border-slate-300" {% if option.code in filters.status %}checked{% endif %}>
+                                <span class="text-slate-700">{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Situações</label>
+                <div class="mt-2 relative">
+                    <button type="button" id="situationComboboxBtn" class="combobox-button w-full px-4 py-2 text-left rounded-lg border border-slate-200 bg-white flex justify-between items-center">
+                        <span id="situationComboboxSelection" class="text-sm text-slate-500">Selecione uma ou mais opções</span>
+                        <i class="fas fa-chevron-down text-slate-400" id="situationComboboxArrow"></i>
+                    </button>
+                    <div id="situationComboboxPanel" class="hidden absolute z-10 w-full mt-2 rounded-lg border border-slate-200 bg-white shadow-lg max-h-72 overflow-auto">
+                        <div class="p-3 border-b border-slate-100">
+                            <input type="text" id="situationComboboxSearch" class="w-full p-2 border border-slate-200 rounded" placeholder="Buscar situação">
+                        </div>
+                        <div class="p-3 space-y-2">
+                            {% for option in situation_options %}
+                            <label class="flex items-center gap-2 text-sm" data-label="{{ option.label }}">
+                                <input type="checkbox" name="situation" value="{{ option.code }}" class="rounded border-slate-300" {% if option.code in filters.situation %}checked{% endif %}>
+                                <span class="text-slate-700">{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Transações</label>
+                <div class="mt-2 relative">
+                    <button type="button" id="transactionComboboxBtn" class="combobox-button w-full px-4 py-2 text-left rounded-lg border border-slate-200 bg-white flex justify-between items-center">
+                        <span id="transactionComboboxSelection" class="text-sm text-slate-500">Selecione uma ou mais opções</span>
+                        <i class="fas fa-chevron-down text-slate-400" id="transactionComboboxArrow"></i>
+                    </button>
+                    <div id="transactionComboboxPanel" class="hidden absolute z-10 w-full mt-2 rounded-lg border border-slate-200 bg-white shadow-lg max-h-72 overflow-auto">
+                        <div class="p-3 border-b border-slate-100">
+                            <input type="text" id="transactionComboboxSearch" class="w-full p-2 border border-slate-200 rounded" placeholder="Buscar transação">
+                        </div>
+                        <div class="p-3 space-y-2">
+                            {% for option in transaction_options %}
+                            <label class="flex items-center gap-2 text-sm" data-label="{{ option.label }} {{ option.code }}">
+                                <input type="checkbox" name="transaction" value="{{ option.code }}" class="rounded border-slate-300" {% if option.code in filters.transaction %}checked{% endif %}>
+                                <span class="text-slate-700">{{ option.label or '—' }}{% if option.code %} ({{ option.code }}){% endif %}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <p id="saveFiltersFeedback" class="text-sm text-slate-500 flex-1 text-right"></p>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" id="closeFilterModalBtn" class="px-4 py-2 rounded bg-gray-200">Cancelar</button>
+                <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white">Aplicar</button>
+                <button type="button" id="saveFiltersBtn" class="px-4 py-2 rounded border border-slate-300">Salvar filtros</button>
+            </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const escapeHtml = (text) => {
+    if (!text) return '';
+    return text.replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const filterModal = document.getElementById('filterModal');
+    const openFilterModalBtn = document.getElementById('openFilterModalBtn');
+    const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+    const filterForm = document.getElementById('filterForm');
+    const saveFiltersBtn = document.getElementById('saveFiltersBtn');
+    const saveFiltersFeedback = document.getElementById('saveFiltersFeedback');
+    const treeData = {{ tree_data | tojson }};
+    const saveFiltersUrl = '{{ save_filters_url }}';
+
+    const openModal = () => filterModal.classList.remove('hidden');
+    const closeModal = () => filterModal.classList.add('hidden');
+
+    openFilterModalBtn?.addEventListener('click', openModal);
+    closeFilterModalBtn?.addEventListener('click', closeModal);
+    window.addEventListener('click', (e) => { if (e.target === filterModal) closeModal(); });
+
+    const formatCurrency = value => {
+        return new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+            maximumFractionDigits: 2
+        }).format(value);
+    };
+
+    const columnTitles = ['Vendedor','Cidade','Cliente','Linha','SubGrupo','Produto'];
+    const columnBodies = columnTitles.map((_, index) => document.getElementById(`columnBody${index}`));
+    const selectedPath = new Array(columnTitles.length).fill(null);
+
+    const getNodesForDepth = (depth) => {
+        let nodes = treeData;
+        for (let i = 0; i < depth; i += 1) {
+            const selected = selectedPath[i];
+            if (!selected) {
+                return [];
+            }
+            const match = nodes.find(node => node.label === selected);
+            if (!match) {
+                return [];
+            }
+            nodes = match.children || [];
+        }
+        return nodes;
+    };
+
+    const clearLowerDepths = (fromDepth) => {
+        for (let i = fromDepth; i < selectedPath.length; i += 1) {
+            selectedPath[i] = null;
+        }
+    };
+
+    const renderColumns = () => {
+        columnBodies.forEach((body, depth) => {
+            if (!body) return;
+            const nodes = getNodesForDepth(depth);
+            if (depth > 0 && !selectedPath[depth - 1]) {
+                body.innerHTML = `<p class="column-empty">Clique em "${columnTitles[depth - 1]}" para ver as opções.</p>`;
+                return;
+            }
+            const maxValue = nodes.reduce((acc, node) => {
+                const value = Number(node.value) || 0;
+                return Math.max(acc, value);
+            }, 0);
+            body.innerHTML = '';
+            if (!nodes.length) {
+                body.innerHTML = '<p class="column-empty">Nenhum registro foi encontrado.</p>';
+                return;
+            }
+            nodes.forEach(node => {
+                const card = document.createElement('div');
+                const isLastColumn = depth === columnTitles.length - 1;
+                card.className = 'node-card' + (!isLastColumn ? ' with-connector' : '');
+                const progress = maxValue ? Math.min((Number(node.value) || 0) / maxValue * 100, 100) : 0;
+                card.style.setProperty('--progress-width', `${progress}%`);
+                const safeLabel = escapeHtml(node.label || '—');
+                card.innerHTML = `
+                    <div class="node-heading">
+                        <span title="${safeLabel}">${safeLabel}</span>
+                        <span>${formatCurrency(Number(node.value) || 0)}</span>
+                    </div>
+                    <div class="node-progress"><span></span></div>
+                `;
+                if (selectedPath[depth] === node.label) {
+                    card.classList.add('selected');
+                }
+                card.addEventListener('click', () => {
+                    const currentlySelected = selectedPath[depth];
+                    if (currentlySelected === node.label) {
+                        clearLowerDepths(depth);
+                    } else {
+                        selectedPath[depth] = node.label;
+                        clearLowerDepths(depth + 1);
+                    }
+                    renderColumns();
+                });
+                body.appendChild(card);
+            });
+        });
+    };
+
+    renderColumns();
+
+    const setupCombobox = (fieldName, placeholder) => {
+        const button = document.getElementById(`${fieldName}ComboboxBtn`);
+        const panel = document.getElementById(`${fieldName}ComboboxPanel`);
+        const arrow = document.getElementById(`${fieldName}ComboboxArrow`);
+        const searchInput = document.getElementById(`${fieldName}ComboboxSearch`);
+        const selection = document.getElementById(`${fieldName}ComboboxSelection`);
+        const items = panel ? Array.from(panel.querySelectorAll('label')) : [];
+        const checkboxes = panel ? Array.from(panel.querySelectorAll('input[type="checkbox"]')) : [];
+
+        const closeAll = () => {
+            document.querySelectorAll('[id$="ComboboxPanel"]').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('[id$="ComboboxArrow"]').forEach(el => el.classList.remove('rotate-180'));
+        };
+
+        const filterItems = () => {
+            const term = (searchInput?.value || '').toLowerCase();
+            items.forEach(item => {
+                const label = (item.getAttribute('data-label') || '').toLowerCase();
+                item.classList.toggle('hidden', !label.includes(term));
+            });
+        };
+
+        const updateText = () => {
+            const selected = checkboxes.filter(cb => cb.checked).map(cb => {
+                const labelEl = cb.parentElement.querySelector('span');
+                return labelEl ? labelEl.textContent.trim() : cb.value;
+            });
+            selection.textContent = selected.length ? selected.join(', ') : placeholder;
+        };
+
+        button?.addEventListener('click', () => {
+            if (!panel) return;
+            const isHidden = panel.classList.contains('hidden');
+            closeAll();
+            if (isHidden) {
+                panel.classList.remove('hidden');
+                arrow?.classList.add('rotate-180');
+                setTimeout(() => searchInput?.focus(), 50);
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!panel || !button) return;
+            if (!panel.contains(event.target) && !button.contains(event.target)) {
+                panel.classList.add('hidden');
+                arrow?.classList.remove('rotate-180');
+            }
+        });
+
+        checkboxes.forEach(cb => cb.addEventListener('change', updateText));
+        searchInput?.addEventListener('input', filterItems);
+        filterItems();
+        updateText();
+    };
+
+    ['vendor','state','customer','line','status','situation','transaction'].forEach(field => {
+        setupCombobox(field, 'Selecione uma ou mais opções');
+    });
+
+    const showSaveFeedback = (message, type = 'info') => {
+        if (!saveFiltersFeedback) return;
+        const classes = ['text-sm', 'text-right', 'mt-1'];
+        let colorClass = 'text-slate-500';
+        if (type === 'success') colorClass = 'text-emerald-600';
+        if (type === 'error') colorClass = 'text-rose-600';
+        saveFiltersFeedback.className = [...classes, colorClass].join(' ');
+        saveFiltersFeedback.textContent = message;
+    };
+
+    saveFiltersBtn?.addEventListener('click', async () => {
+        if (!filterForm) return;
+        const formData = new FormData(filterForm);
+        const payload = {};
+        formData.forEach((value, key) => {
+            if (key === 'filter_applied') return;
+            if (payload[key]) {
+                if (!Array.isArray(payload[key])) payload[key] = [payload[key]];
+                payload[key].push(value);
+            } else {
+                payload[key] = value;
+            }
+        });
+
+        ['vendor','state','customer','line','status','situation','transaction'].forEach(field => {
+            if (!(field in payload)) {
+                payload[field] = [];
+            } else if (!Array.isArray(payload[field])) {
+                payload[field] = [payload[field]];
+            }
+        });
+
+        try {
+            const response = await fetch(saveFiltersUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (response.ok && result?.success) {
+                showSaveFeedback(result.message || 'Filtros salvos com sucesso.', 'success');
+            } else if (response.status === 401) {
+                showSaveFeedback('Sessão expirada. Faça login novamente para salvar os filtros.', 'error');
+            } else {
+                showSaveFeedback((result && result.message) || 'Não foi possível salvar os filtros.', 'error');
+            }
+        } catch (error) {
+            console.error('Erro ao salvar filtros da Árvore de Decomposição:', error);
+            showSaveFeedback('Erro de comunicação ao salvar os filtros.', 'error');
+        }
+    });
+});
+</script>
+{% endblock %}
