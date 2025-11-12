@@ -62,22 +62,27 @@
     </div>
 
     <div class="overflow-x-auto">
-        <table class="min-w-full bg-white rounded-xl overflow-hidden">
+        <table id="load-lot-detail-table" class="min-w-full bg-white rounded-xl overflow-hidden">
             <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
                 <tr class="text-xs font-medium uppercase tracking-wider">
                     <th scope="col" class="px-4 py-3 text-left rounded-tl-lg">Pedido</th>
-                    <th scope="col" class="px-4 py-3 text-left">Seq.</th>
+                    <th scope="col" class="px-4 py-3 text-left">
+                        <button id="sequence-sort-button" type="button" class="sequence-sort-button" aria-label="Ordenar por sequência">
+                            <span>Seq.</span>
+                            <span class="sequence-sort-indicator" aria-hidden="true">↕</span>
+                        </button>
+                    </th>
                     <th scope="col" class="px-4 py-3 text-left">Cliente</th>
                     <th scope="col" class="px-4 py-3 text-right">Quantidade</th>
                     <th scope="col" class="px-4 py-3 text-right">Total M³</th>
                     <th scope="col" class="px-4 py-3 text-right rounded-tr-lg">Valor Total</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="load-lot-detail-body">
                 {% if detail_orders %}
                     {% for order in detail_orders %}
                     {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
-                    <tr class="hover-row text-sm text-dark-blue" style="background-color: {{ row_bg }};">
+                    <tr class="detail-order-row hover-row text-sm text-dark-blue" data-sequence="{{ order.sequencia if order.sequencia is not none else '' }}" style="background-color: {{ row_bg }};">
                         <td class="py-2 px-4 whitespace-nowrap font-semibold">{{ order.pedido }}</td>
                         <td class="py-2 px-4 whitespace-nowrap">{{ order.sequencia or '—' }}</td>
                         <td class="py-2 px-4 whitespace-nowrap">{{ order.cliente }}</td>
@@ -94,6 +99,74 @@
             </tbody>
         </table>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const sortButton = document.getElementById('sequence-sort-button');
+            const tableBody = document.getElementById('load-lot-detail-body');
+            if (!sortButton || !tableBody) {
+                return;
+            }
+
+            const indicator = sortButton.querySelector('.sequence-sort-indicator');
+            const typeOrder = { number: 0, string: 1, missing: 2 };
+            let currentDirection = null;
+
+            function parseSequenceKey(rawValue) {
+                const rawString = (typeof rawValue === 'string' ? rawValue : (rawValue ?? '')).trim();
+                if (!rawString) {
+                    return { type: 'missing', value: '' };
+                }
+                const normalized = rawString.replace(',', '.');
+                const numericValue = Number(normalized);
+                if (!Number.isNaN(numericValue)) {
+                    return { type: 'number', value: numericValue };
+                }
+                return { type: 'string', value: rawString.toLowerCase() };
+            }
+
+            function compareSequenceValues(first, second) {
+                const firstKey = parseSequenceKey(first);
+                const secondKey = parseSequenceKey(second);
+                if (firstKey.type !== secondKey.type) {
+                    return typeOrder[firstKey.type] - typeOrder[secondKey.type];
+                }
+                if (firstKey.type === 'number') {
+                    return firstKey.value - secondKey.value;
+                }
+                return firstKey.value.localeCompare(secondKey.value);
+            }
+
+            function sortRows(direction) {
+                const rows = Array.from(tableBody.querySelectorAll('tr.detail-order-row'));
+                if (!rows.length) {
+                    return;
+                }
+                const multiplier = direction === 'asc' ? 1 : -1;
+                rows.sort(function (rowA, rowB) {
+                    return compareSequenceValues(rowA.dataset.sequence, rowB.dataset.sequence) * multiplier;
+                });
+                rows.forEach(function (row) {
+                    tableBody.appendChild(row);
+                });
+            }
+
+            function updateIndicator(direction) {
+                if (!indicator) {
+                    return;
+                }
+                sortButton.dataset.direction = direction || '';
+                indicator.textContent = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
+            }
+
+            updateIndicator(null);
+
+            sortButton.addEventListener('click', function () {
+                currentDirection = currentDirection === 'asc' ? 'desc' : 'asc';
+                sortRows(currentDirection);
+                updateIndicator(currentDirection);
+            });
+        });
+    </script>
 </section>
 
 {# Adicionando estilos genéricos que estavam em sales_orders_list.html para que possam ser usados aqui #}
@@ -141,6 +214,26 @@
         font-size: 1.2rem;
         font-weight: 700;
         color: var(--clr-dark-blue);
+    }
+    .sequence-sort-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        border: none;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-weight: 600;
+        padding: 0;
+        cursor: pointer;
+    }
+    .sequence-sort-button:focus-visible {
+        outline: 2px solid #93c5fd;
+        outline-offset: 2px;
+    }
+    .sequence-sort-indicator {
+        font-size: 0.75rem;
+        line-height: 1;
     }
     .order-summary-card--blue { background-color: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.35); }
     .order-summary-card--blue .order-summary-label, .order-summary-card--blue .order-summary-value { color: #1d4ed8; }
