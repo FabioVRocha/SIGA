@@ -6448,15 +6448,12 @@ def fetch_technical_assistance(filters):
     try:
         cur = conn.cursor()
         asslcaseq_select = (
-            "                COALESCE(a.asslcaseq::text, '') AS asslcaseq,
-"
+            "                COALESCE(a.asslcaseq::text, '') AS asslcaseq,\n"
             if has_asslcaseq_column else
-            "                '' AS asslcaseq,
-"
+            "                '' AS asslcaseq,\n"
         )
         group_by_asslcaseq = (
-            "                a.asslcaseq,
-"
+            "                a.asslcaseq,\n"
             if has_asslcaseq_column else
             ""
         )
@@ -6665,7 +6662,7 @@ def fetch_technical_assistance(filters):
             """
             params.append(like_pattern)
 
-        query += """
+        query += f"""
             GROUP BY
                 a.assistec,
                 {group_by_asslcaseq}
