@@ -1921,6 +1921,45 @@ def fetch_load_lot_orders(load_lot_code):
                 JOIN pedprodu pp ON pp.pedido = p.pedido
                 WHERE p.lcapecod IS NOT NULL
                 GROUP BY CAST(p.lcapecod AS TEXT)
+            ),
+            linha_info AS (
+                SELECT
+                    sub.pedido,
+                    (ARRAY_AGG(sub.linha_value ORDER BY sub.priority))[1] AS linha
+                FROM (
+                    SELECT DISTINCT
+                        base_data.pedido,
+                        CASE
+                            WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 'MADRESILVA'
+                            WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 'PETRA'
+                            WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 'GARLAND'
+                            WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 'GLASSMADRE'
+                            WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 'CAVILHAS'
+                            WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 'SOLARE'
+                            WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 'ESPUMA'
+                            ELSE 'OUTROS'
+                        END AS linha_value,
+                        CASE
+                            WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 1
+                            WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 2
+                            WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 3
+                            WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 4
+                            WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 5
+                            WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 6
+                            WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 7
+                            ELSE 999
+                        END AS priority
+                    FROM (
+                        SELECT
+                            pp.pedido,
+                            UPPER(COALESCE(g.grunome, '')) AS group_name_upper
+                        FROM pedprodu pp
+                        LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+                        LEFT JOIN grupo g ON g.grupo = prod.grupo
+                        WHERE pp.pedido IS NOT NULL
+                    ) base_data
+                ) sub
+                GROUP BY sub.pedido
             )
             SELECT
                 CAST(p.pedido AS TEXT) AS pedido,
@@ -1939,13 +1978,15 @@ def fetch_load_lot_orders(load_lot_code):
                         (COALESCE(oi.quantidade_total, 0) / lt.quantidade_total) * COALESCE(lc.lcam3, 0)
                     ELSE 0
                 END AS total_m3,
-                COALESCE(oi.valor_bruto_total, 0) - COALESCE(oi.desconto_total, 0) AS valor_total
+                COALESCE(oi.valor_bruto_total, 0) - COALESCE(oi.desconto_total, 0) AS valor_total,
+                COALESCE(linha.linha, 'OUTROS') AS linha
             FROM pedido p
             LEFT JOIN order_items oi ON oi.pedido = p.pedido
             LEFT JOIN empresa e ON e.empresa = p.pedcliente
             LEFT JOIN cidade c ON c.cidade = p.pedentcid
             LEFT JOIN lotecar lc ON lc.lcacod = p.lcapecod
             LEFT JOIN lot_totals lt ON lt.lot_code = CAST(p.lcapecod AS TEXT)
+            LEFT JOIN linha_info linha ON linha.pedido = p.pedido
             WHERE CAST(p.lcapecod AS TEXT) = %s
             ORDER BY p.pedido DESC
         """
@@ -1966,6 +2007,7 @@ def fetch_load_lot_orders(load_lot_code):
                     'estado': (row[4] or '').strip(),
                     'latitude': float(row[5]) if row[5] not in (None, '') else None,
                     'longitude': float(row[6]) if row[6] not in (None, '') else None,
+                    'linha': (row[10] or '').strip(),
                 }
             )
 
@@ -1999,6 +2041,53 @@ def fetch_load_lot_orders(load_lot_code):
             conn.close()
 
     return orders, lot_info, error_message
+
+
+def fetch_load_lot_assistances(load_lot_code):
+    """Busca assistências técnicas vinculadas ao mesmo lote de carga."""
+    assistance_rows = []
+    if not load_lot_code:
+        return assistance_rows, None
+
+    filters = {
+        'load_lots': [load_lot_code],
+        'sort_by': 'assistec',
+        'sort_order': 'desc',
+    }
+    records, error_message = fetch_technical_assistance(filters)
+    if error_message:
+        return assistance_rows, error_message
+
+    for record in records:
+        record['asslcaseq'] = (record.get('asslcaseq') or '').strip()
+        quantidade = record.get('quantidade_pecas')
+        valor = record.get('valor_total')
+
+        try:
+            quantidade_total = float(quantidade)
+        except (TypeError, ValueError):
+            quantidade_total = 0.0
+        try:
+            valor_total = float(valor)
+        except (TypeError, ValueError):
+            valor_total = 0.0
+
+        sequence_value = (
+            (record.get('asslcaseq') or record.get('numero_reparo') or '').strip()
+        )
+        assistance_rows.append(
+            {
+                'pedido': str(record.get('assistec') or '').strip(),
+                'sequencia': sequence_value,
+                'cliente': (record.get('cliente_nome') or '').strip(),
+                'quantidade_total': quantidade_total,
+                'total_m3': 0.0,
+                'valor_total': valor_total,
+                'is_assistance': True,
+            }
+        )
+
+    return assistance_rows, None
 
 def get_distinct_occurrences():
     """
@@ -6353,10 +6442,26 @@ def fetch_technical_assistance(filters):
     if not conn:
         return records, "Não foi possível conectar ao banco de dados do ERP."
 
+    has_asslcaseq_column = table_has_column(conn, 'assistec', 'asslcaseq')
+
     cur = None
     try:
         cur = conn.cursor()
-        query = """
+        asslcaseq_select = (
+            "                COALESCE(a.asslcaseq::text, '') AS asslcaseq,
+"
+            if has_asslcaseq_column else
+            "                '' AS asslcaseq,
+"
+        )
+        group_by_asslcaseq = (
+            "                a.asslcaseq,
+"
+            if has_asslcaseq_column else
+            ""
+        )
+        query = (
+            """
             WITH proj_totals AS (
                 SELECT
                     TRIM(CAST(pm.prjmpedid AS TEXT)) AS assistec,
@@ -6410,6 +6515,7 @@ def fetch_technical_assistance(filters):
             )
             SELECT
                 a.assistec,
+                {asslcaseq_select}
                 a.asscliente,
                 COALESCE(e.empnome, '') AS cliente_nome,
                 COALESCE(cid.cidnome, '') AS cidade_nome,
@@ -6451,6 +6557,10 @@ def fetch_technical_assistance(filters):
             ) resp ON TRUE
             WHERE 1 = 1
         """
+        ).format(
+            asslcaseq_select=asslcaseq_select,
+            group_by_asslcaseq=group_by_asslcaseq,
+        )
         params = []
 
         start_date = filters.get('start_date')
@@ -6558,6 +6668,7 @@ def fetch_technical_assistance(filters):
         query += """
             GROUP BY
                 a.assistec,
+                {group_by_asslcaseq}
                 a.asscliente,
                 e.empnome,
                 cid.cidnome,
@@ -6669,6 +6780,7 @@ def fetch_technical_assistance(filters):
 
             # Processar linha
             record['linha'] = (record.get('linha') or '').strip()
+            record['asslcaseq'] = (record.get('asslcaseq') or '').strip()
 
             records.append(record)
     except UndefinedColumn as error:
@@ -9363,6 +9475,12 @@ def load_lot_detail(load_lot_code):
     if not lot_info:
         flash('Lote não encontrado para consulta.', 'warning')
         return redirect(url_for('load_lots_view'))
+
+    assistance_rows, assistance_error = fetch_load_lot_assistances(lot_code)
+    if assistance_error:
+        flash(assistance_error, 'danger')
+
+    detail_orders = detail_orders + assistance_rows
 
     detail_totals = {
         'quantidade_total': sum(order['quantidade_total'] for order in detail_orders),

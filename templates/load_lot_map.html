@@ -260,9 +260,39 @@
 
     <div class="route-layout">
         <aside class="route-sidebar">
-            <div>
-                <h3>Sequência de Entregas</h3>
-                <p class="text-sm text-slate-muted">Clique em uma linha para focar o ponto correspondente no mapa.</p>
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3>Sequência de Entregas</h3>
+                </div>
+                <div class="flex flex-col items-end gap-1">
+                    <div class="flex items-center gap-1">
+                        <button
+                            id="copyRouteLinkButton"
+                            type="button"
+                            class="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-slate-600 border border-slate-200 rounded-full bg-white hover:bg-slate-50 focus:outline-none focus:ring focus:ring-blue-200"
+                            title="Criar link da rota no Google Maps"
+                        >
+                            <i class="fas fa-link"></i>
+                            <span>Google&nbsp;Maps</span>
+                        </button>
+                        <button
+                            id="printRouteReportButton"
+                            type="button"
+                            class="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-slate-600 border border-slate-200 rounded-full bg-white hover:bg-slate-50 focus:outline-none focus:ring focus:ring-blue-200"
+                            title="Gerar relatório para impressão matricial"
+                        >
+                            <i class="fas fa-print"></i>
+                            <span>Imprimir</span>
+                        </button>
+                    </div>
+                    <span
+                        id="routeLinkFeedback"
+                        class="text-xs text-slate-muted"
+                        role="status"
+                        aria-live="polite"
+                        style="opacity: 0; transition: opacity 0.2s ease;"
+                    ></span>
+                </div>
             </div>
             {% if route_orders %}
             <div class="space-y-2">
@@ -377,12 +407,295 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const routeOrdersPayload = {{ route_orders | tojson }};
+    const routeOrders = Array.isArray(routeOrdersPayload) ? routeOrdersPayload : [];
+    const routePreferencesPayload = {{ route_preferences | tojson }};
+    const routePreferences = routePreferencesPayload || {};
+    const routeLinkButton = document.getElementById('copyRouteLinkButton');
+    const printRouteReportButton = document.getElementById('printRouteReportButton');
+    const routeLinkFeedback = document.getElementById('routeLinkFeedback');
+    let routeLinkFeedbackTimer;
+    const printableTitle = {{ page_title | tojson }};
     const stops = {{ route_payload | tojson }};
     const mapWaypoints = {{ map_waypoints | tojson }};
     const statusEl = document.getElementById('mapStatus');
     const mapEl = document.getElementById('lotRouteMap');
     const totalKmEl = document.getElementById('routeTotalKm');
     const isSuggestionView = {{ is_suggestion_view | tojson }};
+
+    function buildLocationLabel(city, state) {
+        const cityValue = (city || '').trim();
+        const stateValue = (state || '').trim();
+        if (!cityValue && !stateValue) {
+            return '';
+        }
+        const parts = [];
+        if (cityValue) {
+            parts.push(cityValue);
+        }
+        if (stateValue) {
+            parts.push(stateValue);
+        }
+        return parts.join(', ');
+    }
+
+    function collectRouteLocationLabels() {
+        const labels = [];
+        let lastKey = '';
+        const addLabel = (label) => {
+            if (!label) {
+                return;
+            }
+            const normalized = label.trim().toLowerCase();
+            if (!normalized || normalized === lastKey) {
+                return;
+            }
+            labels.push(label);
+            lastKey = normalized;
+        };
+
+        const startPreference = (routePreferences.start || {});
+        if (startPreference.enabled) {
+            addLabel(buildLocationLabel(startPreference.cidade, startPreference.estado));
+        }
+
+        routeOrders.forEach(order => {
+            addLabel(buildLocationLabel(order.cidade, order.estado));
+        });
+
+        const endPreference = (routePreferences.end || {});
+        if (endPreference.enabled) {
+            addLabel(buildLocationLabel(endPreference.cidade, endPreference.estado));
+        }
+
+        return labels;
+    }
+
+    function buildGoogleMapsRouteLink(locations) {
+        if (!locations.length) {
+            return null;
+        }
+        const origin = locations[0];
+        const destination = locations.length === 1 ? locations[0] : locations[locations.length - 1];
+        const waypoints = locations.length > 2 ? locations.slice(1, -1) : [];
+        const base = 'https://www.google.com/maps/dir/?api=1&travelmode=driving';
+        const params = [
+            `origin=${encodeURIComponent(origin)}`,
+            `destination=${encodeURIComponent(destination)}`
+        ];
+        if (waypoints.length) {
+            const encodedWaypoints = waypoints.map(part => encodeURIComponent(part)).join('|');
+            params.push(`waypoints=${encodedWaypoints}`);
+        }
+        return `${base}&${params.join('&')}`;
+    }
+
+    function flashRouteLinkMessage(message, isError = false) {
+        if (!routeLinkFeedback) {
+            return;
+        }
+        routeLinkFeedback.textContent = message;
+        routeLinkFeedback.style.color = isError ? '#dc2626' : '';
+        routeLinkFeedback.style.opacity = '1';
+        if (routeLinkFeedbackTimer) {
+            clearTimeout(routeLinkFeedbackTimer);
+        }
+        routeLinkFeedbackTimer = setTimeout(() => {
+            routeLinkFeedback.style.opacity = '0';
+        }, 2600);
+    }
+
+    async function copyTextToClipboard(value) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(value);
+            return;
+        }
+        const fallbackEl = document.createElement('textarea');
+        fallbackEl.value = value;
+        fallbackEl.setAttribute('readonly', '');
+        fallbackEl.style.position = 'fixed';
+        fallbackEl.style.top = '-9999px';
+        fallbackEl.style.left = '-9999px';
+        document.body.appendChild(fallbackEl);
+        fallbackEl.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(fallbackEl);
+        if (!successful) {
+            throw new Error('Falha ao copiar o link para a área de transferência.');
+        }
+    }
+
+    async function handleRouteLinkButtonClick() {
+        if (!routeLinkButton) {
+            return;
+        }
+        routeLinkButton.disabled = true;
+        try {
+            const locations = collectRouteLocationLabels();
+            if (!locations.length) {
+                flashRouteLinkMessage('Informe ao menos uma cidade para gerar o link.', true);
+                return;
+            }
+            const link = buildGoogleMapsRouteLink(locations);
+            if (!link) {
+                flashRouteLinkMessage('Não foi possível gerar o link da rota.', true);
+                return;
+            }
+            await copyTextToClipboard(link);
+            flashRouteLinkMessage('Link copiado para a área de transferência.');
+        } catch (error) {
+            console.error('Erro ao gerar link do Google Maps:', error);
+            flashRouteLinkMessage('Falha ao copiar o link.', true);
+        } finally {
+            routeLinkButton.disabled = false;
+        }
+    }
+
+    if (routeLinkButton) {
+        routeLinkButton.addEventListener('click', handleRouteLinkButtonClick);
+    }
+
+    function escapeHtml(value) {
+        if (value === null || typeof value === 'undefined') {
+            return '';
+        }
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function collectPrintableRows() {
+        return routeOrders.map(order => {
+            const cityLabel = buildLocationLabel(order.cidade, order.estado) || 'Sem endereço';
+            const lineLabel = (order.linha || 'OUTROS').trim() || 'OUTROS';
+            return {
+                seqSuggested: order.suggested_position || '',
+                sequencia: order.sequencia || '',
+                pedido: order.pedido || '',
+                cliente: order.cliente || '',
+                cidadeUf: cityLabel,
+                linha: lineLabel,
+            };
+        });
+    }
+
+    function renderPrintableDocument(rows) {
+        const printedAt = new Date().toLocaleString('pt-BR');
+        const reportSubtitle = isSuggestionView ? 'Sugestão automática de rota' : 'Sequência de Entregas confirmada';
+        const rowsHtml = rows.map(row => `
+            <tr>
+                <td>${escapeHtml(row.seqSuggested)}</td>
+                <td>${escapeHtml(row.sequencia)}</td>
+                <td>${escapeHtml(row.pedido)}</td>
+                <td>${escapeHtml(row.cliente)}</td>
+                <td>${escapeHtml(row.cidadeUf)}</td>
+                <td>${escapeHtml(row.linha)}</td>
+            </tr>
+        `).join('');
+        return `<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(printableTitle || 'Mapa do Lote')}</title>
+    <style>
+        :root {
+            font-family: "Courier New", Courier, monospace;
+            color: #000;
+        }
+        body {
+            margin: 12mm;
+            font-size: 12px;
+        }
+        header {
+            margin-bottom: 12px;
+        }
+        header h1, header h2 {
+            margin: 0;
+            font-size: 13px;
+        }
+        header p {
+            margin: 4px 0 0;
+            font-size: 11px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+        th, td {
+            padding: 4px 2px;
+            border-bottom: 1px solid #000;
+            text-align: left;
+        }
+        th {
+            font-weight: 600;
+        }
+        @media print {
+            body {
+                margin: 6mm;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>${escapeHtml(printableTitle || 'Mapa do Lote')}</h1>
+        <h2>${escapeHtml(reportSubtitle)}</h2>
+        <p>Emitido em: ${escapeHtml(printedAt)}</p>
+    </header>
+    <table>
+        <thead>
+            <tr>
+                <th>Seq. Sugerida</th>
+                <th>Sequencia</th>
+                <th>Pedido</th>
+                <th>Cliente</th>
+                <th>Cidade/UF</th>
+                <th>Linha</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${rowsHtml}
+        </tbody>
+    </table>
+</body>
+</html>`;
+    }
+
+    function handlePrintRouteReport() {
+        if (!printRouteReportButton) {
+            return;
+        }
+        const rows = collectPrintableRows();
+        if (!rows.length) {
+            flashRouteLinkMessage('Nenhum pedido disponível para imprimir.', true);
+            return;
+        }
+        const win = window.open('', '_blank', 'width=900,height=600,menubar=yes,scrollbars=yes,resizable=yes');
+        if (!win) {
+            flashRouteLinkMessage('Permita pop-ups para gerar o relatório.', true);
+            return;
+        }
+        const html = renderPrintableDocument(rows);
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => {
+            try {
+                win.print();
+            } catch (error) {
+                console.error('Erro ao enviar o relatório para impressão:', error);
+            }
+        }, 250);
+        flashRouteLinkMessage('Relatório preparado para impressão.');
+    }
+
+    if (printRouteReportButton) {
+        printRouteReportButton.addEventListener('click', handlePrintRouteReport);
+    }
 
     if (!mapEl) {
         return;
