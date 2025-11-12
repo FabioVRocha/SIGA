@@ -70,6 +70,19 @@
         letter-spacing: 0.05em;
         color: var(--clr-medium-gray);
     }
+    .route-assistance-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.125rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.64rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border: 1px solid rgba(236, 72, 153, 0.45);
+        color: #be185d;
+        background-color: rgba(236, 72, 153, 0.13);
+    }
     .route-side-table tbody tr {
         background-color: var(--clr-white);
         border-radius: 0.5rem;
@@ -321,7 +334,12 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <div class="font-semibold text-dark-blue">{{ order.pedido }}</div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="font-semibold text-dark-blue">{{ order.pedido }}</span>
+                                    {% if order.is_assistance %}
+                                    <span class="route-assistance-pill">Assistência</span>
+                                    {% endif %}
+                                </div>
                                 <div class="text-xs text-slate-muted">{{ order.cliente }}</div>
                             </td>
                             <td>

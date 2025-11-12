@@ -2083,6 +2083,11 @@ def fetch_load_lot_assistances(load_lot_code):
                 'quantidade_total': quantidade_total,
                 'total_m3': 0.0,
                 'valor_total': valor_total,
+                'cidade': (record.get('cidade_nome') or '').strip(),
+                'estado': (record.get('estado_sigla') or '').strip(),
+                'linha': (record.get('linha') or '').strip(),
+                'latitude': None,
+                'longitude': None,
                 'is_assistance': True,
             }
         )
@@ -9539,6 +9544,11 @@ def load_lot_map(load_lot_code):
         flash('Lote não encontrado para consulta.', 'warning')
         return redirect(url_for('load_lots_view'))
 
+    assistance_rows, assistance_error = fetch_load_lot_assistances(lot_code)
+    if assistance_error:
+        flash(assistance_error, 'danger')
+    detail_orders = detail_orders + assistance_rows
+
     ordered_stops = sorted(
         detail_orders,
         key=lambda order: route_sequence_sort_value(order.get('sequencia'))
@@ -9600,6 +9610,11 @@ def load_lot_route_suggestion(load_lot_code):
     if not lot_info:
         flash('Lote não encontrado para consulta.', 'warning')
         return redirect(url_for('load_lots_view'))
+
+    assistance_rows, assistance_error = fetch_load_lot_assistances(lot_code)
+    if assistance_error:
+        flash(assistance_error, 'danger')
+    detail_orders = detail_orders + assistance_rows
 
     ordered_stops = sorted(
         detail_orders,
