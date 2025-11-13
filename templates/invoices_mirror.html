@@ -566,7 +566,8 @@
             downloadXmlBtn.addEventListener('click', async () => {
                 const selectedControles = eligibleCheckboxes
                     .filter(cb => cb.checked && cb.dataset.controle)
-                    .map(cb => cb.dataset.controle);
+                    .map(cb => cb.dataset.controle.trim())
+                    .filter(controle => controle);
 
                 if (!selectedControles.length) {
                     showXmlWarning('Selecione notas fiscais com série válida para baixar os XMLs.');
@@ -577,29 +578,40 @@
                 downloadXmlBtn.disabled = true;
                 downloadXmlBtn.classList.add('opacity-60', 'cursor-wait');
 
+                const warnings = [];
+                let fetchError = false;
                 try {
-                    const response = await fetch('/invoices_mirror/download_xml', {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ controles: selectedControles })
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json().catch(() => null);
-                        const errorMessage = (errorData && errorData.error) || 'Não foi possível baixar os XMLs.';
-                        showXmlWarning(errorMessage);
-                        return;
+                    for (const controle of selectedControles) {
+                        const response = await fetch(`/invoices_mirror/download_xml/${controle}`, {
+                            credentials: 'same-origin'
+                        });
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => null);
+                            const errorMessage = (errorData && errorData.error) || `Não foi possível baixar o XML da nota ${controle}.`;
+                            showXmlWarning(errorMessage);
+                            fetchError = true;
+                            break;
+                        }
+                        const blob = await response.blob();
+                        const filename = getFilenameFromDisposition(response.headers.get('content-disposition')) || `nota_${controle}.xml`;
+                        triggerFileDownload(blob, filename);
+                        const warning = response.headers.get('X-Xml-Warnings');
+                        if (warning) {
+                            warnings.push(warning);
+                        }
                     }
-
-                    const blob = await response.blob();
-                    const filename = getFilenameFromDisposition(response.headers.get('content-disposition')) || 'notas_fiscais_xml.zip';
-                    triggerFileDownload(blob, filename);
-                    showXmlWarning(response.headers.get('X-Xml-Warnings'));
                 } catch (error) {
                     console.error('Erro ao baixar XMLs:', error);
                     showXmlWarning('Erro inesperado ao buscar os arquivos XML.');
+                    fetchError = true;
                 } finally {
+                    if (!fetchError) {
+                        if (warnings.length) {
+                            showXmlWarning(warnings.join(' '));
+                        } else {
+                            showXmlWarning('');
+                        }
+                    }
                     downloadXmlBtn.classList.remove('opacity-60', 'cursor-wait');
                     refreshXmlControls();
                 }

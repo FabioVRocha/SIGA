@@ -4449,6 +4449,14 @@ def _sanitize_xml_filename(value):
     return re.sub(r'[^0-9A-Za-z\-_.]', '_', str(value))
 
 
+def _format_invoice_filename(controle, documento, access_key):
+    """Gera um nome de arquivo amigável para o XML."""
+    base = documento or f"controle_{controle}"
+    safe_base = _sanitize_xml_filename(base) or f"controle_{controle}"
+    safe_key = _sanitize_xml_filename(access_key) or 'sem_chave'
+    return f"{safe_base}_{safe_key}.xml"
+
+
 def _find_xml_file_for_access_key(access_key, storage_dir, invoice_date=None):
     """Busca recursivamente um XML cujo nome contenha a chave de acesso fornecida."""
     trimmed_key = str(access_key).strip()
@@ -4591,10 +4599,11 @@ def download_invoices_xml():
     for invoice_record in eligible_invoices:
         xml_bytes = _load_xml_bytes(invoice_record['access_key'], storage_dir, invoice_record.get('notdata'))
         if xml_bytes:
-            prefix = invoice_record.get('documento') or invoice_record['controle']
-            safe_prefix = _sanitize_xml_filename(prefix) or f"controle_{invoice_record['controle']}"
-            safe_access_key = _sanitize_xml_filename(invoice_record['access_key'])
-            filename = f"{safe_prefix}_{safe_access_key}.xml"
+            filename = _format_invoice_filename(
+                invoice_record['controle'],
+                invoice_record.get('documento'),
+                invoice_record['access_key']
+            )
             xml_entries.append({'filename': filename, 'content': xml_bytes})
         else:
             missing_files.append(invoice_record['access_key'])
@@ -4645,6 +4654,71 @@ def download_invoices_xml():
     )
     if warning_messages:
         response.headers['X-Xml-Warnings'] = ' '.join(warning_messages)
+    return response
+
+
+@app.route('/invoices_mirror/download_xml/<int:controle>')
+@login_required
+def download_invoice_xml(controle):
+    """Retorna o XML de uma nota fiscal individual através do controle."""
+    user_id = session.get('user_id')
+    conn = get_erp_db_connection()
+    if not conn:
+        return jsonify({'error': 'Não foi possível conectar ao banco de dados ERP.'}), 503
+
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT notserie, notcodac, notdocto, notdata
+            FROM doctos
+            WHERE controle = %s
+            """,
+            (controle,)
+        )
+        row = cur.fetchone()
+        cur.close()
+    except Error as exc:
+        print(f"Erro ao buscar nota fiscal {controle} para download de XML: {exc}")
+        return jsonify({'error': 'Erro ao buscar a nota fiscal solicitada.'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+    if not row:
+        return jsonify({'error': 'Nota fiscal não encontrada.'}), 404
+
+    serie_raw = str(row[0]).strip() if row[0] not in (None, '') else ''
+    if serie_raw:
+        try:
+            serie_number = int(serie_raw)
+        except (ValueError, TypeError):
+            serie_number = 0
+    else:
+        serie_number = 0
+
+    access_key = str(row[1]).strip() if row[1] not in (None, '') else ''
+    if serie_number < 1 or not access_key:
+        return jsonify({'error': 'Nota fiscal não possui série ou chave válida para download de XML.'}), 400
+
+    storage_dir = _resolve_xml_storage_dir(user_id)
+    if not storage_dir:
+        return jsonify({'error': 'Diretório de XML não está configurado corretamente.'}), 500
+
+    xml_bytes = _load_xml_bytes(access_key, storage_dir, row[3])
+    if not xml_bytes:
+        return jsonify({'error': 'XML não encontrado no diretório configurado.'}), 404
+
+    filename = _format_invoice_filename(controle, row[2], access_key)
+    buffer = BytesIO(xml_bytes)
+    buffer.seek(0)
+    response = send_file(
+        buffer,
+        mimetype='application/xml',
+        as_attachment=True,
+        download_name=filename,
+        conditional=False
+    )
     return response
 
 @app.route('/api/get_lotecar_description/<string:lotecar_code>')
