@@ -6,12 +6,19 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
-    <div class="flex justify-between items-center mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
         <h2 class="text-xl font-semibold text-gray-800">Notas Fiscais</h2>
-        <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
-            <i class="fas fa-filter mr-2"></i> Filtrar
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+            <button id="openFilterModalBtn" type="button" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+                <i class="fas fa-filter mr-2"></i> Filtrar
+            </button>
+            <button id="downloadXmlBtn" type="button" class="btn btn-secondary flex items-center px-4 py-2 rounded-lg" disabled>
+                <i class="fas fa-download mr-2"></i> Baixar XML(s)
+            </button>
+            <span id="xmlSelectionLabel" class="text-sm text-gray-600 hidden">Nenhum XML elegível selecionado</span>
+        </div>
     </div>
+    <div id="xmlWarningMessage" class="text-sm text-yellow-700 mb-3 hidden"></div>
 
     {% if invoices %}
     <div class="overflow-x-auto rounded-lg shadow-md">
@@ -23,6 +30,7 @@
                     </th>
                     <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Controle</th>
                     <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Documento</th>
+                    <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Série</th>
                     <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Data</th>
                     <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Cliente/Fornecedor</th>
                     <th scope="col" class="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor Produtos</th>
@@ -38,10 +46,17 @@
                 {% for invoice in invoices %}
                 <tr class="hover:bg-blue-50">
                     <td class="px-1 py-4 whitespace-nowrap text-center">
-                        <input type="checkbox" class="invoice-checkbox" data-valor-produtos="{{ invoice.total_privltotal or 0 }}" data-valor-ipi="{{ invoice.notvlipi or 0 }}" data-valor-st="{{ invoice.total_privlsubst or 0 }}" data-valor-total="{{ invoice.notvltotal or 0 }}" data-valor-frete="{{ invoice.valor_frete or 0 }}">
+                        <input type="checkbox" class="invoice-checkbox" data-controle="{{ invoice.controle }}" data-xml-eligible="{{ 'true' if invoice.xml_eligible else 'false' }}" data-valor-produtos="{{ invoice.total_privltotal or 0 }}" data-valor-ipi="{{ invoice.notvlipi or 0 }}" data-valor-st="{{ invoice.total_privlsubst or 0 }}" data-valor-total="{{ invoice.notvltotal or 0 }}" data-valor-frete="{{ invoice.valor_frete or 0 }}">
                     </td>
                     <td class="px-1 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ invoice.controle if invoice.controle is not none else 'N/A' }}</td>
                     <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice.notdocto if invoice.notdocto is not none else 'N/A' }}</td>
+                    <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {% if invoice.xml_eligible %}
+                        {{ invoice.notserie }}
+                        {% else %}
+                        <span class="text-xs text-red-600 font-semibold" title="XML disponível para séries com valor maior ou igual a 1">{{ invoice.notserie }}</span>
+                        {% endif %}
+                    </td>
                     <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice.notdata.strftime('%d/%m/%Y') if invoice.notdata is not none else 'N/A' }}</td>
                     <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice.client_name if invoice.client_name is not none else 'N/A' }}</td>
                     <td class="px-1 py-4 whitespace-nowrap text-sm text-gray-700">R$ {{ '{:,.2f}'.format(invoice.total_privltotal).replace('.', 'X').replace(',', '.').replace('X', ',') if invoice.total_privltotal is not none else '0,00' }}</td>
@@ -438,10 +453,14 @@
             });
         });
 
-        // --- Totais do rodapé ---
+        // --- Totais do rodapé e download de XML ---
         const initialTotals = JSON.parse(document.getElementById('initialTotalsData').textContent);
         const invoiceCheckboxes = document.querySelectorAll('.invoice-checkbox');
         const selectAllCheckbox = document.getElementById('selectAllInvoices');
+        const downloadXmlBtn = document.getElementById('downloadXmlBtn');
+        const eligibleCheckboxes = Array.from(invoiceCheckboxes).filter(cb => cb.dataset.xmlEligible === 'true');
+        const xmlSelectionLabel = document.getElementById('xmlSelectionLabel');
+        const xmlWarningMessage = document.getElementById('xmlWarningMessage');
 
         function formatCurrencyFooter(value) {
             const num = parseFloat(value);
@@ -470,7 +489,68 @@
             document.getElementById('footer_valor_frete').textContent = formatCurrencyFooter(totals.valor_frete);
         }
 
-        invoiceCheckboxes.forEach(cb => cb.addEventListener('change', updateFooterTotals));
+        function refreshXmlControls() {
+            if (!downloadXmlBtn) {
+                return;
+            }
+            const selectedEligible = eligibleCheckboxes.filter(cb => cb.checked);
+            const count = selectedEligible.length;
+            downloadXmlBtn.disabled = count === 0;
+            if (xmlSelectionLabel) {
+                if (count > 0) {
+                    xmlSelectionLabel.textContent = `${count} XML${count > 1 ? 's' : ''} selecionado${count > 1 ? 's' : ''}`;
+                    xmlSelectionLabel.classList.remove('hidden');
+                } else {
+                    xmlSelectionLabel.textContent = 'Nenhum XML elegível selecionado';
+                    xmlSelectionLabel.classList.add('hidden');
+                }
+            }
+        }
+
+        function showXmlWarning(message) {
+            if (!xmlWarningMessage) {
+                return;
+            }
+            if (message) {
+                xmlWarningMessage.textContent = message;
+                xmlWarningMessage.classList.remove('hidden');
+            } else {
+                xmlWarningMessage.textContent = '';
+                xmlWarningMessage.classList.add('hidden');
+            }
+        }
+
+        function getFilenameFromDisposition(disposition) {
+            if (!disposition) {
+                return null;
+            }
+            const utfMatch = /filename\*=UTF-8''([^;\n]+)/i.exec(disposition);
+            if (utfMatch) {
+                try {
+                    return decodeURIComponent(utfMatch[1]);
+                } catch {
+                    return utfMatch[1];
+                }
+            }
+            const match = /filename="?([^";]+)"?/i.exec(disposition);
+            return match ? match[1] : null;
+        }
+
+        function triggerFileDownload(blob, filename) {
+            const temporaryUrl = URL.createObjectURL(blob);
+            const tempLink = document.createElement('a');
+            tempLink.href = temporaryUrl;
+            tempLink.download = filename;
+            document.body.appendChild(tempLink);
+            tempLink.click();
+            document.body.removeChild(tempLink);
+            URL.revokeObjectURL(temporaryUrl);
+        }
+
+        invoiceCheckboxes.forEach(cb => {
+            cb.addEventListener('change', updateFooterTotals);
+            cb.addEventListener('change', refreshXmlControls);
+        });
 
         if (selectAllCheckbox) {
             selectAllCheckbox.addEventListener('change', () => {
@@ -478,10 +558,56 @@
                     cb.checked = selectAllCheckbox.checked;
                 });
                 updateFooterTotals();
+                refreshXmlControls();
+            });
+        }
+
+        if (downloadXmlBtn) {
+            downloadXmlBtn.addEventListener('click', async () => {
+                const selectedControles = eligibleCheckboxes
+                    .filter(cb => cb.checked && cb.dataset.controle)
+                    .map(cb => cb.dataset.controle);
+
+                if (!selectedControles.length) {
+                    showXmlWarning('Selecione notas fiscais com série válida para baixar os XMLs.');
+                    return;
+                }
+
+                showXmlWarning('');
+                downloadXmlBtn.disabled = true;
+                downloadXmlBtn.classList.add('opacity-60', 'cursor-wait');
+
+                try {
+                    const response = await fetch('/invoices_mirror/download_xml', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ controles: selectedControles })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => null);
+                        const errorMessage = (errorData && errorData.error) || 'Não foi possível baixar os XMLs.';
+                        showXmlWarning(errorMessage);
+                        return;
+                    }
+
+                    const blob = await response.blob();
+                    const filename = getFilenameFromDisposition(response.headers.get('content-disposition')) || 'notas_fiscais_xml.zip';
+                    triggerFileDownload(blob, filename);
+                    showXmlWarning(response.headers.get('X-Xml-Warnings'));
+                } catch (error) {
+                    console.error('Erro ao baixar XMLs:', error);
+                    showXmlWarning('Erro inesperado ao buscar os arquivos XML.');
+                } finally {
+                    downloadXmlBtn.classList.remove('opacity-60', 'cursor-wait');
+                    refreshXmlControls();
+                }
             });
         }
 
         updateFooterTotals();
+        refreshXmlControls();
 
         closeInvoiceDetailsModalBtn.addEventListener('click', closeInvoiceDetailsModal);
     });

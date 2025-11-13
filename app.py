@@ -24,9 +24,11 @@ import mimetypes
 import ssl
 from pathlib import Path
 import threading
+from io import BytesIO
+import zipfile
 
 # Importa as configurações do arquivo config.py
-from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE
+from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE, INVOICE_XML_STORAGE_DIR
 
 # Inicializa a aplicação Flask
 app = Flask(__name__)
@@ -198,6 +200,7 @@ RECORD_TYPE_LABELS = {
 }
 
 ASSISTANCE_MEDIA_PATH_PARAM = 'technical_assistance_media_base_path'
+INVOICE_XML_STORAGE_PARAM = 'invoices_xml_storage_dir'
 ASSISTANCE_MEDIA_IMAGE_EXTENSIONS = {
     '.jpg',
     '.jpeg',
@@ -4265,6 +4268,8 @@ def invoices_mirror():
                     COALESCE(MAX(rc.rgcdes), '') AS rgcdes_agg,
                     COALESCE(MAX(p.pronome), '') AS pronome_agg,
                     COALESCE(MAX(g.grunome), '') AS grunome_agg,
+                    COALESCE(MAX(d.notserie), '') AS notserie,
+                    COALESCE(MAX(d.notcodac), '') AS notcodac,
                     op.opetransac
                 FROM
                     doctos d
@@ -4373,8 +4378,21 @@ def invoices_mirror():
                     'rgcdes': row[8], # rgcdes_agg
                     'pronome': row[9], # pronome_agg
                     'grunome': row[10], # grunome_agg
-                    'operacao': row[11] # Código da transação
+                    'notserie': row[11],
+                    'notcodac': row[12],
+                    'operacao': row[13] # Código da transação
                 }
+
+                # Normaliza os dados de série e chave de acesso para o template
+                serie_raw = str(invoice['notserie']).strip() if invoice['notserie'] not in (None, '') else ''
+                invoice['notserie'] = serie_raw or '0'
+                access_key = str(invoice['notcodac']).strip() if invoice['notcodac'] not in (None, '') else ''
+                invoice['notcodac'] = access_key
+                try:
+                    serie_number = int(serie_raw)
+                except (ValueError, TypeError):
+                    serie_number = 0
+                invoice['xml_eligible'] = serie_number >= 1 and bool(access_key)
                 print(
                     f"Processing invoice {invoice['controle']}: rgcdes='{invoice['rgcdes']}', pronome='{invoice['pronome']}', grunome='{invoice['grunome']}'"
                 )  # DEBUG
@@ -4410,6 +4428,224 @@ def invoices_mirror():
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
+
+
+def _resolve_xml_storage_dir(user_id=None):
+    """Retorna o diretório configurado para os XMLs, privilegiando o valor do usuário quando disponível."""
+    configured_path = None
+    if user_id:
+        configured_path = get_user_parameters(user_id, INVOICE_XML_STORAGE_PARAM)
+    storage_path = configured_path or INVOICE_XML_STORAGE_DIR
+    if not storage_path:
+        return None
+    path = Path(storage_path).expanduser()
+    return path if path.is_dir() else None
+
+
+def _sanitize_xml_filename(value):
+    """Substitui caracteres inválidos para gerar nomes de arquivo seguros."""
+    if not value:
+        return ''
+    return re.sub(r'[^0-9A-Za-z\-_.]', '_', str(value))
+
+
+def _find_xml_file_for_access_key(access_key, storage_dir, invoice_date=None):
+    """Busca recursivamente um XML cujo nome contenha a chave de acesso fornecida."""
+    trimmed_key = str(access_key).strip()
+    if not trimmed_key:
+        return None
+    pattern = f"*{trimmed_key}*.xml"
+    try:
+        search_dirs = []
+        guessed_dir = _guess_xml_directory_for_date(storage_dir, invoice_date)
+        if guessed_dir:
+            search_dirs.append(guessed_dir)
+        search_dirs.append(storage_dir)
+        seen_dirs = set()
+        for base_dir in search_dirs:
+            if base_dir in seen_dirs:
+                continue
+            seen_dirs.add(base_dir)
+            for candidate in base_dir.rglob(pattern):
+                if trimmed_key in candidate.name:
+                    return candidate
+    except (OSError, IOError) as exc:
+        print(f"Erro ao buscar XML para chave {trimmed_key}: {exc}")
+    return None
+
+
+def _guess_xml_directory_for_date(storage_dir, invoice_date):
+    """Constrói o subdiretório esperado para o XML com base na data da nota."""
+    if not invoice_date:
+        return None
+    try:
+        if isinstance(invoice_date, str):
+            parsed_date = datetime.datetime.strptime(invoice_date.strip(), '%Y-%m-%d').date()
+        elif isinstance(invoice_date, datetime.date):
+            parsed_date = invoice_date
+        else:
+            return None
+    except (ValueError, TypeError):
+        return None
+
+    year_dir = storage_dir / f"{parsed_date.year}"
+    month_dir = year_dir / f"{parsed_date.month:02d}"
+    xml_dir = month_dir / "XML"
+    for candidate in (xml_dir, month_dir, year_dir):
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _load_xml_bytes(access_key, storage_dir, invoice_date=None):
+    """Carrega o XML correspondente à chave de acesso dentro do diretório informado."""
+    xml_path = _find_xml_file_for_access_key(access_key, storage_dir, invoice_date)
+    if not xml_path:
+        return None
+    try:
+        return xml_path.read_bytes()
+    except (OSError, IOError) as exc:
+        print(f"Erro ao ler XML {xml_path}: {exc}")
+        return None
+
+
+@app.route('/invoices_mirror/download_xml', methods=['POST'])
+@login_required
+def download_invoices_xml():
+    """Gera um ZIP com os XMLs das notas selecionadas e elegíveis."""
+    current_user_id = session.get('user_id')
+
+    payload = request.get_json(silent=True)
+    controles_raw = payload.get('controles') if isinstance(payload, dict) else []
+
+    if not isinstance(controles_raw, list):
+        return jsonify({'error': 'Formato inválido para os controles selecionados.'}), 400
+
+    selected_controles = []
+    for value in controles_raw:
+        try:
+            controle_number = int(str(value).strip())
+            selected_controles.append(controle_number)
+        except (ValueError, TypeError):
+            continue
+    if not selected_controles:
+        return jsonify({'error': 'Selecione ao menos uma nota fiscal válida.'}), 400
+
+    selected_controles = list(dict.fromkeys(selected_controles))
+    conn = get_erp_db_connection()
+    if not conn:
+        return jsonify({'error': 'Não foi possível conectar ao banco de dados ERP.'}), 503
+
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT controle, notserie, notcodac, notdocto, notdata
+            FROM doctos
+            WHERE controle = ANY(%s)
+            """,
+            (selected_controles,)
+        )
+        rows = cur.fetchall()
+        cur.close()
+    except Error as exc:
+        print(f"Erro ao buscar notas fiscais para download de XML: {exc}")
+        return jsonify({'error': 'Erro ao buscar as notas fiscais selecionadas.'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+    found_controles = {row[0] for row in rows}
+    missing_controles = [c for c in selected_controles if c not in found_controles]
+    eligible_invoices = []
+    invalid_series = []
+
+    for controle, notserie, notcodac, notdocto, notdata in rows:
+        serie_str = str(notserie).strip() if notserie not in (None, '') else ''
+        if not serie_str:
+            serie_number = 0
+        else:
+            try:
+                serie_number = int(serie_str)
+            except (ValueError, TypeError):
+                serie_number = 0
+
+        access_key = str(notcodac).strip() if notcodac not in (None, '') else ''
+        if serie_number >= 1 and access_key:
+            eligible_invoices.append({
+                'controle': controle,
+                'documento': notdocto,
+                'serie': serie_str or '0',
+                'access_key': access_key,
+                'notdata': notdata
+            })
+        else:
+            invalid_series.append(f"{controle} (Série {serie_str or '0'})")
+
+    storage_dir = _resolve_xml_storage_dir(current_user_id)
+    if not storage_dir:
+        return jsonify({'error': 'Diretório de XML não está disponível no servidor.'}), 500
+
+    xml_entries = []
+    missing_files = []
+    for invoice_record in eligible_invoices:
+        xml_bytes = _load_xml_bytes(invoice_record['access_key'], storage_dir, invoice_record.get('notdata'))
+        if xml_bytes:
+            prefix = invoice_record.get('documento') or invoice_record['controle']
+            safe_prefix = _sanitize_xml_filename(prefix) or f"controle_{invoice_record['controle']}"
+            safe_access_key = _sanitize_xml_filename(invoice_record['access_key'])
+            filename = f"{safe_prefix}_{safe_access_key}.xml"
+            xml_entries.append({'filename': filename, 'content': xml_bytes})
+        else:
+            missing_files.append(invoice_record['access_key'])
+
+    if not xml_entries:
+        messages = ['Nenhum XML disponível para download.']
+        if invalid_series:
+            messages.append(f"Notas com série inválida: {', '.join(invalid_series)}.")
+        if missing_controles:
+            messages.append(f"Controles não encontrados: {', '.join(str(c) for c in missing_controles)}.")
+        return jsonify({'error': ' '.join(messages)}), 400
+
+    warning_messages = []
+    if invalid_series:
+        warning_messages.append(f"Notas com série inválida foram ignoradas ({', '.join(invalid_series)}).")
+    if missing_files:
+        warning_messages.append(f"XML não encontrado para as chaves: {', '.join(missing_files)}.")
+    if missing_controles:
+        warning_messages.append(f"Controles não retornados pelo ERP: {', '.join(str(c) for c in missing_controles)}.")
+
+    if len(xml_entries) == 1:
+        single = xml_entries[0]
+        buffer = BytesIO(single['content'])
+        buffer.seek(0)
+        response = send_file(
+            buffer,
+            mimetype='application/xml',
+            as_attachment=True,
+            download_name=single['filename'],
+            conditional=False
+        )
+        if warning_messages:
+            response.headers['X-Xml-Warnings'] = ' '.join(warning_messages)
+        return response
+
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for entry in xml_entries:
+            zip_file.writestr(entry['filename'], entry['content'])
+    zip_buffer.seek(0)
+
+    response = send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='notas_fiscais_xml.zip',
+        conditional=False
+    )
+    if warning_messages:
+        response.headers['X-Xml-Warnings'] = ' '.join(warning_messages)
+    return response
 
 @app.route('/api/get_lotecar_description/<string:lotecar_code>')
 @login_required
@@ -12351,6 +12587,9 @@ def gerencial_parameters():
         media_base_path = request.form.get('assistance_media_base_path', '').strip()
         if not save_user_parameters(user_id, ASSISTANCE_MEDIA_PATH_PARAM, media_base_path):
             success = False
+        xml_storage_path = request.form.get('invoices_xml_storage_path', '').strip()
+        if not save_user_parameters(user_id, INVOICE_XML_STORAGE_PARAM, xml_storage_path):
+            success = False
         if success:
             flash('Parâmetros salvos com sucesso!', 'success')
         else:
@@ -12373,6 +12612,7 @@ def gerencial_parameters():
         current_selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
 
     assistance_media_base_path = get_user_parameters(user_id, ASSISTANCE_MEDIA_PATH_PARAM) or ''
+    xml_storage_base_path = get_user_parameters(user_id, INVOICE_XML_STORAGE_PARAM) or ''
 
     # Marcar as transações e CFOPs que já estão selecionados
     for trans in all_transactions:
@@ -12394,6 +12634,7 @@ def gerencial_parameters():
         available_reports=available_reports,
         selected_report=selected_report,
         assistance_media_base_path=assistance_media_base_path,
+        xml_storage_base_path=xml_storage_base_path,
     )
 
 

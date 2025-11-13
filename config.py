@@ -21,3 +21,7 @@ SECRET_KEY = 'sua_chave_secreta_muito_segura_e_complexa_aqui'
 # Variáveis de exemplo para o rodapé (em um sistema real, viriam de um banco de dados ou configuração)
 SYSTEM_VERSION = "1.0.0"
 LOGGED_IN_USER = "Admin" # Será sobrescrito pelo nome de usuário da sessão
+
+# Caminho onde os arquivos XML das notas fiscais são armazenados.
+# Por padrão aponta para a pasta Downloads do usuário atual, que é onde os XML geralmente chegam.
+INVOICE_XML_STORAGE_DIR = "~/Downloads"

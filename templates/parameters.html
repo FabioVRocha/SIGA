@@ -66,6 +66,22 @@
             </p>
         </div>
 
+        <h2 class="text-xl font-semibold text-gray-800">XML das Notas Fiscais</h2>
+        <div class="form-group">
+            <label for="invoices_xml_storage_path" class="form-label text-lg font-medium">Diretório onde os XMLs estão disponíveis:</label>
+            <input
+                type="text"
+                id="invoices_xml_storage_path"
+                name="invoices_xml_storage_path"
+                class="form-input mt-2"
+                placeholder="Ex.: /mnt/xmls/notas_fiscais"
+                value="{{ xml_storage_base_path or '' }}"
+            >
+            <p class="text-sm text-gray-500 mt-2">
+                Informe o caminho absoluto no servidor onde os XMLs das notas fiscais estão armazenados para o botão "Baixar XML(s)" usá-los.
+            </p>
+        </div>
+
         <div class="flex justify-end mt-6">
             <button type="submit" class="btn btn-primary">Salvar Parâmetros</button>
         </div>
