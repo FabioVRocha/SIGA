@@ -1105,6 +1105,38 @@
             </div>
             <div class="modal-grid">
                 <div class="modal-field">
+                    <label for="stateFilterTrigger">Estados</label>
+                    <div class="multi-combobox" data-multi-combobox data-field-name="states">
+                        <button type="button" class="multi-combobox-trigger" id="stateFilterTrigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span data-role="label" data-placeholder="Todos">Todos</span>
+                            <span class="count-pill" data-role="count" hidden></span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="multi-combobox-panel" role="listbox" aria-multiselectable="true">
+                            <div class="multi-combobox-search">
+                                <input type="search" placeholder="Pesquisar..." data-role="search">
+                            </div>
+                            <ul class="multi-combobox-options" data-role="options">
+                                {% for state in state_options %}
+                                <li class="multi-combobox-option" data-option-label="{{ (state.code ~ ' ' ~ state.label)|trim|lower }}">
+                                    <label>
+                                        <input type="checkbox" name="states" value="{{ state.code }}" {% if state.code in filters.states %}checked{% endif %}>
+                                        <span>{{ state.code }} - {{ state.label }}</span>
+                                    </label>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            <div class="multi-combobox-empty" data-role="empty" hidden>Nenhuma opção encontrada.</div>
+                            <div class="multi-combobox-footer">
+                                <button type="button" class="btn-secondary" data-role="clear">Limpar</button>
+                                <button type="button" class="btn-secondary" data-role="select-all">Selecionar todos</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-grid">
+                <div class="modal-field">
                     <label for="orderApprovalStatusTrigger">Status (Pedidos)</label>
                     <div class="multi-combobox" data-multi-combobox data-field-name="approval_statuses">
                         <button type="button" class="multi-combobox-trigger" id="orderApprovalStatusTrigger" aria-haspopup="listbox" aria-expanded="false">
@@ -3546,6 +3578,7 @@
                 production_lots: normalizeArrayValues(formData.getAll('production_lots')),
                 approval_statuses: normalizeArrayValues(formData.getAll('approval_statuses')),
                 situations: normalizeArrayValues(formData.getAll('situations'), { allowEmpty: true }),
+                states: normalizeArrayValues(formData.getAll('states')),
                 separation_stages: normalizeArrayValues(formData.getAll('separation_stage')),
             };
         };

@@ -392,6 +392,36 @@ BRAZIL_STATE_CODES = (
     'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
 )
 
+BRAZIL_STATE_NAMES = {
+    'AC': 'Acre',
+    'AL': 'Alagoas',
+    'AP': 'Amapá',
+    'AM': 'Amazonas',
+    'BA': 'Bahia',
+    'CE': 'Ceará',
+    'DF': 'Distrito Federal',
+    'ES': 'Espírito Santo',
+    'GO': 'Goiás',
+    'MA': 'Maranhão',
+    'MT': 'Mato Grosso',
+    'MS': 'Mato Grosso do Sul',
+    'MG': 'Minas Gerais',
+    'PA': 'Pará',
+    'PB': 'Paraíba',
+    'PR': 'Paraná',
+    'PE': 'Pernambuco',
+    'PI': 'Piauí',
+    'RJ': 'Rio de Janeiro',
+    'RN': 'Rio Grande do Norte',
+    'RS': 'Rio Grande do Sul',
+    'RO': 'Rondônia',
+    'RR': 'Roraima',
+    'SC': 'Santa Catarina',
+    'SP': 'São Paulo',
+    'SE': 'Sergipe',
+    'TO': 'Tocantins',
+}
+
 
 def route_sequence_sort_value(raw_value):
     """Normaliza o valor de sequência para permitir ordenação consistente."""
@@ -6168,6 +6198,25 @@ def fetch_orders_from_integrated_view(filters):
                 base_query.append("AND UPPER(COALESCE(situation_code, '')) = ANY(%s)")
                 params.append(normalized)
 
+        states = filters.get('states') or []
+        if isinstance(states, str):
+            states = [states]
+        normalized_states = []
+        seen_states = set()
+        for value in states:
+            if value is None:
+                continue
+            candidate = str(value).strip().upper()
+            if not candidate or candidate not in BRAZIL_STATE_CODES:
+                continue
+            if candidate in seen_states:
+                continue
+            seen_states.add(candidate)
+            normalized_states.append(candidate)
+        if normalized_states:
+            base_query.append("AND UPPER(COALESCE(state, '')) = ANY(%s)")
+            params.append(normalized_states)
+
         lines = filters.get('lines') or []
         if isinstance(lines, str):
             lines = [lines]
@@ -9060,6 +9109,19 @@ def load_lot_route_planner_v2():
         ]
         situation_param = saved_situations
 
+    state_param = []
+    for raw_value in request.args.getlist('states'):
+        code = clean_string(raw_value).upper()
+        if code in BRAZIL_STATE_CODES and code not in state_param:
+            state_param.append(code)
+    if not state_param and not ignore_saved_defaults:
+        saved_states = [
+            code.upper()
+            for code in deduplicate_preserve_order(clean_list(saved_filters.get('states')))
+            if code.upper() in BRAZIL_STATE_CODES
+        ]
+        state_param = saved_states
+
     separation_stage_param = []
     for raw_value in request.args.getlist('separation_stage'):
         code = clean_string(raw_value).lower()
@@ -9091,6 +9153,7 @@ def load_lot_route_planner_v2():
         'end_date': end_date_param,
         'production_lots': production_lots_param,
         'approval_statuses': approval_status_param,
+        'states': state_param,
         'situations': situation_param,
         'separation_stages': separation_stage_param,
         'missing_production_lot': missing_production_lot_param,
@@ -9100,6 +9163,7 @@ def load_lot_route_planner_v2():
     query_filters = {
         'production_lots': production_lots_param,
         'approval_statuses': approval_status_param,
+        'states': state_param,
         'situations': situation_param,
         'sort_by': 'pedido',
         'sort_order': 'desc',
@@ -9527,6 +9591,11 @@ def load_lot_route_planner_v2():
         'end': format_period(query_filters.get('end_date')),
     }
 
+    state_options = [
+        {'code': code, 'label': BRAZIL_STATE_NAMES.get(code, code)}
+        for code in BRAZIL_STATE_CODES
+    ]
+
     return render_template(
         'load_route_planner_v2.html',
         page_title="Mapa Interativo 2",
@@ -9547,6 +9616,7 @@ def load_lot_route_planner_v2():
         stage_border_colors=stage_border_colors,
         separation_stages=separation_stage_param,
         separation_stage_options=SEPARATION_STAGE_OPTIONS,
+        state_options=state_options,
         period_display=period_display,
         distribution_report_data=distribution_report_payload,
         document_source_options=MAP_DOCUMENT_SOURCE_OPTIONS,
@@ -9748,6 +9818,14 @@ def save_load_lot_route_filters_v2():
         if code.upper() in allowed_situation_codes
     ]
     sanitized_filters['situations'] = situations
+
+    allowed_state_codes = set(BRAZIL_STATE_CODES)
+    states = [
+        code.upper()
+        for code in deduplicate_preserve_order(clean_list(payload.get('states')))
+        if code.upper() in allowed_state_codes
+    ]
+    sanitized_filters['states'] = states
 
     sanitized_filters['production_lots'] = deduplicate_preserve_order(clean_list(payload.get('production_lots')))
 
