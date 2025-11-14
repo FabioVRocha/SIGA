@@ -82,6 +82,22 @@
             </p>
         </div>
 
+        <h2 class="text-xl font-semibold text-gray-800">Metas e Prêmios</h2>
+        <div class="form-group">
+            <label for="ranger_metas_directory" class="form-label text-lg font-medium">Diretório da planilha MetasXPremio.xlsx:</label>
+            <input
+                type="text"
+                id="ranger_metas_directory"
+                name="ranger_metas_directory"
+                class="form-input mt-2"
+                placeholder="Ex.: /mnt/arquivos/MetasXPremio"
+                value="{{ ranger_metas_directory or '' }}"
+            >
+            <p class="text-sm text-gray-500 mt-2">
+                Informe a pasta (ou o caminho completo) onde o arquivo MetasXPremio.xlsx estará disponível no servidor. O relatório irá buscar a aba "RangerMetas".
+            </p>
+        </div>
+
         <div class="flex justify-end mt-6">
             <button type="submit" class="btn btn-primary">Salvar Parâmetros</button>
         </div>

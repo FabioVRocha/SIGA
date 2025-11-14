@@ -26,6 +26,11 @@
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Pedidos por Linha</h2>
         <p class="text-medium-gray">Visualize o valor total dos pedidos agrupados por linha de produto.</p>
     </a>
+    <a href="{{ url_for('report_premio_por_vendedor') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-amber mb-4"><i class="fas fa-award fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Prêmio por Vendedor</h2>
+        <p class="text-medium-gray">Acompanhe metas, realizações e o prêmio por linha e vendedor com regras parametrizadas.</p>
+    </a>
     <a href="{{ url_for('report_decomposition_tree') }}" class="card p-6 text-center flex flex-col items-center justify-center">
         <div class="text-icon-amber mb-4"><i class="fas fa-sitemap fa-3x"></i></div>
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Árvore de Decomposição</h2>

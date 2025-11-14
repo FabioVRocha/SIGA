@@ -1,0 +1,488 @@
+{% extends "base.html" %}
+
+{% block title %}Prêmio por Vendedor{% endblock %}
+
+{% block page_title %}Prêmio por Vendedor{% endblock %}
+
+{% block header_action %}
+<a href="{{ url_for('commercial_reports') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+    <i class="fas fa-arrow-left mr-2"></i> Voltar
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {% if ranger_error %}
+    <div class="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-2xl">
+        {{ ranger_error }}
+    </div>
+    {% endif %}
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+        <div class="flex flex-wrap items-center gap-4">
+            <div>
+                <h2 class="text-2xl font-semibold text-gray-800">Prêmio por Vendedor</h2>
+                <p class="text-sm text-gray-500">Distribuição dos prêmios por linha e por vendedor com base nos parâmetros definidos.</p>
+            </div>
+            <div class="flex-1"></div>
+            <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+                <i class="fas fa-filter mr-2"></i> Filtrar
+            </button>
+        </div>
+        <div class="flex flex-wrap gap-3 text-sm">
+            {% if selected_period_label %}
+            <div class="flex items-center gap-2 px-3 py-1 rounded-full border border-blue-100 bg-blue-50 text-blue-700">
+                <span class="font-semibold">Período:</span>
+                <span>{{ selected_period_label }}</span>
+            </div>
+            {% endif %}
+            {% if selected_vendor_label %}
+            <div class="flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
+                <span class="font-semibold">Vendedor:</span>
+                <span>{{ selected_vendor_label }}</span>
+            </div>
+            {% endif %}
+            {% if selected_status_labels %}
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="font-semibold text-gray-700">Status:</span>
+                {% for status in selected_status_labels %}
+                <span class="bg-orange-50 border border-orange-200 text-orange-700 px-3 py-1 rounded-full">{{ status }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+        <header class="flex items-center justify-between">
+            <div>
+                <h3 class="text-xl font-semibold text-gray-800">Resumo por Linha</h3>
+                <p class="text-sm text-gray-500">Cada linha recebe sua parte proporcional da meta.</p>
+            </div>
+        </header>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm border-collapse">
+                <thead>
+                    <tr class="text-left text-xs uppercase text-slate-500 border-b border-slate-200">
+                        <th class="px-3 py-2">Linha</th>
+                        <th class="px-3 py-2">Participação</th>
+                        <th class="px-3 py-2">Metas / Linha</th>
+                        <th class="px-3 py-2">Pedidos Aprovados</th>
+                        <th class="px-3 py-2">Realizado %</th>
+                        <th class="px-3 py-2">Ranger1/Linha</th>
+                        <th class="px-3 py-2">Ranger2/Linha</th>
+                        <th class="px-3 py-2">Prêmio/Linha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if line_rows %}
+                        {% for row in line_rows %}
+                        <tr class="border-b last:border-b-0 border-slate-100">
+                            <td class="px-3 py-2 font-medium text-gray-700">{{ row.linha }}</td>
+                            <td class="px-3 py-2 text-gray-600">{{ row.participacao | format_percentage }}</td>
+                            <td class="px-3 py-2 text-gray-600">{{ row.meta_linha | format_currency_brl }}</td>
+                            <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ row.pedidos_aprovados | format_currency_brl }}</td>
+                            <td class="px-3 py-2 text-gray-600">
+                                {% if row.realizado_percent is not none %}
+                                {{ row.realizado_percent | format_percentage }}
+                                {% else %}
+                                ---
+                                {% endif %}
+                            </td>
+                            <td class="px-3 py-2 text-gray-600">{{ row.ranger1 | format_percentage }}</td>
+                            <td class="px-3 py-2 text-gray-600">{{ row.ranger2 | format_percentage }}</td>
+                            <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ row.premio | format_currency_brl }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="px-3 py-4 text-center text-slate-500">Não há dados de linha para o período selecionado.</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+        <header class="flex items-center justify-between">
+            <div>
+                <h3 class="text-xl font-semibold text-gray-800">Resumo por Vendedor</h3>
+                <p class="text-sm text-gray-500">Apura o desempenho e o prêmio aplicado a cada representante.</p>
+            </div>
+        </header>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm border-collapse">
+                <thead>
+                    <tr class="text-left text-xs uppercase text-slate-500 border-b border-slate-200">
+                        <th class="px-3 py-2">Vendedor</th>
+                        <th class="px-3 py-2">Participação</th>
+                        <th class="px-3 py-2">Metas / Linha</th>
+                        <th class="px-3 py-2">Pedidos Aprovados</th>
+                        <th class="px-3 py-2">Realizado %</th>
+                        <th class="px-3 py-2">Ranger1/Total</th>
+                        <th class="px-3 py-2">Ranger2/Total</th>
+                        <th class="px-3 py-2">Prêmio/Geral</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if vendor_rows %}
+                        {% for row in vendor_rows %}
+                        <tr class="border-b last:border-b-0 border-slate-100">
+                            <td class="px-3 py-2 font-medium text-gray-700">
+                                {{ row.nome }}
+                                {% if row.codigo %}
+                                <span class="text-slate-400 text-xs ml-1">({{ row.codigo }})</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-3 py-2 text-gray-600">{{ row.participacao | format_percentage }}</td>
+                            <td class="px-3 py-2 text-gray-600">{{ row.meta_linha | format_currency_brl }}</td>
+                            <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ row.pedidos_aprovados | format_currency_brl }}</td>
+                            <td class="px-3 py-2 text-gray-600">
+                                {% if row.realizado_percent is not none %}
+                                {{ row.realizado_percent | format_percentage }}
+                                {% else %}
+                                ---
+                                {% endif %}
+                            </td>
+                            <td class="px-3 py-2 text-gray-600">{{ row.ranger1 | format_percentage }}</td>
+                            <td class="px-3 py-2 text-gray-600">{{ row.ranger2 | format_percentage }}</td>
+                            <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ row.premio | format_currency_brl }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="px-3 py-4 text-center text-slate-500">Não há dados de vendedores para o período selecionado.</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-1">
+            <span class="text-sm text-gray-500">Meta</span>
+            <span class="text-xl font-semibold text-gray-800">{{ meta_total | format_currency_brl }}</span>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-1">
+            <span class="text-sm text-gray-500">Pedidos Aprovados</span>
+            <span class="text-xl font-semibold text-gray-800">{{ pedidos_total | format_currency_brl }}</span>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-1">
+            <span class="text-sm text-gray-500">Meta Pendente Linha</span>
+            <span class="text-xl font-semibold text-gray-800">{{ meta_pendente_linha | format_currency_brl }}</span>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-1">
+            <span class="text-sm text-gray-500">Prêmio</span>
+            <span class="text-xl font-semibold text-gray-800">{{ premio_total | format_currency_brl }}</span>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-1">
+            <span class="text-sm text-gray-500">Meta Realizada %</span>
+            <span class="text-xl font-semibold text-gray-800">
+                {% if meta_realizada_percent is not none %}
+                {{ meta_realizada_percent | format_percentage }}
+                {% else %}
+                ---
+                {% endif %}
+            </span>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-1">
+            <span class="text-sm text-gray-500">Meta Pendente %</span>
+            <span class="text-xl font-semibold text-gray-800">
+                {% if meta_pendente_percent is not none %}
+                {{ meta_pendente_percent | format_percentage }}
+                {% else %}
+                ---
+                {% endif %}
+            </span>
+        </div>
+    </div>
+</div>
+
+<div id="filterModal" class="fixed z-40 inset-0 hidden">
+  <div class="flex items-center justify-center min-h-screen px-4 py-8">
+    <div class="absolute inset-0 bg-gray-800/70" id="filterModalBackdrop"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl">
+      <form id="filterForm" method="get" action="{{ url_for('report_premio_por_vendedor') }}" class="p-6 space-y-6">
+        <div class="flex justify-between items-start">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800">Filtros</h3>
+                <p class="text-sm text-gray-500">Selecione o período e os vendedores que devem ser considerados.</p>
+            </div>
+            <button type="button" id="filterModalCloseIcon" class="text-slate-500 hover:text-slate-700">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Ano</label>
+                <div class="relative w-full">
+                    <input type="hidden" name="year" id="year-input" value="{{ selected_year }}">
+                    <button type="button" id="year-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                        <span id="year-text" class="truncate">{{ selected_year }}</span>
+                        <svg id="year-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="year-options" data-combobox-panel="year" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for year in year_options %}
+                            <button type="button" data-combobox-item data-label="{{ year }}" data-value="{{ year }}" class="w-full text-left px-4 py-2 text-sm hover:bg-indigo-50">
+                                {{ year }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Mês</label>
+                <div class="relative w-full">
+                    <input type="hidden" name="month" id="month-input" value="{{ selected_month }}">
+                    <button type="button" id="month-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                        <span id="month-text" class="truncate">
+                            {% set current_month = month_options | selectattr('value','equalto',selected_month) | first %}
+                            {{ current_month.label if current_month else selected_month }}
+                        </span>
+                        <svg id="month-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="month-options" data-combobox-panel="month" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for month in month_options %}
+                            <button type="button" data-combobox-item data-label="{{ month.label }}" data-value="{{ month.value }}" class="w-full text-left px-4 py-2 text-sm hover:bg-indigo-50">
+                                {{ month.label }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Vendedor</label>
+                <div class="relative w-full">
+                    <input type="hidden" name="vendor" id="vendor-input" value="{{ selected_vendor }}">
+                    <button type="button" id="vendor-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                        <span id="vendor-text" class="truncate">{{ selected_vendor_label or 'Selecione um vendedor' }}</span>
+                        <svg id="vendor-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="vendor-options" data-combobox-panel="vendor" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar vendedores" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="vendor">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto space-y-1">
+                            {% for option in vendor_options %}
+                            {% if option.code %}
+                            <button type="button" data-combobox-item data-label="{{ option.name or option.code }}" data-value="{{ option.code }}" class="w-full text-left px-4 py-2 text-sm rounded-sm hover:bg-indigo-50">
+                                <span class="font-medium text-gray-700">{{ option.name or option.code }}</span>
+                                <span class="text-xs text-slate-400 block">{{ option.code }}</span>
+                            </button>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Status do Vendedor</label>
+                <div class="relative w-full">
+                    <button type="button" id="status-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                        <span id="status-text" class="truncate">Selecione um ou mais status</span>
+                        <svg id="status-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="status-options" data-combobox-panel="status" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar status" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="status">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for status in status_options %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ status.label }}">
+                                <input type="checkbox" name="status" value="{{ status.value }}" class="form-checkbox text-indigo-600 rounded-sm" {% if status.value in selected_statuses %}checked{% endif %}>
+                                <span class="text-gray-700">{{ status.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="flex justify-end gap-3">
+            <button type="button" id="closeFilterModalBtn" class="btn-secondary px-4 py-2 rounded-lg">Cancelar</button>
+            <button type="submit" class="btn-primary px-4 py-2 rounded-lg">Aplicar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const filterModal = document.getElementById('filterModal');
+    const openFilterModalBtn = document.getElementById('openFilterModalBtn');
+    const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+    const closeIcon = document.getElementById('filterModalCloseIcon');
+    const modalBackdrop = document.getElementById('filterModalBackdrop');
+
+    const showModal = () => filterModal.classList.remove('hidden');
+    const hideModal = () => filterModal.classList.add('hidden');
+
+    openFilterModalBtn?.addEventListener('click', showModal);
+    closeFilterModalBtn?.addEventListener('click', hideModal);
+    closeIcon?.addEventListener('click', hideModal);
+    modalBackdrop?.addEventListener('click', hideModal);
+
+    const closeAllComboboxPanels = () => {
+        document.querySelectorAll('[data-combobox-panel]').forEach(panel => {
+            panel.classList.add('hidden');
+            const name = panel.getAttribute('data-combobox-panel');
+            const arrow = document.getElementById(`${name}-arrow`);
+            if (arrow) arrow.classList.remove('rotate-180');
+        });
+    };
+
+    const setupSingleCombobox = ({ name, placeholder, searchable = false }) => {
+        const button = document.getElementById(`${name}-button`);
+        const panel = document.getElementById(`${name}-options`);
+        const text = document.getElementById(`${name}-text`);
+        const arrow = document.getElementById(`${name}-arrow`);
+        const hiddenInput = document.getElementById(`${name}-input`);
+        if (!button || !panel || !text || !hiddenInput) {
+            return;
+        }
+
+        const items = panel.querySelectorAll('[data-combobox-item]');
+        const searchInput = searchable ? panel.querySelector(`[data-combobox-search="${name}"]`) : null;
+
+        const filterItems = () => {
+            if (!searchInput) {
+                return;
+            }
+            const term = searchInput.value.toLowerCase();
+            items.forEach(item => {
+                const label = (item.getAttribute('data-label') || '').toLowerCase();
+                const match = label.includes(term);
+                item.classList.toggle('hidden', !match);
+            });
+        };
+
+        const updateText = (value, label) => {
+            if (label) {
+                text.textContent = label;
+            } else if (value) {
+                text.textContent = value;
+            } else {
+                text.textContent = placeholder;
+            }
+        };
+
+        button.addEventListener('click', () => {
+            const isHidden = panel.classList.contains('hidden');
+            closeAllComboboxPanels();
+            if (isHidden) {
+                panel.classList.remove('hidden');
+                if (arrow) arrow.classList.add('rotate-180');
+                setTimeout(() => searchInput?.focus(), 50);
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!panel.contains(event.target) && !button.contains(event.target)) {
+                panel.classList.add('hidden');
+                if (arrow) arrow.classList.remove('rotate-180');
+            }
+        });
+
+        items.forEach(item => {
+            item.addEventListener('click', () => {
+                const value = item.getAttribute('data-value') || '';
+                const label = item.getAttribute('data-label') || value;
+                hiddenInput.value = value;
+                updateText(value, label);
+                panel.classList.add('hidden');
+                if (arrow) arrow.classList.remove('rotate-180');
+            });
+        });
+
+        if (searchInput) {
+            searchInput.addEventListener('input', filterItems);
+            filterItems();
+        }
+
+        updateText(hiddenInput.value, text.textContent);
+    };
+
+    const setupMultiCombobox = (name, placeholder) => {
+        const button = document.getElementById(`${name}-button`);
+        const panel = document.getElementById(`${name}-options`);
+        const text = document.getElementById(`${name}-text`);
+        const arrow = document.getElementById(`${name}-arrow`);
+        if (!button || !panel || !text) {
+            return;
+        }
+
+        const searchInput = panel.querySelector(`[data-combobox-search="${name}"]`);
+        const items = panel.querySelectorAll('[data-combobox-item]');
+        const checkboxes = panel.querySelectorAll('input[type="checkbox"]');
+
+        const updateText = () => {
+            const selected = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => {
+                    const labelEl = cb.parentElement.querySelector('span');
+                    return labelEl ? labelEl.textContent.trim() : cb.value;
+                });
+            text.textContent = selected.length ? selected.join(', ') : placeholder;
+        };
+
+        const filterItems = () => {
+            if (!searchInput) {
+                return;
+            }
+            const term = searchInput.value.toLowerCase();
+            items.forEach(item => {
+                const label = (item.getAttribute('data-label') || '').toLowerCase();
+                const match = label.includes(term);
+                item.classList.toggle('hidden', !match);
+            });
+        };
+
+        button.addEventListener('click', () => {
+            const isHidden = panel.classList.contains('hidden');
+            closeAllComboboxPanels();
+            if (isHidden) {
+                panel.classList.remove('hidden');
+                if (arrow) arrow.classList.add('rotate-180');
+                setTimeout(() => searchInput?.focus(), 50);
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!panel.contains(event.target) && !button.contains(event.target)) {
+                panel.classList.add('hidden');
+                if (arrow) arrow.classList.remove('rotate-180');
+            }
+        });
+
+        if (searchInput) {
+            searchInput.addEventListener('input', filterItems);
+        }
+        checkboxes.forEach(cb => cb.addEventListener('change', updateText));
+
+        updateText();
+    };
+
+    setupSingleCombobox({ name: 'year', placeholder: 'Selecione um ano' });
+    setupSingleCombobox({ name: 'month', placeholder: 'Selecione um mês' });
+    setupSingleCombobox({ name: 'vendor', placeholder: 'Selecione um vendedor', searchable: true });
+    setupMultiCombobox('status', 'Selecione um ou mais status');
+});
+</script>
+{% endblock %}
+

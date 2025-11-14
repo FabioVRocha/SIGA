@@ -26,6 +26,9 @@ from pathlib import Path
 import threading
 from io import BytesIO
 import zipfile
+from collections import defaultdict
+import unicodedata
+import openpyxl
 
 # Importa as configurações do arquivo config.py
 from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE, INVOICE_XML_STORAGE_DIR
@@ -201,6 +204,7 @@ RECORD_TYPE_LABELS = {
 
 ASSISTANCE_MEDIA_PATH_PARAM = 'technical_assistance_media_base_path'
 INVOICE_XML_STORAGE_PARAM = 'invoices_xml_storage_dir'
+RANGER_METAS_PATH_PARAM = 'ranger_metas_directory'
 ASSISTANCE_MEDIA_IMAGE_EXTENSIONS = {
     '.jpg',
     '.jpeg',
@@ -1124,8 +1128,22 @@ def format_decimal_br(value, decimals=2):
     return format_pattern.format(value).replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def format_percentage(value, decimals=2):
+    """Formata valores decimais como porcentagens brasileiras."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        value = 0.0
+    normalized = round(value * 100, decimals)
+    format_pattern = f"{{:,.{decimals}f}}"
+    formatted = format_pattern.format(normalized)
+    formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{formatted}%"
+
+
 app.jinja_env.filters["format_currency_brl"] = format_currency_brl
 app.jinja_env.filters["format_decimal_br"] = format_decimal_br
+app.jinja_env.filters["format_percentage"] = format_percentage
 
 
 
@@ -1763,6 +1781,397 @@ def get_sales_order_vendors():
         finally:
             conn.close()
     return vendor_options
+
+
+def get_vendors_for_premio():
+    """Retorna os vendedores que começam com 'VEN - ' usados no relatório de prêmio."""
+    conn = get_erp_db_connection()
+    metadata = []
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(v.vendedor::text, '') AS vendor_code,
+                    COALESCE(v.vennome, '') AS vendor_name,
+                    COALESCE(v.venstatus, '') AS vendor_status
+                FROM vendedor v
+                WHERE COALESCE(v.vennome, '') LIKE 'VEN - %'
+                ORDER BY COALESCE(v.vennome, ''), COALESCE(v.vendedor::text, '')
+                """
+            )
+            rows = cur.fetchall()
+            cur.close()
+            for code, name, status in rows:
+                metadata.append({
+                    'code': (code or '').strip(),
+                    'name': (name or '').strip(),
+                    'status': (status or '').strip(),
+                })
+        except Error as e:
+            print(f'Erro ao buscar vendedores para prêmio: {e}')
+        finally:
+            conn.close()
+    return metadata
+
+
+def _normalize_header_name(value):
+    if value is None:
+        return ''
+    normalized = unicodedata.normalize('NFD', str(value))
+    without_accents = ''.join(ch for ch in normalized if unicodedata.category(ch) != 'Mn')
+    return ''.join(ch.lower() for ch in without_accents if ch.isalnum())
+
+
+def normalize_period_code(value):
+    if value is None:
+        return ''
+    raw = str(value).strip()
+    digits = ''.join(ch for ch in raw if ch.isdigit())
+    if len(digits) >= 6:
+        return digits[:4] + digits[4:6]
+    return raw
+
+
+def parse_period_year_month(value):
+    if value is None:
+        return None
+    raw = str(value).strip()
+    for fmt in ('%Y%m', '%Y/%m', '%Y-%m', '%m/%Y', '%m-%Y'):
+        try:
+            dt = datetime.datetime.strptime(raw, fmt)
+            return dt.year, dt.month
+        except ValueError:
+            continue
+    digits = ''.join(ch for ch in raw if ch.isdigit())
+    if len(digits) >= 6:
+        try:
+            year = int(digits[:4])
+            month = int(digits[4:6])
+            if 1 <= month <= 12:
+                return year, month
+        except ValueError:
+            pass
+    return None
+
+
+def format_period_label(value):
+    parsed = parse_period_year_month(value)
+    if parsed:
+        year, month = parsed
+        return f"{month:02d}/{year}"
+    return (str(value) or '').strip()
+
+
+def determine_default_period_selection(period_options):
+    if not period_options:
+        return []
+    today = datetime.date.today()
+    candidates = {
+        f"{today.year}{today.month:02d}",
+        f"{today.year}-{today.month:02d}",
+        f"{today.year}/{today.month:02d}",
+    }
+    normalized_options = {
+        normalize_period_code(opt['value']): opt['value']
+        for opt in period_options
+        if opt and opt.get('value')
+    }
+    for candidate in candidates:
+        if candidate in normalized_options:
+            return [normalized_options[candidate]]
+    return [period_options[0]['value']]
+
+
+def get_period_options():
+    conn = get_erp_db_connection()
+    options = []
+    if not conn:
+        return options
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT percod FROM metas WHERE percod IS NOT NULL ORDER BY percod DESC;")
+        for row in cur.fetchall():
+            value = (row[0] or '')
+            if not str(value).strip():
+                continue
+            clean_value = str(value).strip()
+            options.append({
+                'value': clean_value,
+                'label': format_period_label(clean_value),
+            })
+        cur.close()
+    except Error as e:
+        print(f'Erro ao buscar períodos de metas: {e}')
+    finally:
+        conn.close()
+    return options
+
+
+def parse_percentage_like_value(raw_value):
+    if raw_value is None:
+        return 0.0
+    if isinstance(raw_value, (int, float, Decimal)):
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            return 0.0
+        if 1 < value <= 100:
+            return value / 100
+        return value
+    text = str(raw_value).strip()
+    if not text:
+        return 0.0
+    is_percent = '%' in text
+    normalized = text.replace('%', '').replace(',', '.')
+    try:
+        value = float(normalized)
+    except ValueError:
+        return 0.0
+    if is_percent or (value > 1 and value <= 100):
+        return value / 100
+    return value
+
+
+def load_ranger_metas_entries(user_id, selected_periods=None, selected_vendors=None):
+    directory = (get_user_parameters(user_id, RANGER_METAS_PATH_PARAM) or '').strip()
+    if not directory:
+        return [], 'Configure o caminho da planilha MetasXPremio.xlsx em Parâmetros do Sistema.'
+
+    path_obj = Path(directory).expanduser()
+    if path_obj.is_dir():
+        path_obj = path_obj / 'MetasXPremio.xlsx'
+    elif path_obj.suffix and path_obj.suffix.lower() not in ('.xlsx', '.xls'):
+        path_obj = path_obj / 'MetasXPremio.xlsx'
+
+    if not path_obj.exists():
+        return [], f"Arquivo não encontrado: {path_obj}"
+
+    try:
+        workbook = openpyxl.load_workbook(path_obj, data_only=True)
+    except Exception as exc:
+        return [], f"Erro ao carregar a planilha: {exc}"
+
+    sheet = None
+    for name in workbook.sheetnames:
+        if name.strip().lower() == 'rangermetas':
+            sheet = workbook[name]
+            break
+    if sheet is None:
+        return [], "A aba 'RangerMetas' não foi encontrada na planilha."
+
+    rows = sheet.iter_rows(values_only=True)
+    header = next(rows, None)
+    if not header:
+        return [], "A planilha 'RangerMetas' está vazia."
+
+    header_index = {}
+    for idx, column_name in enumerate(header):
+        normalized = _normalize_header_name(column_name)
+        if 'periodo' in normalized:
+            header_index['periodo'] = idx
+        elif 'vendedor' in normalized:
+            header_index['vendedor'] = idx
+        elif 'linha' in normalized:
+            header_index['linha'] = idx
+        elif 'participacao' in normalized:
+            header_index['participacao'] = idx
+        elif 'ranger1' in normalized:
+            header_index['ranger1'] = idx
+        elif 'ranger2' in normalized:
+            header_index['ranger2'] = idx
+
+    entries = []
+    normalized_period_filter = {
+        normalize_period_code(value) for value in (selected_periods or []) if value
+    } or None
+    normalized_vendor_filter = {
+        str(value).strip() for value in (selected_vendors or []) if value
+    } or None
+
+    for row in rows:
+        period_raw = row[header_index.get('periodo')] if 'periodo' in header_index else None
+        vendor_raw = row[header_index.get('vendedor')] if 'vendedor' in header_index else ''
+        line_raw = row[header_index.get('linha')] if 'linha' in header_index else None
+
+        period_norm = normalize_period_code(period_raw)
+        if normalized_period_filter and period_norm not in normalized_period_filter:
+            continue
+
+        vendor_code = str(vendor_raw).strip() if vendor_raw is not None else ''
+        if normalized_vendor_filter and vendor_code not in normalized_vendor_filter:
+            continue
+
+        line_name = (str(line_raw).strip() if line_raw is not None and str(line_raw).strip() else 'Sem Linha')
+        participation = parse_percentage_like_value(row[header_index['participacao']]) if 'participacao' in header_index else 0.0
+        ranger1 = parse_percentage_like_value(row[header_index['ranger1']]) if 'ranger1' in header_index else 0.0
+        ranger2 = parse_percentage_like_value(row[header_index['ranger2']]) if 'ranger2' in header_index else 0.0
+
+        entries.append({
+            'period': period_norm,
+            'vendor': vendor_code,
+            'line': line_name,
+            'participation': participation,
+            'ranger1': ranger1,
+            'ranger2': ranger2,
+        })
+
+    return entries, None
+
+
+def fetch_meta_totals_for_premio(selected_periods, selected_vendors):
+    if not selected_periods:
+        return 0.0, {}
+    conn = get_erp_db_connection()
+    meta_total = 0.0
+    meta_by_vendor = {}
+    if not conn:
+        return meta_total, meta_by_vendor
+    try:
+        cur = conn.cursor()
+        sql = """
+            SELECT COALESCE(vendedor::text, '') AS vendedor_code,
+                   SUM(COALESCE(m.metavlr, 0)) AS total_meta
+            FROM metas m
+            WHERE 1=1
+        """
+        params = []
+        placeholders = ','.join(['%s'] * len(selected_periods))
+        sql += f" AND m.percod IN ({placeholders})"
+        params.extend(selected_periods)
+
+        if selected_vendors:
+            vendor_placeholders = ','.join(['%s'] * len(selected_vendors))
+            sql += f" AND COALESCE(m.vendedor::text, '') IN ({vendor_placeholders})"
+            params.extend(selected_vendors)
+
+        sql += " GROUP BY COALESCE(vendedor::text, '')"
+        cur.execute(sql, tuple(params))
+        for vendor_code, total_meta in cur.fetchall():
+            code = (vendor_code or '').strip()
+            value = float(total_meta or 0)
+            meta_by_vendor[code] = value
+            meta_total += value
+        cur.close()
+    except Error as e:
+        print(f'Erro ao buscar metas para o prêmio: {e}')
+    finally:
+        conn.close()
+    return meta_total, meta_by_vendor
+
+
+def fetch_pedidos_aprovados_summary(selected_periods, selected_vendors):
+    conn = get_erp_db_connection()
+    line_totals = defaultdict(float)
+    vendor_totals = defaultdict(float)
+    overall_total = 0.0
+    if not conn:
+        return line_totals, vendor_totals, overall_total
+    try:
+        pedprodu_columns = get_table_columns(conn, 'pedprodu')
+        has_pprdescped = 'pprdescped' in pedprodu_columns if pedprodu_columns else False
+        if has_pprdescped:
+            value_expr = "SUM(COALESCE(pp.pprvlsoma, 0)) - SUM(COALESCE(pp.pprdescped, 0))"
+            sql = f"""
+                SELECT
+                    COALESCE(g.linha, 'Sem Linha') AS linha,
+                    COALESCE(p.pedrepres::text, '') AS vendor_code,
+                    {value_expr} AS total_value
+                FROM pedprodu pp
+                JOIN pedido p ON pp.pedido = p.pedido
+                LEFT JOIN produto prod ON pp.pprproduto = prod.produto
+                LEFT JOIN grupo1 g1 ON prod.nsu = g1.nsu
+                LEFT JOIN grupo g ON g1.grupo = g.grupo
+                WHERE COALESCE(p.pedaprova, '') = 'S'
+            """
+        else:
+            has_peddesval_column = table_has_column(conn, 'pedido', 'peddesval')
+            if has_peddesval_column:
+                discount_component = """
+                    CASE
+                        WHEN NULLIF(pt.total_pedido_value, 0) IS NULL THEN 0
+                        ELSE COALESCE(p.peddesval, 0) * COALESCE(pp.pprvlsoma, 0) / NULLIF(pt.total_pedido_value, 0)
+                    END
+                """
+            else:
+                discount_component = "0"
+
+            value_expr = f"""
+                SUM(
+                    COALESCE(pp.pprvlsoma, 0)
+                    - ({discount_component})
+                )
+            """
+
+            sql = f"""
+                WITH pedido_totals AS (
+                    SELECT
+                        pp.pedido,
+                        SUM(COALESCE(pp.pprvlsoma, 0)) AS total_pedido_value
+                    FROM pedprodu pp
+                    GROUP BY pp.pedido
+                )
+                SELECT
+                    COALESCE(g.linha, 'Sem Linha') AS linha,
+                    COALESCE(p.pedrepres::text, '') AS vendor_code,
+                    {value_expr} AS total_value
+                FROM pedprodu pp
+                JOIN pedido p ON pp.pedido = p.pedido
+                LEFT JOIN pedido_totals pt ON pt.pedido = pp.pedido
+                LEFT JOIN produto prod ON pp.pprproduto = prod.produto
+                LEFT JOIN grupo1 g1 ON prod.nsu = g1.nsu
+                LEFT JOIN grupo g ON g1.grupo = g.grupo
+                WHERE COALESCE(p.pedaprova, '') = 'S'
+            """
+        params = []
+
+        period_filters = []
+        for period in (selected_periods or []):
+            parsed = parse_period_year_month(period)
+            if parsed:
+                period_filters.append(parsed)
+        if period_filters:
+            clause_parts = []
+            for year, month in period_filters:
+                clause_parts.append("(EXTRACT(YEAR FROM p.peddata) = %s AND EXTRACT(MONTH FROM p.peddata) = %s)")
+                params.extend([year, month])
+            sql += " AND (" + " OR ".join(clause_parts) + ")"
+
+        if selected_vendors:
+            vendor_placeholders = ','.join(['%s'] * len(selected_vendors))
+            sql += f" AND COALESCE(p.pedrepres::text, '') IN ({vendor_placeholders})"
+            params.extend(selected_vendors)
+
+        sql += " GROUP BY COALESCE(g.linha, 'Sem Linha'), COALESCE(p.pedrepres::text, '')"
+
+        cur = conn.cursor()
+        cur.execute(sql, tuple(params))
+        for line, vendor_code, total_value in cur.fetchall():
+            value = float(total_value or 0)
+            key_line = line or 'Sem Linha'
+            key_vendor = (vendor_code or '').strip()
+            line_totals[key_line] += value
+            vendor_totals[key_vendor] += value
+            overall_total += value
+        cur.close()
+    except Error as e:
+        print(f'Erro ao buscar pedidos aprovados para o prêmio: {e}')
+    finally:
+        conn.close()
+    return line_totals, vendor_totals, overall_total
+
+
+def compute_prize_amount(pedidos_value, realizado_percent, ranger1, ranger2):
+    if not pedidos_value or pedidos_value <= 0:
+        return 0.0
+    if realizado_percent is None:
+        return 0.0
+    if realizado_percent >= 1 and ranger2:
+        return pedidos_value * ranger2
+    if 0.8 <= realizado_percent < 1 and ranger1:
+        return pedidos_value * ranger1
+    return 0.0
 
 
 def get_sales_order_customers():
@@ -10940,6 +11349,215 @@ def report_revenue_by_vendor():
     )
 
 
+@app.route('/report_premio_por_vendedor')
+@login_required
+def report_premio_por_vendedor():
+    user_id = session.get('user_id')
+    today = datetime.date.today()
+    period_options = get_period_options()
+
+    period_lookup = {}
+    available_years = set()
+    for option in period_options:
+        parsed = parse_period_year_month(option['value'])
+        if parsed:
+            year, month = parsed
+            available_years.add(year)
+            period_lookup.setdefault((year, month), option['value'])
+
+    if not available_years:
+        available_years = {today.year}
+        period_lookup[(today.year, today.month)] = ''
+
+    year_values = sorted(available_years, reverse=True)
+    raw_year = (request.args.get('year') or '').strip()
+    selected_year = raw_year if raw_year.isdigit() and int(raw_year) in year_values else ''
+    if not selected_year:
+        fallback_year = today.year if today.year in year_values else year_values[0]
+        selected_year = str(fallback_year)
+
+    MONTH_LABELS_PT = [
+        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    ]
+    month_options = [
+        {'value': f"{month:02d}", 'label': MONTH_LABELS_PT[month - 1]}
+        for month in range(1, 13)
+    ]
+    raw_month = (request.args.get('month') or '').strip()
+    month_values = {opt['value'] for opt in month_options}
+    selected_month = raw_month if raw_month in month_values else ''
+    if not selected_month:
+        selected_month = f"{today.month:02d}"
+
+    period_code = period_lookup.get((int(selected_year), int(selected_month)))
+    if not period_code and period_options:
+        period_code = period_options[0]['value']
+    selected_periods = [period_code] if period_code else []
+
+    vendor_metadata = get_vendors_for_premio()
+    vendor_label_map = {
+        item['code']: item['name'] or item['code'] or 'Sem nome'
+        for item in vendor_metadata
+    }
+    selected_vendor = (request.args.get('vendor') or '').strip()
+
+    raw_statuses = set()
+    for item in vendor_metadata:
+        raw_statuses.add(item['status'] or 'Sem Valor')
+    status_list = sorted(raw_statuses)
+    if 'A' not in status_list:
+        status_list.insert(0, 'A')
+    status_options = [{'value': status, 'label': status} for status in status_list]
+    selected_statuses = [
+        status for status in (request.args.getlist('status') or ['A'])
+        if status
+    ]
+    if not selected_statuses:
+        selected_statuses = ['A']
+
+    status_filtered_codes = {
+        item['code'] for item in vendor_metadata
+        if not selected_statuses or (item['status'] or 'Sem Valor') in selected_statuses
+    }
+    vendor_options_for_template = [
+        {
+            'code': item['code'],
+            'name': item['name'],
+            'status': item['status'],
+        }
+        for item in vendor_metadata
+        if item['code'] in status_filtered_codes
+    ]
+    if selected_vendor:
+        applied_vendor_filters = [selected_vendor]
+    else:
+        applied_vendor_filters = sorted(code for code in status_filtered_codes if code)
+
+    ranger_entries, ranger_error = load_ranger_metas_entries(
+        user_id,
+        selected_periods,
+        applied_vendor_filters if applied_vendor_filters else None
+    )
+
+    line_participation = defaultdict(float)
+    line_ranger1 = defaultdict(float)
+    line_ranger2 = defaultdict(float)
+    vendor_participation = defaultdict(float)
+    vendor_ranger1 = defaultdict(float)
+    vendor_ranger2 = defaultdict(float)
+
+    for entry in ranger_entries:
+        line_participation[entry['line']] += entry['participation']
+        line_ranger1[entry['line']] += entry['ranger1']
+        line_ranger2[entry['line']] += entry['ranger2']
+        vendor_participation[entry['vendor']] += entry['participation']
+        vendor_ranger1[entry['vendor']] += entry['ranger1']
+        vendor_ranger2[entry['vendor']] += entry['ranger2']
+
+    meta_total, meta_by_vendor = fetch_meta_totals_for_premio(
+        selected_periods,
+        applied_vendor_filters if applied_vendor_filters else None
+    )
+    line_pedidos, vendor_pedidos, total_pedidos = fetch_pedidos_aprovados_summary(
+        selected_periods,
+        applied_vendor_filters if applied_vendor_filters else None
+    )
+
+    unique_lines = set(line_participation.keys()) | set(line_pedidos.keys())
+    unique_vendors = set(vendor_participation.keys()) | set(vendor_pedidos.keys()) | set(meta_by_vendor.keys())
+
+    line_rows = []
+    line_prize_total = 0.0
+    for linha in sorted(unique_lines):
+        participation = line_participation.get(linha, 0.0)
+        meta_line = meta_total * participation
+        pedidos_valor = line_pedidos.get(linha, 0.0)
+        realizado_percent = (pedidos_valor / meta_line) if meta_line else None
+        ranger1 = line_ranger1.get(linha, 0.0)
+        ranger2 = line_ranger2.get(linha, 0.0)
+        premio = compute_prize_amount(pedidos_valor, realizado_percent, ranger1, ranger2)
+        line_prize_total += premio
+        line_rows.append({
+            'linha': linha,
+            'participacao': participation,
+            'meta_linha': meta_line,
+            'pedidos_aprovados': pedidos_valor,
+            'realizado_percent': realizado_percent,
+            'ranger1': ranger1,
+            'ranger2': ranger2,
+            'premio': premio,
+        })
+
+    vendor_rows = []
+    vendor_prize_total = 0.0
+    for vendor_code in sorted(unique_vendors, key=lambda x: vendor_label_map.get(x, x or '')):
+        participation = vendor_participation.get(vendor_code, 0.0)
+        meta_vendedor = meta_by_vendor.get(vendor_code, 0.0)
+        meta_allocated = meta_vendedor * participation
+        pedidos_valor = vendor_pedidos.get(vendor_code, 0.0)
+        realizado_percent = (pedidos_valor / meta_allocated) if meta_allocated else None
+        ranger1 = vendor_ranger1.get(vendor_code, 0.0)
+        ranger2 = vendor_ranger2.get(vendor_code, 0.0)
+        premio = compute_prize_amount(pedidos_valor, realizado_percent, ranger1, ranger2)
+        vendor_prize_total += premio
+        vendor_rows.append({
+            'codigo': vendor_code,
+            'nome': vendor_label_map.get(vendor_code, vendor_code),
+            'participacao': participation,
+            'meta_linha': meta_allocated,
+            'pedidos_aprovados': pedidos_valor,
+            'realizado_percent': realizado_percent,
+            'ranger1': ranger1,
+            'ranger2': ranger2,
+            'premio': premio,
+        })
+
+    total_prize = line_prize_total + vendor_prize_total
+    meta_pendente_linha = max(meta_total - total_pedidos, 0.0)
+    meta_realizada_percent = None
+    meta_pending_percent = None
+    if meta_total:
+        meta_realizada_percent = total_pedidos / meta_total
+        ratio_minus_one = meta_realizada_percent - 1
+        meta_pending_percent = 0.0 if ratio_minus_one >= 0 else ratio_minus_one
+
+    period_label_map = {opt['value']: opt['label'] for opt in period_options}
+    selected_period_label = period_label_map.get(period_code, '')
+    selected_vendor_label = vendor_label_map.get(selected_vendor) if selected_vendor else ''
+    selected_status_labels = [
+        status for status in selected_statuses
+    ]
+
+    return render_template(
+        'report_premio_por_vendedor.html',
+        period_options=period_options,
+        selected_period_label=selected_period_label,
+        line_rows=line_rows,
+        vendor_rows=vendor_rows,
+        meta_total=meta_total,
+        pedidos_total=total_pedidos,
+        meta_pendente_linha=meta_pendente_linha,
+        premio_total=total_prize,
+        meta_realizada_percent=meta_realizada_percent,
+        meta_pendente_percent=meta_pending_percent,
+        ranger_error=ranger_error,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
+        year_options=year_values,
+        month_options=month_options,
+        selected_year=selected_year,
+        selected_month=selected_month,
+        vendor_options=vendor_options_for_template,
+        selected_vendor=selected_vendor,
+        vendor_label_map=vendor_label_map,
+        selected_vendor_label=selected_vendor_label,
+        status_options=status_options,
+        selected_statuses=selected_statuses,
+        selected_status_labels=selected_status_labels,
+    )
+
+
 @app.route('/commercial_reports')
 @login_required
 def commercial_reports():
@@ -12742,6 +13360,9 @@ def gerencial_parameters():
         xml_storage_path = request.form.get('invoices_xml_storage_path', '').strip()
         if not save_user_parameters(user_id, INVOICE_XML_STORAGE_PARAM, xml_storage_path):
             success = False
+        ranger_metas_directory = request.form.get('ranger_metas_directory', '').strip()
+        if not save_user_parameters(user_id, RANGER_METAS_PATH_PARAM, ranger_metas_directory):
+            success = False
         if success:
             flash('Parâmetros salvos com sucesso!', 'success')
         else:
@@ -12765,6 +13386,7 @@ def gerencial_parameters():
 
     assistance_media_base_path = get_user_parameters(user_id, ASSISTANCE_MEDIA_PATH_PARAM) or ''
     xml_storage_base_path = get_user_parameters(user_id, INVOICE_XML_STORAGE_PARAM) or ''
+    ranger_metas_directory = get_user_parameters(user_id, RANGER_METAS_PATH_PARAM) or ''
 
     # Marcar as transações e CFOPs que já estão selecionados
     for trans in all_transactions:
@@ -12787,6 +13409,7 @@ def gerencial_parameters():
         selected_report=selected_report,
         assistance_media_base_path=assistance_media_base_path,
         xml_storage_base_path=xml_storage_base_path,
+        ranger_metas_directory=ranger_metas_directory,
     )
 
 
