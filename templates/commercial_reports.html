@@ -11,6 +11,11 @@
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Comparativo Mensal de Pedidos</h2>
         <p class="text-medium-gray">Compare o valor total mensal dos pedidos de venda com o ano anterior.</p>
     </a>
+    <a href="{{ url_for('report_sales_by_client_year') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-teal mb-4"><i class="fas fa-table fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Análise de Vendas por Cliente X Ano</h2>
+        <p class="text-medium-gray">Matriz com totais por cliente e indicador de crescimento anual, exibindo produtos ao expandir cada cliente.</p>
+    </a>
     <a href="{{ url_for('report_orders_by_representatives') }}" class="card p-6 text-center flex flex-col items-center justify-center">
         <div class="text-icon-green mb-4"><i class="fas fa-user-tie fa-3x"></i></div>
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Pedidos por Representantes</h2>

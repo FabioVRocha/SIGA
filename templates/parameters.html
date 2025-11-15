@@ -6,96 +6,186 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
-    <form method="get" action="{{ url_for('gerencial_parameters') }}" class="mb-4">
-        <label for="report" class="form-label text-lg font-medium">Relatório:</label>
-        <select name="report" id="report" class="ml-2 h-8 border-gray-300 rounded" onchange="this.form.submit()">
-            {% for value, label in available_reports %}
-            <option value="{{ value }}" {% if value == selected_report %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-    </form>
-    <h2 class="text-xl font-semibold text-gray-800 mb-4">Configurações de Transações para Notas Fiscais</h2>
+    <form id="report-selector" method="get" action="{{ url_for('gerencial_parameters') }}" class="hidden"></form>
+    <style>
+        .tab-button {
+            border: 1px solid #d1d5db;
+            background-color: #ffffff;
+            color: #1f2937;
+        }
+        .tab-button.tab-active {
+            background-color: var(--clr-sidebar-bg);
+            color: #ffffff;
+            box-shadow: 0 10px 15px rgba(15, 23, 42, 0.15);
+        }
+    </style>
+    <div class="border-b border-gray-200 mb-6">
+        <nav class="flex flex-wrap gap-2 text-sm font-semibold">
+            <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="transacoes-cfop">Transações &amp; CFOP</button>
+            <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="midias">Mídias Assistências</button>
+            <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="xml">XML</button>
+            <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="metas">Metas &amp; Prêmios</button>
+        </nav>
+    </div>
     <form action="{{ url_for('gerencial_parameters') }}" method="POST" class="space-y-6">
         <input type="hidden" name="report" value="{{ selected_report }}">
-        <div class="form-group">
-            <label class="form-label text-lg font-medium">Transações a serem exibidas no Espelho de Notas Fiscais:</label>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-2">
-                {% for transacao in all_transactions %}
-                <div class="flex items-center">
-                    <input type="checkbox" id="transacao_{{ transacao.transacao }}" name="selected_transactions" value="{{ transacao.transacao }}"
-                           class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                           {% if transacao.is_selected %}checked{% endif %}>
-                    <label for="transacao_{{ transacao.transacao }}" class="ml-2 text-gray-700">{{ transacao.trsnome }} ({{ transacao.transacao }})</label>
-                    <select name="sign_{{ transacao.transacao }}" class="ml-2 h-8 border-gray-300 rounded">
-                        <option value="+" {% if transacao.sign == '+' %}selected{% endif %}>+</option>
-                        <option value="-" {% if transacao.sign == '-' %}selected{% endif %}>-</option>
+        <div class="tab-panel space-y-6" data-tab-panel="transacoes-cfop">
+            <div class="form-group">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Configurações de Transações</h2>
+                <label class="form-label text-lg font-medium">Transações a serem exibidas no Espelho de Notas Fiscais:</label>
+                <div class="mt-3">
+                    <label for="report" class="form-label text-base font-medium">Relatório:</label>
+                    <select
+                        id="report"
+                        name="report"
+                        form="report-selector"
+                        class="ml-2 h-8 border-gray-300 rounded w-full max-w-md"
+                        onchange="document.getElementById('report-selector').submit()"
+                    >
+                        {% for value, label in available_reports %}
+                        <option value="{{ value }}" {% if value == selected_report %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
                     </select>
                 </div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <h2 class="text-xl font-semibold text-gray-800">Configurações de CFOP para Relatórios</h2>
-        <div class="form-group">
-            <label class="form-label text-lg font-medium">CFOP a serem exibidas nos relatórios:</label>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-2">
-                {% for cfop in all_cfops %}
-                <div class="flex items-center">
-                    <input type="checkbox" id="cfop_{{ cfop.cfop }}" name="selected_cfops" value="{{ cfop.cfop }}"
-                           class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                           {% if cfop.is_selected %}checked{% endif %}>
-                    <label for="cfop_{{ cfop.cfop }}" class="ml-2 text-gray-700">{{ cfop.cfop }}</label>
+                <div class="relative mt-2" data-multiselect>
+                    <button
+                        type="button"
+                        class="w-full rounded-lg border border-gray-300 px-4 py-2 text-left flex justify-between items-center text-gray-700"
+                        data-multiselect-button
+                        data-placeholder="Selecione transações"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                    >
+                        <span data-multiselect-summary>Selecione transações</span>
+                        <i class="fas fa-chevron-down text-sm text-gray-500"></i>
+                    </button>
+                    <div class="absolute z-10 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg hidden" data-multiselect-panel>
+                        <div class="px-4 py-3">
+                            <input
+                                type="text"
+                                class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Buscar transações..."
+                                data-multiselect-search
+                            >
+                        </div>
+                        <div class="max-h-64 overflow-y-auto px-4 pb-4" data-multiselect-options>
+                            {% for transacao in all_transactions %}
+                            <label
+                                class="flex items-center justify-between gap-4 rounded p-2 hover:bg-gray-50"
+                                data-multiselect-option
+                                data-option-text="{{ transacao.trsnome }} {{ transacao.transacao }}"
+                            >
+                                <div class="flex items-center gap-2">
+                                    <input type="checkbox" id="transacao_{{ transacao.transacao }}" name="selected_transactions" value="{{ transacao.transacao }}"
+                                           class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                           {% if transacao.is_selected %}checked{% endif %}>
+                                    <span class="text-sm text-gray-700">{{ transacao.trsnome }} ({{ transacao.transacao }})</span>
+                                </div>
+                                <select name="sign_{{ transacao.transacao }}" class="ml-2 h-8 rounded border border-gray-300 px-2 text-sm">
+                                    <option value="+" {% if transacao.sign == '+' %}selected{% endif %}>+</option>
+                                    <option value="-" {% if transacao.sign == '-' %}selected{% endif %}>-</option>
+                                </select>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
                 </div>
-                {% endfor %}
+            </div>
+            <div class="form-group">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Configurações de CFOP</h2>
+                <label class="form-label text-lg font-medium">CFOP a serem exibidas nos relatórios:</label>
+                <div class="relative mt-2" data-multiselect>
+                    <button
+                        type="button"
+                        class="w-full rounded-lg border border-gray-300 px-4 py-2 text-left flex justify-between items-center text-gray-700"
+                        data-multiselect-button
+                        data-placeholder="Selecione CFOPs"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                    >
+                        <span data-multiselect-summary>Selecione CFOPs</span>
+                        <i class="fas fa-chevron-down text-sm text-gray-500"></i>
+                    </button>
+                    <div class="absolute z-10 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg hidden" data-multiselect-panel>
+                        <div class="px-4 py-3">
+                            <input
+                                type="text"
+                                class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Buscar CFOP..."
+                                data-multiselect-search
+                            >
+                        </div>
+                        <div class="max-h-64 overflow-y-auto px-4 pb-4" data-multiselect-options>
+                            {% for cfop in all_cfops %}
+                            <label
+                                class="flex items-center gap-3 rounded p-2 hover:bg-gray-50"
+                                data-multiselect-option
+                                data-option-text="{{ cfop.cfop }}"
+                            >
+                                <input type="checkbox" id="cfop_{{ cfop.cfop }}" name="selected_cfops" value="{{ cfop.cfop }}"
+                                       class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                       {% if cfop.is_selected %}checked{% endif %}>
+                                <span class="text-sm text-gray-700">{{ cfop.cfop }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <h2 class="text-xl font-semibold text-gray-800">Mídias das Assistências</h2>
-        <div class="form-group">
-            <label for="assistance_media_base_path" class="form-label text-lg font-medium">Diretório base das mídias:</label>
-            <input
-                type="text"
-                id="assistance_media_base_path"
-                name="assistance_media_base_path"
-                class="form-input mt-2"
-                placeholder="Ex.: /mnt/arquivos/assistencias"
-                value="{{ assistance_media_base_path or '' }}"
-            >
-            <p class="text-sm text-gray-500 mt-2">
-                Informe o caminho completo no servidor para a pasta onde cada assistência possui suas mídias (imagens, vídeos e PDFs).
-            </p>
+        <div class="tab-panel hidden space-y-6" data-tab-panel="midias">
+            <div class="form-group">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Mídias das Assistências</h2>
+                <label for="assistance_media_base_path" class="form-label text-lg font-medium">Diretório base das mídias:</label>
+                <input
+                    type="text"
+                    id="assistance_media_base_path"
+                    name="assistance_media_base_path"
+                    class="form-input mt-2"
+                    placeholder="Ex.: /mnt/arquivos/assistencias"
+                    value="{{ assistance_media_base_path or '' }}"
+                >
+                <p class="text-sm text-gray-500 mt-2">
+                    Informe o caminho completo no servidor para a pasta onde cada assistência possui suas mídias (imagens, vídeos e PDFs).
+                </p>
+            </div>
         </div>
 
-        <h2 class="text-xl font-semibold text-gray-800">XML das Notas Fiscais</h2>
-        <div class="form-group">
-            <label for="invoices_xml_storage_path" class="form-label text-lg font-medium">Diretório onde os XMLs estão disponíveis:</label>
-            <input
-                type="text"
-                id="invoices_xml_storage_path"
-                name="invoices_xml_storage_path"
-                class="form-input mt-2"
-                placeholder="Ex.: /mnt/xmls/notas_fiscais"
-                value="{{ xml_storage_base_path or '' }}"
-            >
-            <p class="text-sm text-gray-500 mt-2">
-                Informe o caminho absoluto no servidor onde os XMLs das notas fiscais estão armazenados para o botão "Baixar XML(s)" usá-los.
-            </p>
+        <div class="tab-panel hidden space-y-6" data-tab-panel="xml">
+            <div class="form-group">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">XML das Notas Fiscais</h2>
+                <label for="invoices_xml_storage_path" class="form-label text-lg font-medium">Diretório onde os XMLs estão disponíveis:</label>
+                <input
+                    type="text"
+                    id="invoices_xml_storage_path"
+                    name="invoices_xml_storage_path"
+                    class="form-input mt-2"
+                    placeholder="Ex.: /mnt/xmls/notas_fiscais"
+                    value="{{ xml_storage_base_path or '' }}"
+                >
+                <p class="text-sm text-gray-500 mt-2">
+                    Informe o caminho absoluto no servidor onde os XMLs das notas fiscais estão armazenados para o botão "Baixar XML(s)" usá-los.
+                </p>
+            </div>
         </div>
 
-        <h2 class="text-xl font-semibold text-gray-800">Metas e Prêmios</h2>
-        <div class="form-group">
-            <label for="ranger_metas_directory" class="form-label text-lg font-medium">Diretório da planilha MetasXPremio.xlsx:</label>
-            <input
-                type="text"
-                id="ranger_metas_directory"
-                name="ranger_metas_directory"
-                class="form-input mt-2"
-                placeholder="Ex.: /mnt/arquivos/MetasXPremio"
-                value="{{ ranger_metas_directory or '' }}"
-            >
-            <p class="text-sm text-gray-500 mt-2">
-                Informe a pasta (ou o caminho completo) onde o arquivo MetasXPremio.xlsx estará disponível no servidor. O relatório irá buscar a aba "RangerMetas".
-            </p>
+        <div class="tab-panel hidden space-y-6" data-tab-panel="metas">
+            <div class="form-group">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Metas e Prêmios</h2>
+                <label for="ranger_metas_directory" class="form-label text-lg font-medium">Diretório da planilha MetasXPremio.xlsx:</label>
+                <input
+                    type="text"
+                    id="ranger_metas_directory"
+                    name="ranger_metas_directory"
+                    class="form-input mt-2"
+                    placeholder="Ex.: /mnt/arquivos/MetasXPremio"
+                    value="{{ ranger_metas_directory or '' }}"
+                >
+                <p class="text-sm text-gray-500 mt-2">
+                    Informe a pasta (ou o caminho completo) onde o arquivo MetasXPremio.xlsx estará disponível no servidor. O relatório irá buscar a aba "RangerMetas".
+                </p>
+            </div>
         </div>
 
         <div class="flex justify-end mt-6">
@@ -103,4 +193,87 @@
         </div>
     </form>
 </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const tabs = document.querySelectorAll('[data-tab]');
+        const panels = document.querySelectorAll('[data-tab-panel]');
+        if (tabs.length && panels.length) {
+            const activateTab = (tabName) => {
+                tabs.forEach((tab) => {
+                    const isActive = tab.dataset.tab === tabName;
+                    tab.classList.toggle('tab-active', isActive);
+                });
+                panels.forEach((panel) => {
+                    panel.classList.toggle('hidden', panel.dataset.tabPanel !== tabName);
+                });
+            };
+
+            // Initialize first tab as active
+            activateTab(tabs[0].dataset.tab);
+
+            tabs.forEach((tab) => {
+                tab.addEventListener('click', () => activateTab(tab.dataset.tab));
+            });
+        }
+
+        const setupMultiSelect = (container) => {
+            const button = container.querySelector('[data-multiselect-button]');
+            const panel = container.querySelector('[data-multiselect-panel]');
+            const searchInput = container.querySelector('[data-multiselect-search]');
+            const optionLabels = Array.from(container.querySelectorAll('[data-multiselect-option]'));
+            const checkboxes = Array.from(container.querySelectorAll('input[type="checkbox"]'));
+            const summary = button.querySelector('[data-multiselect-summary]');
+            const placeholder = button.dataset.placeholder || summary.textContent;
+
+            const updateSummary = () => {
+                const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+                summary.textContent = selectedCount ? `${selectedCount} selecionada${selectedCount === 1 ? '' : 's'}` : placeholder;
+            };
+
+            const filterOptions = () => {
+                const query = searchInput.value.toLowerCase();
+                optionLabels.forEach((label) => {
+                    const text = label.dataset.optionText.toLowerCase();
+                    label.classList.toggle('hidden', !text.includes(query));
+                });
+            };
+
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const isOpen = !panel.classList.contains('hidden');
+                document.querySelectorAll('[data-multiselect-panel]').forEach((otherPanel) => {
+                    if (otherPanel !== panel) {
+                        otherPanel.classList.add('hidden');
+                        const otherButton = otherPanel.closest('[data-multiselect]').querySelector('[data-multiselect-button]');
+                        otherButton?.setAttribute('aria-expanded', 'false');
+                    }
+                });
+                panel.classList.toggle('hidden', isOpen);
+                button.setAttribute('aria-expanded', String(!isOpen));
+                if (!isOpen && searchInput) {
+                    searchInput.focus();
+                }
+            });
+
+            searchInput?.addEventListener('input', filterOptions);
+
+            checkboxes.forEach((checkbox) => {
+                checkbox.addEventListener('change', updateSummary);
+            });
+
+            const handleOutsideClick = (event) => {
+                if (!container.contains(event.target)) {
+                    panel.classList.add('hidden');
+                    button.setAttribute('aria-expanded', 'false');
+                }
+            };
+
+            document.addEventListener('click', handleOutsideClick);
+
+            updateSummary();
+        };
+
+        document.querySelectorAll('[data-multiselect]').forEach((container) => setupMultiSelect(container));
+    });
+    </script>
 {% endblock %}
