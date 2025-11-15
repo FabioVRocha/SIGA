@@ -170,6 +170,12 @@
                 <span>{{ period_label }}</span>
             </div>
             {% endif %}
+            {% if analysis_scope_label %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Visualização:</span>
+                <span class="bg-slate-50 text-slate-700 px-3 py-1 rounded-full border border-slate-200">{{ analysis_scope_label }}</span>
+            </div>
+            {% endif %}
             {% if selected_vendor_labels %}
             <div class="flex flex-wrap gap-2 items-center">
                 <span class="font-semibold text-gray-700">Representantes:</span>
@@ -210,30 +216,12 @@
                 <div class="root-subtitle">Base atual dos filtros aplicados.</div>
             </div>
             <div class="columns-wrapper">
+                {% for title in column_titles %}
                 <div class="column">
-                    <div class="column-title">Vendedor</div>
-                    <div class="column-body" id="columnBody0"></div>
+                    <div class="column-title">{{ title }}</div>
+                    <div class="column-body" id="columnBody{{ loop.index0 }}"></div>
                 </div>
-                <div class="column">
-                    <div class="column-title">Cidade</div>
-                    <div class="column-body" id="columnBody1"></div>
-                </div>
-                <div class="column">
-                    <div class="column-title">Cliente</div>
-                    <div class="column-body" id="columnBody2"></div>
-                </div>
-                <div class="column">
-                    <div class="column-title">Linha</div>
-                    <div class="column-body" id="columnBody3"></div>
-                </div>
-                <div class="column">
-                    <div class="column-title">SubGrupo</div>
-                    <div class="column-body" id="columnBody4"></div>
-                </div>
-                <div class="column">
-                    <div class="column-title">Produto</div>
-                    <div class="column-body" id="columnBody5"></div>
-                </div>
+                {% endfor %}
             </div>
         </div>
     </div>
@@ -265,6 +253,18 @@
             <div class="space-y-3">
                 <p class="text-sm font-medium text-gray-700">Filtros adicionais</p>
                 <p class="text-xs text-gray-500">Selecione os valores desejados nos combobox abaixo.</p>
+            </div>
+        </div>
+        <div class="space-y-3">
+            <p class="text-sm font-medium text-gray-700">Visualização da árvore</p>
+            {% set current_scope = filters.get('customer_scope') or 'customer' %}
+            <div class="flex flex-wrap gap-4">
+                {% for option in customer_scope_options %}
+                <label class="inline-flex items-center gap-2 text-sm">
+                    <input type="radio" name="customer_scope" value="{{ option.code }}" class="rounded border-slate-300" {% if current_scope == option.code %}checked{% endif %}>
+                    <span>{{ option.label }}</span>
+                </label>
+                {% endfor %}
             </div>
         </div>
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -478,7 +478,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }).format(value);
     };
 
-    const columnTitles = ['Vendedor','Cidade','Cliente','Linha','SubGrupo','Produto'];
+    const columnTitles = {{ column_titles | tojson }};
     const columnBodies = columnTitles.map((_, index) => document.getElementById(`columnBody${index}`));
     const selectedPath = new Array(columnTitles.length).fill(null);
 

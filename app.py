@@ -76,6 +76,23 @@ ORDER_SITUATION_LABELS = {
     option['code']: option['label'] for option in ORDER_SITUATION_OPTIONS
 }
 
+CUSTOMER_SCOPE_CUSTOMER = 'customer'
+CUSTOMER_SCOPE_ECONOMIC_GROUP = 'economic_group'
+CUSTOMER_SCOPE_OPTIONS = [
+    {'code': CUSTOMER_SCOPE_CUSTOMER, 'label': 'Cliente'},
+    {'code': CUSTOMER_SCOPE_ECONOMIC_GROUP, 'label': 'Grupo Econômico'},
+]
+CUSTOMER_SCOPE_LABEL_MAP = {
+    option['code']: option['label'] for option in CUSTOMER_SCOPE_OPTIONS
+}
+CUSTOMER_SCOPE_DEFAULT = CUSTOMER_SCOPE_CUSTOMER
+
+def normalize_customer_scope(value):
+    if value is None:
+        return ''
+    candidate = str(value).strip()
+    return candidate if candidate in CUSTOMER_SCOPE_LABEL_MAP else ''
+
 REPORT_ORDERS_REP_FILTERS_PARAM = 'report_orders_by_representatives_filters'
 
 TECHNICAL_ASSISTANCE_STATUS_LABELS = {
@@ -3287,8 +3304,10 @@ def fetch_sales_client_year_records(filters, year_ranges, years_for_query):
             SELECT
                 COALESCE(e.empresa::text, '') AS client_code,
                 COALESCE(e.empnome, 'Cliente sem nome') AS client_name,
+                COALESCE(gco.grecodigo::text, '') AS economic_group_code,
+                COALESCE(gco.gredescri, '') AS economic_group_name,
                 COALESCE(prod.produto::text, '') AS product_code,
-                COALESCE(prod.prdnome, 'Produto sem nome') AS product_name,
+                COALESCE(prod.pronome, 'Produto sem nome') AS product_name,
                 {line_case_expression} AS product_line,
                 {year_expression} AS year,
                 {value_expression} AS total_value
@@ -3297,6 +3316,8 @@ def fetch_sales_client_year_records(filters, year_ranges, years_for_query):
             LEFT JOIN produto prod ON prod.produto = pp.pprproduto
             LEFT JOIN grupo g_line ON g_line.grupo = prod.grupo
             LEFT JOIN empresa e ON e.empresa = p.pedcliente
+            LEFT JOIN grupeco1 gco_member ON gco_member.grempresa = e.empresa
+            LEFT JOIN grupeco gco ON gco.grecodigo = gco_member.grecodigo
             LEFT JOIN cidade c ON c.cidade = p.pedentcid
             LEFT JOIN opera op ON op.operacao = p.pedoperaca
             WHERE p.peddata >= %s
@@ -3350,20 +3371,24 @@ def fetch_sales_client_year_records(filters, year_ranges, years_for_query):
 
         transactions = filters.get('transaction')
         if transactions:
-            transaction_placeholders = ','.join(['%s'] * len(transactions))
-            query += f" AND COALESCE(op.opetransac::text, '') IN ({transaction_placeholders})"
-            params.extend(transactions)
+            transaction_values = [str(t).strip() for t in transactions if str(t).strip()]
+            if transaction_values:
+                transaction_placeholders = ','.join(['%s'] * len(transaction_values))
+                query += f" AND TRIM(COALESCE(op.opetransac::text, '')) IN ({transaction_placeholders})"
+                params.extend(transaction_values)
 
         query += f"""
-            GROUP BY client_code, client_name, product_code, product_name, {line_case_expression}, {year_expression}
+            GROUP BY client_code, client_name, economic_group_code, economic_group_name, product_code, product_name, {line_case_expression}, {year_expression}
             ORDER BY client_name, product_name, {year_expression}
         """
 
         cur.execute(query, params)
-        for client_code, client_name, product_code, product_name, product_line, year_value, total_value in cur.fetchall():
+        for client_code, client_name, economic_group_code, economic_group_name, product_code, product_name, product_line, year_value, total_value in cur.fetchall():
             records.append({
                 'client_code': (client_code or '').strip(),
                 'client_name': (client_name or '').strip(),
+                'economic_group_code': (economic_group_code or '').strip(),
+                'economic_group_name': (economic_group_name or '').strip(),
                 'product_code': (product_code or '').strip(),
                 'product_name': (product_name or '').strip(),
                 'product_line': (product_line or '').strip(),
@@ -3740,6 +3765,9 @@ def fetch_decomposition_tree(filters):
         vendor_name_expression = "COALESCE(v.vennome, '')"
         customer_code_expression = "COALESCE(p.pedcliente::text, '')"
         customer_name_expression = "COALESCE(e.empnome, '')"
+        customer_scope_value = filters.get('customer_scope') or CUSTOMER_SCOPE_DEFAULT
+        if customer_scope_value not in CUSTOMER_SCOPE_LABEL_MAP:
+            customer_scope_value = CUSTOMER_SCOPE_DEFAULT
 
         query = f"""
             WITH pedprod AS (
@@ -3755,6 +3783,8 @@ def fetch_decomposition_tree(filters):
                     MAX({vendor_name_expression}) AS vendor_name,
                     MAX({customer_code_expression}) AS customer_code,
                     MAX({customer_name_expression}) AS customer_name,
+                    MAX(COALESCE(economic_group.grecodigo::text, '')) AS economic_group_code,
+                    MAX(COALESCE(economic_group.gredescri, '')) AS economic_group_name,
                     MAX({city_expression}) AS city,
                     MAX({state_expression}) AS state,
                     MAX({discount_expression}) AS peddesval,
@@ -3764,6 +3794,8 @@ def fetch_decomposition_tree(filters):
                 FROM pedido p
                 LEFT JOIN cidade c ON c.cidade = p.pedentcid
                 LEFT JOIN empresa e ON e.empresa = p.pedcliente
+                LEFT JOIN grupeco1 economic_group_map ON economic_group_map.grempresa = e.empresa
+                LEFT JOIN grupeco economic_group ON economic_group.grecodigo = economic_group_map.grecodigo
                 LEFT JOIN vendedor v ON v.vendedor = p.pedrepres
                 LEFT JOIN opera op ON op.operacao = p.pedoperaca
                 GROUP BY p.pedido
@@ -3788,6 +3820,8 @@ def fetch_decomposition_tree(filters):
                 od.vendor_name AS vendor_name,
                 od.customer_code AS customer_code,
                 od.customer_name AS customer_name,
+                od.economic_group_code AS economic_group_code,
+                od.economic_group_name AS economic_group_name,
                 COALESCE(od.city, 'Sem Cidade') AS city,
                 pv.line AS line,
                 pv.sub_group AS sub_group,
@@ -3872,8 +3906,8 @@ def fetch_decomposition_tree(filters):
                 query += f" AND COALESCE(od.transaction_code, '') IN ({placeholders})"
                 params.extend(transaction_values)
 
-        query += " GROUP BY 1,2,3,4,5,6,7,8,9"
-        query += " ORDER BY vendor_name, customer_name, city, line, sub_group, product_name"
+        query += " GROUP BY 1,2,3,4,5,6,7,8,9,10,11"
+        query += " ORDER BY vendor_name, customer_name, economic_group_name, city, line, sub_group, product_name"
 
         cur.execute(query, params)
         for (
@@ -3881,6 +3915,8 @@ def fetch_decomposition_tree(filters):
             vendor_name,
             customer_code,
             customer_name,
+            economic_group_code,
+            economic_group_name,
             city,
             line,
             sub_group,
@@ -3893,6 +3929,8 @@ def fetch_decomposition_tree(filters):
                 'vendor_name': vendor_name or '',
                 'customer_code': customer_code or '',
                 'customer_name': customer_name or '',
+                'economic_group_code': str(economic_group_code) if economic_group_code is not None else '',
+                'economic_group_name': economic_group_name or '',
                 'city': city or 'Sem Cidade',
                 'line': line or 'OUTROS',
                 'sub_group': sub_group or 'Sem SubGrupo',
@@ -12252,6 +12290,15 @@ def report_sales_by_client_year():
         restore_saved_values('transaction')
         # start/end dates no longer provided via filters
 
+    analysis_scope = (request.args.get('analysis_scope') or '').strip().lower()
+    if not analysis_scope and use_saved_defaults:
+        saved_scope = saved_filters.get('analysis_scope')
+        if saved_scope:
+            analysis_scope = str(saved_scope).strip().lower()
+    if analysis_scope not in ('group', 'client'):
+        analysis_scope = 'client'
+    filters['analysis_scope'] = analysis_scope
+
     def deduplicate_preserve_order(items):
         seen = set()
         result = []
@@ -12329,6 +12376,7 @@ def report_sales_by_client_year():
         'situation': filters['situation'],
         'transaction': filters['transaction'],
         'months': selected_months,
+        'analysis_scope': analysis_scope,
     }
 
     years_for_ranges = sorted(set(selected_years + [year - 1 for year in selected_years if year > 0]))
@@ -12345,6 +12393,12 @@ def report_sales_by_client_year():
             continue
         client_code = record.get('client_code') or ''
         client_name = record.get('client_name') or 'Cliente sem nome'
+        if analysis_scope == 'group':
+            group_code = (record.get('economic_group_code') or '').strip()
+            group_name = (record.get('economic_group_name') or '').strip()
+            if group_code or group_name:
+                client_code = group_code
+                client_name = group_name or f"Grupo {group_code}"
         client_key = (client_code, client_name)
         entry = client_entries.setdefault(client_key, {'year_values': defaultdict(float), 'products': {}})
         entry['year_values'][year_value] += record.get('value', 0.0)
@@ -12495,6 +12549,7 @@ def report_sales_by_client_year():
         return ''
 
     period_label = format_period_label(start_date_obj, end_date_obj)
+    analysis_scope_label = 'Cliente' if analysis_scope == 'client' else 'Grupo Econômico'
 
     return render_template(
         'report_sales_by_client_year.html',
@@ -12524,6 +12579,8 @@ def report_sales_by_client_year():
         selected_month_labels=selected_month_labels,
         selected_year_labels=selected_year_labels,
         save_filters_url=url_for('save_report_sales_by_client_year_filters'),
+        analysis_scope=analysis_scope,
+        analysis_scope_label=analysis_scope_label,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
@@ -13374,6 +13431,12 @@ def report_orders_by_line():
         if label not in selected_transaction_labels:
             selected_transaction_labels.append(label)
 
+    analysis_scope_label = CUSTOMER_SCOPE_LABEL_MAP.get(
+        customer_scope_value,
+        CUSTOMER_SCOPE_LABEL_MAP[CUSTOMER_SCOPE_DEFAULT]
+    )
+    column_titles = ['Vendedor', 'Cidade', analysis_scope_label, 'Linha', 'SubGrupo', 'Produto']
+
     def format_date_label(value):
         if not value:
             return ''
@@ -13590,6 +13653,12 @@ def report_decomposition_tree():
     if use_saved_defaults and not transaction_values:
         transaction_values = normalize_saved_values(saved_filters.get('transaction'))
 
+    customer_scope_value = normalize_customer_scope(request.args.get('customer_scope'))
+    if use_saved_defaults and not customer_scope_value:
+        customer_scope_value = normalize_customer_scope(saved_filters.get('customer_scope'))
+    if not customer_scope_value:
+        customer_scope_value = CUSTOMER_SCOPE_DEFAULT
+
     should_default_period = (
         not date_params_present
         and not (use_saved_defaults and saved_dates_present)
@@ -13613,6 +13682,7 @@ def report_decomposition_tree():
         'status': status_values,
         'situation': situation_values,
         'transaction': transaction_values,
+        'customer_scope': customer_scope_value,
     }
 
     query_filters = {
@@ -13625,7 +13695,10 @@ def report_decomposition_tree():
         'status': status_values,
         'situation': situation_values,
         'transaction': transaction_values,
+        'customer_scope': customer_scope_value,
     }
+
+    use_economic_group = customer_scope_value == CUSTOMER_SCOPE_ECONOMIC_GROUP
 
     rows = fetch_decomposition_tree(query_filters)
     tree_map = {}
@@ -13661,12 +13734,19 @@ def report_decomposition_tree():
         city_node = ensure_node(vendor_node['children'], city_label)
         city_node['value'] += value
 
-        customer_label = format_label(row.get('customer_name'), row.get('customer_code'), 'Sem Cliente')
-        customer_node = ensure_node(city_node['children'], customer_label)
-        customer_node['value'] += value
+        if use_economic_group:
+            grouping_label = format_label(
+                row.get('economic_group_name'),
+                row.get('economic_group_code'),
+                'Sem Grupo Econômico'
+            )
+        else:
+            grouping_label = format_label(row.get('customer_name'), row.get('customer_code'), 'Sem Cliente')
+        grouping_node = ensure_node(city_node['children'], grouping_label)
+        grouping_node['value'] += value
 
         line_label = (row.get('line') or 'OUTROS').strip() or 'OUTROS'
-        line_node = ensure_node(customer_node['children'], line_label)
+        line_node = ensure_node(grouping_node['children'], line_label)
         line_node['value'] += value
 
         sub_group_label = row.get('sub_group') or 'Sem SubGrupo'
@@ -13764,6 +13844,12 @@ def report_decomposition_tree():
         if label not in selected_transaction_labels:
             selected_transaction_labels.append(label)
 
+    analysis_scope_label = CUSTOMER_SCOPE_LABEL_MAP.get(
+        customer_scope_value,
+        CUSTOMER_SCOPE_LABEL_MAP[CUSTOMER_SCOPE_DEFAULT]
+    )
+    column_titles = ['Vendedor', 'Cidade', analysis_scope_label, 'Linha', 'SubGrupo', 'Produto']
+
     def format_date_label(value):
         if not value:
             return ''
@@ -13802,6 +13888,9 @@ def report_decomposition_tree():
         selected_status_labels=selected_status_labels,
         selected_situation_labels=selected_situation_labels,
         selected_transaction_labels=selected_transaction_labels,
+        column_titles=column_titles,
+        customer_scope_options=CUSTOMER_SCOPE_OPTIONS,
+        analysis_scope_label=analysis_scope_label,
         save_filters_url=url_for('save_report_decomposition_tree_filters'),
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado'),
@@ -13855,6 +13944,11 @@ def save_report_decomposition_tree_filters():
         except (ValueError, TypeError):
             return ''
 
+    def sanitize_scope():
+        value = payload.get('customer_scope')
+        normalized = str(value).strip() if value is not None else ''
+        return normalized if normalized in CUSTOMER_SCOPE_LABEL_MAP else CUSTOMER_SCOPE_DEFAULT
+
     sanitized_filters = {
         'start_date': sanitize_date(payload.get('start_date')),
         'end_date': sanitize_date(payload.get('end_date')),
@@ -13865,6 +13959,7 @@ def save_report_decomposition_tree_filters():
         'status': sanitize_multi('status', uppercase=True),
         'situation': sanitize_multi('situation', allow_blank=True, uppercase=True),
         'transaction': sanitize_multi('transaction'),
+        'customer_scope': sanitize_scope(),
     }
 
     try:
@@ -14017,6 +14112,11 @@ def save_report_sales_by_client_year_filters():
                 cleaned.append(text)
         return deduplicate_preserve_order(cleaned)
 
+    def sanitize_scope():
+        scope_value = payload.get('analysis_scope')
+        normalized = (str(scope_value).strip().lower() if scope_value is not None else '')
+        return normalized if normalized in ('client', 'group') else 'client'
+
     sanitized_filters = {
         'year': sanitize_multi('year', numeric_range=(1900, 2100)),
         'month': sanitize_multi('month', numeric_range=(1, 12)),
@@ -14027,6 +14127,7 @@ def save_report_sales_by_client_year_filters():
         'status': sanitize_multi('status', uppercase=True),
         'situation': sanitize_multi('situation', uppercase=True, allow_blank=True),
         'transaction': sanitize_multi('transaction'),
+        'analysis_scope': sanitize_scope(),
     }
 
     try:

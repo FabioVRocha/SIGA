@@ -23,12 +23,10 @@
             </button>
         </div>
         <div class="flex flex-wrap gap-3 mb-6 text-sm">
-            {% if period_label %}
-            <div class="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200">
-                <span class="font-semibold">Período:</span>
-                <span>{{ period_label }}</span>
+            <div class="flex items-center gap-2">
+                <span class="font-semibold text-gray-700">Visualização:</span>
+                <span class="bg-slate-50 text-slate-700 px-3 py-1 rounded-full border border-slate-200">{{ analysis_scope_label }}</span>
             </div>
-            {% endif %}
             {% if selected_year_labels %}
             <div class="flex flex-wrap gap-2 items-center">
                 <span class="font-semibold text-gray-700">Anos:</span>
@@ -106,7 +104,7 @@
             <table class="min-w-[900px] w-full text-left border-collapse">
                 <thead class="bg-slate-50">
                     <tr>
-                        <th rowspan="2" class="px-4 py-3 text-sm font-semibold text-slate-600 border-b border-slate-200">Cliente</th>
+                        <th rowspan="2" class="px-4 py-3 text-sm font-semibold text-slate-600 border-b border-slate-200">{{ analysis_scope_label }}</th>
                         {% for year in year_columns %}
                         <th colspan="2" class="px-4 py-3 text-sm font-semibold text-slate-600 text-center border-b border-slate-200">{{ year }}</th>
                         {% endfor %}
@@ -211,20 +209,28 @@
         <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-5xl overflow-visible">
             <form id="filterForm" method="get" action="{{ url_for('report_sales_by_client_year') }}" class="space-y-6 p-6">
                 <input type="hidden" name="filter_applied" value="1">
+                <input type="hidden" name="analysis_scope" id="analysisScopeInput" value="{{ filters.analysis_scope or 'client' }}">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Visualizar por</label>
+                    <div class="mt-2 flex gap-2">
+                        <button type="button" data-analysis-scope="client" class="analysis-scope-toggle px-4 py-2 text-sm font-semibold rounded-full border border-slate-200 bg-white text-slate-600 transition focus:outline-none focus:ring-2 focus:ring-indigo-500">Cliente</button>
+                        <button type="button" data-analysis-scope="group" class="analysis-scope-toggle px-4 py-2 text-sm font-semibold rounded-full border border-slate-200 bg-white text-slate-600 transition focus:outline-none focus:ring-2 focus:ring-indigo-500">Grupo Econômico</button>
+                    </div>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="relative">
-                        <label class="block text-sm font-medium text-slate-700">Anos</label>
-                        <button type="button" id="year-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" data-combobox-panel="year">
+                        <label id="year-filter-label" class="block text-sm font-medium text-slate-700">Anos</label>
+                        <button type="button" id="year-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" role="combobox" aria-haspopup="listbox" aria-controls="year-options" aria-expanded="false" aria-labelledby="year-filter-label">
                             <span id="year-text" class="text-sm text-slate-600">{% if filters.year %}{{ filters.year | join(', ') }}{% else %}Selecione uma ou mais opções{% endif %}</span>
                             <i id="year-arrow" class="fas fa-chevron-down text-slate-500"></i>
                         </button>
-                        <div id="year-options" data-combobox-panel="year" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg">
+                        <div id="year-options" data-combobox-panel="year" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg" role="listbox" aria-multiselectable="true" aria-labelledby="year-filter-label" tabindex="-1">
                             <div class="p-3 border-b border-slate-100">
-                                <input type="text" data-combobox-search="year" class="form-input w-full" placeholder="Buscar ano">
+                                <input type="text" data-combobox-search="year" class="form-input w-full" placeholder="Buscar ano" aria-label="Buscar ano">
                             </div>
                             <div class="max-h-72 overflow-y-auto">
                                 {% for option in year_options %}
-                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option }}">
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option }}" role="option" aria-selected="{{ 'true' if option|string in filters.year else 'false' }}">
                                     <input type="checkbox" name="year" value="{{ option }}" class="form-checkbox text-indigo-600 rounded-sm" {% if option|string in filters.year %}checked{% endif %}>
                                     <span class="text-sm text-slate-700">{{ option }}</span>
                                 </label>
@@ -233,18 +239,18 @@
                         </div>
                     </div>
                     <div class="relative">
-                        <label class="block text-sm font-medium text-slate-700">Meses</label>
-                        <button type="button" id="month-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" data-combobox-panel="month">
+                        <label id="month-filter-label" class="block text-sm font-medium text-slate-700">Meses</label>
+                        <button type="button" id="month-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" role="combobox" aria-haspopup="listbox" aria-controls="month-options" aria-expanded="false" aria-labelledby="month-filter-label">
                             <span id="month-text" class="text-sm text-slate-600">{% if filters.month %}{{ filters.month | join(', ') }}{% else %}Selecione uma ou mais opções{% endif %}</span>
                             <i id="month-arrow" class="fas fa-chevron-down text-slate-500"></i>
                         </button>
-                        <div id="month-options" data-combobox-panel="month" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg">
+                        <div id="month-options" data-combobox-panel="month" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg" role="listbox" aria-multiselectable="true" aria-labelledby="month-filter-label" tabindex="-1">
                             <div class="p-3 border-b border-slate-100">
-                                <input type="text" data-combobox-search="month" class="form-input w-full" placeholder="Buscar mês">
+                                <input type="text" data-combobox-search="month" class="form-input w-full" placeholder="Buscar mês" aria-label="Buscar mês">
                             </div>
                             <div class="max-h-72 overflow-y-auto">
                                 {% for option in month_options %}
-                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option.label }}">
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option.label }}" role="option" aria-selected="{{ 'true' if option.value in filters.month else 'false' }}">
                                     <input type="checkbox" name="month" value="{{ option.value }}" class="form-checkbox text-indigo-600 rounded-sm" {% if option.value in filters.month %}checked{% endif %}>
                                     <span class="text-sm text-slate-700">{{ option.label }}</span>
                                 </label>
@@ -256,20 +262,20 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="relative">
-                        <label class="block text-sm font-medium text-slate-700">Representantes</label>
-                        <button type="button" id="vendor-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" data-combobox-panel="vendor">
+                        <label id="vendor-filter-label" class="block text-sm font-medium text-slate-700">Representantes</label>
+                        <button type="button" id="vendor-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" role="combobox" aria-haspopup="listbox" aria-controls="vendor-options" aria-expanded="false" aria-labelledby="vendor-filter-label">
                             <span id="vendor-text" class="text-sm text-slate-600">{% if filters.vendor %}{{ filters.vendor | join(', ') }}{% else %}Selecione uma ou mais opções{% endif %}</span>
                             <i id="vendor-arrow" class="fas fa-chevron-down text-slate-500"></i>
                         </button>
-                        <div id="vendor-options" data-combobox-panel="vendor" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg">
+                        <div id="vendor-options" data-combobox-panel="vendor" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg" role="listbox" aria-multiselectable="true" aria-labelledby="vendor-filter-label" tabindex="-1">
                             <div class="p-3 border-b border-slate-100">
-                                <input type="text" data-combobox-search="vendor" class="form-input w-full" placeholder="Buscar representante">
+                                <input type="text" data-combobox-search="vendor" class="form-input w-full" placeholder="Buscar representante" aria-label="Buscar representante">
                             </div>
                             <div class="max-h-72 overflow-y-auto">
                                 {% for option in vendor_options %}
                                 {% set code = option.code %}
                                 {% set label = option.name %}
-                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ label }} {% if code %}({{ code }}){% endif %}">
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ label }} {% if code %}({{ code }}){% endif %}" role="option" aria-selected="{{ 'true' if code in filters.vendor else 'false' }}">
                                     <input type="checkbox" name="vendor" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if option.code in filters.vendor %}checked{% endif %}>
                                     <span class="text-sm text-slate-700">{{ label }}{% if code %} ({{ code }}){% endif %}</span>
                                 </label>
@@ -278,18 +284,18 @@
                         </div>
                     </div>
                     <div class="relative">
-                        <label class="block text-sm font-medium text-slate-700">Estados</label>
-                        <button type="button" id="state-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" data-combobox-panel="state">
+                        <label id="state-filter-label" class="block text-sm font-medium text-slate-700">Estados</label>
+                        <button type="button" id="state-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" role="combobox" aria-haspopup="listbox" aria-controls="state-options" aria-expanded="false" aria-labelledby="state-filter-label">
                             <span id="state-text" class="text-sm text-slate-600">{% if filters.state %}{{ filters.state | join(', ') }}{% else %}Selecione uma ou mais opções{% endif %}</span>
                             <i id="state-arrow" class="fas fa-chevron-down text-slate-500"></i>
                         </button>
-                        <div id="state-options" data-combobox-panel="state" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg">
+                        <div id="state-options" data-combobox-panel="state" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg" role="listbox" aria-multiselectable="true" aria-labelledby="state-filter-label" tabindex="-1">
                             <div class="p-3 border-b border-slate-100">
-                                <input type="text" data-combobox-search="state" class="form-input w-full" placeholder="Buscar estado">
+                                <input type="text" data-combobox-search="state" class="form-input w-full" placeholder="Buscar estado" aria-label="Buscar estado">
                             </div>
                             <div class="max-h-72 overflow-y-auto">
                                 {% for option in state_options %}
-                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option }}">
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option }}" role="option" aria-selected="{{ 'true' if option in filters.state else 'false' }}">
                                     <input type="checkbox" name="state" value="{{ option }}" class="form-checkbox text-indigo-600 rounded-sm" {% if option in filters.state %}checked{% endif %}>
                                     <span class="text-sm text-slate-700">{{ option }}</span>
                                 </label>
@@ -301,20 +307,20 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="relative">
-                        <label class="block text-sm font-medium text-slate-700">Clientes</label>
-                        <button type="button" id="customer-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" data-combobox-panel="customer">
+                        <label id="customer-filter-label" class="block text-sm font-medium text-slate-700">Clientes</label>
+                        <button type="button" id="customer-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" role="combobox" aria-haspopup="listbox" aria-controls="customer-options" aria-expanded="false" aria-labelledby="customer-filter-label">
                             <span id="customer-text" class="text-sm text-slate-600">{% if filters.customer %}{{ filters.customer | join(', ') }}{% else %}Selecione uma ou mais opções{% endif %}</span>
                             <i id="customer-arrow" class="fas fa-chevron-down text-slate-500"></i>
                         </button>
-                        <div id="customer-options" data-combobox-panel="customer" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg">
+                        <div id="customer-options" data-combobox-panel="customer" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg" role="listbox" aria-multiselectable="true" aria-labelledby="customer-filter-label" tabindex="-1">
                             <div class="p-3 border-b border-slate-100">
-                                <input type="text" data-combobox-search="customer" class="form-input w-full" placeholder="Buscar cliente">
+                                <input type="text" data-combobox-search="customer" class="form-input w-full" placeholder="Buscar cliente" aria-label="Buscar cliente">
                             </div>
                             <div class="max-h-72 overflow-y-auto">
                                 {% for option in customer_options %}
                                 {% set code = option.code %}
                                 {% set label = option.name %}
-                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ label }} {% if code %}({{ code }}){% endif %}">
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ label }} {% if code %}({{ code }}){% endif %}" role="option" aria-selected="{{ 'true' if code in filters.customer else 'false' }}">
                                     <input type="checkbox" name="customer" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if option.code in filters.customer %}checked{% endif %}>
                                     <span class="text-sm text-slate-700">{{ label }}{% if code %} ({{ code }}){% endif %}</span>
                                 </label>
@@ -323,18 +329,18 @@
                         </div>
                     </div>
                     <div class="relative">
-                        <label class="block text-sm font-medium text-slate-700">Linha</label>
-                        <button type="button" id="line-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" data-combobox-panel="line">
+                        <label id="line-filter-label" class="block text-sm font-medium text-slate-700">Linha</label>
+                        <button type="button" id="line-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" role="combobox" aria-haspopup="listbox" aria-controls="line-options" aria-expanded="false" aria-labelledby="line-filter-label">
                             <span id="line-text" class="text-sm text-slate-600">{% if filters.line %}{{ filters.line | join(', ') }}{% else %}Selecione uma ou mais opções{% endif %}</span>
                             <i id="line-arrow" class="fas fa-chevron-down text-slate-500"></i>
                         </button>
-                        <div id="line-options" data-combobox-panel="line" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg">
+                        <div id="line-options" data-combobox-panel="line" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg" role="listbox" aria-multiselectable="true" aria-labelledby="line-filter-label" tabindex="-1">
                             <div class="p-3 border-b border-slate-100">
-                                <input type="text" data-combobox-search="line" class="form-input w-full" placeholder="Buscar linha">
+                                <input type="text" data-combobox-search="line" class="form-input w-full" placeholder="Buscar linha" aria-label="Buscar linha">
                             </div>
                             <div class="max-h-72 overflow-y-auto">
                                 {% for option in line_options %}
-                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option }}">
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option }}" role="option" aria-selected="{{ 'true' if option in filters.line else 'false' }}">
                                     <input type="checkbox" name="line" value="{{ option }}" class="form-checkbox text-indigo-600 rounded-sm" {% if option in filters.line %}checked{% endif %}>
                                     <span class="text-sm text-slate-700">{{ option }}</span>
                                 </label>
@@ -346,18 +352,18 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="relative">
-                        <label class="block text-sm font-medium text-slate-700">Status</label>
-                        <button type="button" id="status-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" data-combobox-panel="status">
+                        <label id="status-filter-label" class="block text-sm font-medium text-slate-700">Status</label>
+                        <button type="button" id="status-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" role="combobox" aria-haspopup="listbox" aria-controls="status-options" aria-expanded="false" aria-labelledby="status-filter-label">
                             <span id="status-text" class="text-sm text-slate-600">{% if filters.status %}{{ filters.status | join(', ') }}{% else %}Selecione uma ou mais opções{% endif %}</span>
                             <i id="status-arrow" class="fas fa-chevron-down text-slate-500"></i>
                         </button>
-                        <div id="status-options" data-combobox-panel="status" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg">
+                        <div id="status-options" data-combobox-panel="status" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg" role="listbox" aria-multiselectable="true" aria-labelledby="status-filter-label" tabindex="-1">
                             <div class="p-3 border-b border-slate-100">
-                                <input type="text" data-combobox-search="status" class="form-input w-full" placeholder="Buscar status">
+                                <input type="text" data-combobox-search="status" class="form-input w-full" placeholder="Buscar status" aria-label="Buscar status">
                             </div>
                             <div class="max-h-72 overflow-y-auto">
                                 {% for option in status_options %}
-                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option.label }}">
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option.label }}" role="option" aria-selected="{{ 'true' if option.code in filters.status else 'false' }}">
                                     <input type="checkbox" name="status" value="{{ option.code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if option.code in filters.status %}checked{% endif %}>
                                     <span class="text-sm text-slate-700">{{ option.label }}</span>
                                 </label>
@@ -366,18 +372,18 @@
                         </div>
                     </div>
                     <div class="relative">
-                        <label class="block text-sm font-medium text-slate-700">Situação</label>
-                        <button type="button" id="situation-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" data-combobox-panel="situation">
+                        <label id="situation-filter-label" class="block text-sm font-medium text-slate-700">Situação</label>
+                        <button type="button" id="situation-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" role="combobox" aria-haspopup="listbox" aria-controls="situation-options" aria-expanded="false" aria-labelledby="situation-filter-label">
                             <span id="situation-text" class="text-sm text-slate-600">{% if filters.situation %}{{ filters.situation | join(', ') }}{% else %}Selecione uma ou mais opções{% endif %}</span>
                             <i id="situation-arrow" class="fas fa-chevron-down text-slate-500"></i>
                         </button>
-                        <div id="situation-options" data-combobox-panel="situation" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg">
+                        <div id="situation-options" data-combobox-panel="situation" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg" role="listbox" aria-multiselectable="true" aria-labelledby="situation-filter-label" tabindex="-1">
                             <div class="p-3 border-b border-slate-100">
-                                <input type="text" data-combobox-search="situation" class="form-input w-full" placeholder="Buscar situação">
+                                <input type="text" data-combobox-search="situation" class="form-input w-full" placeholder="Buscar situação" aria-label="Buscar situação">
                             </div>
                             <div class="max-h-72 overflow-y-auto">
                                 {% for option in situation_options %}
-                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option.label }}">
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option.label }}" role="option" aria-selected="{{ 'true' if option.code in filters.situation else 'false' }}">
                                     <input type="checkbox" name="situation" value="{{ option.code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if option.code in filters.situation %}checked{% endif %}>
                                     <span class="text-sm text-slate-700">{{ option.label }}</span>
                                 </label>
@@ -388,18 +394,18 @@
                 </div>
 
                 <div class="relative">
-                    <label class="block text-sm font-medium text-slate-700">Transações</label>
-                    <button type="button" id="transaction-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" data-combobox-panel="transaction">
+                    <label id="transaction-filter-label" class="block text-sm font-medium text-slate-700">Transações</label>
+                    <button type="button" id="transaction-button" class="mt-1 border border-slate-200 rounded-xl w-full text-left px-4 py-3 flex justify-between items-center" role="combobox" aria-haspopup="listbox" aria-controls="transaction-options" aria-expanded="false" aria-labelledby="transaction-filter-label">
                         <span id="transaction-text" class="text-sm text-slate-600">{% if filters.transaction %}{{ filters.transaction | join(', ') }}{% else %}Selecione uma ou mais opções{% endif %}</span>
                         <i id="transaction-arrow" class="fas fa-chevron-down text-slate-500"></i>
                     </button>
-                    <div id="transaction-options" data-combobox-panel="transaction" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg">
+                    <div id="transaction-options" data-combobox-panel="transaction" class="hidden absolute z-20 mt-2 w-full rounded-xl bg-white border border-slate-200 shadow-lg" role="listbox" aria-multiselectable="true" aria-labelledby="transaction-filter-label" tabindex="-1">
                         <div class="p-3 border-b border-slate-100">
-                            <input type="text" data-combobox-search="transaction" class="form-input w-full" placeholder="Buscar transação">
+                            <input type="text" data-combobox-search="transaction" class="form-input w-full" placeholder="Buscar transação" aria-label="Buscar transação">
                         </div>
                         <div class="max-h-72 overflow-y-auto">
                             {% for option in transaction_options %}
-                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option.label }} {% if option.code %}({{ option.code }}){% endif %}">
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer" data-label="{{ option.label }} {% if option.code %}({{ option.code }}){% endif %}" role="option" aria-selected="{{ 'true' if option.code in filters.transaction else 'false' }}">
                                 <input type="checkbox" name="transaction" value="{{ option.code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if option.code in filters.transaction %}checked{% endif %}>
                                 <span class="text-sm text-slate-700">{{ option.label }}{% if option.code %} ({{ option.code }}){% endif %}</span>
                             </label>
@@ -457,9 +463,13 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('[data-combobox-panel]').forEach(panel => {
             panel.classList.add('hidden');
             const name = panel.getAttribute('data-combobox-panel');
+            const button = document.getElementById(`${name}-button`);
             const arrow = document.getElementById(`${name}-arrow`);
             if (arrow) {
                 arrow.classList.remove('rotate-180');
+            }
+            if (button) {
+                button.setAttribute('aria-expanded', 'false');
             }
         });
     };
@@ -494,6 +504,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 item.classList.toggle('hidden', !isMatch);
             });
         };
+        const updateOptionSelection = (checkbox) => {
+            const optionItem = checkbox.closest('[data-combobox-item]');
+            if (optionItem) {
+                optionItem.setAttribute('aria-selected', checkbox.checked ? 'true' : 'false');
+            }
+        };
 
         button.addEventListener('click', (event) => {
             event.stopPropagation();
@@ -502,6 +518,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isHidden) {
                 panel.classList.remove('hidden');
                 if (arrow) arrow.classList.add('rotate-180');
+                button.setAttribute('aria-expanded', 'true');
                 setTimeout(() => searchInput?.focus(), 50);
             }
         });
@@ -510,13 +527,46 @@ document.addEventListener('DOMContentLoaded', function() {
             event.stopPropagation();
         });
 
-        checkboxes.forEach(cb => cb.addEventListener('change', updateText));
+        checkboxes.forEach(cb => {
+            cb.addEventListener('change', () => {
+                updateText();
+                updateOptionSelection(cb);
+            });
+            updateOptionSelection(cb);
+        });
         if (searchInput) {
             searchInput.addEventListener('input', filterItems);
         }
         filterItems();
         updateText();
     };
+
+    const analysisScopeInput = document.getElementById('analysisScopeInput');
+    const scopeButtons = document.querySelectorAll('[data-analysis-scope]');
+    const updateScopeButtons = (value) => {
+        scopeButtons.forEach(button => {
+            const scopeValue = button.getAttribute('data-analysis-scope');
+            const isActive = scopeValue === value;
+            button.classList.toggle('bg-slate-900', isActive);
+            button.classList.toggle('text-white', isActive);
+            button.classList.toggle('border-slate-900', isActive);
+            button.classList.toggle('bg-white', !isActive);
+            button.classList.toggle('text-slate-600', !isActive);
+            button.classList.toggle('border-slate-200', !isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    };
+    if (analysisScopeInput && scopeButtons.length) {
+        const initialScope = analysisScopeInput.value || 'client';
+        updateScopeButtons(initialScope);
+        scopeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const chosenScope = button.getAttribute('data-analysis-scope') || 'client';
+                analysisScopeInput.value = chosenScope;
+                updateScopeButtons(chosenScope);
+            });
+        });
+    }
 
     ['year', 'month', 'vendor', 'state', 'customer', 'line', 'status', 'situation', 'transaction'].forEach(setupCombobox);
 
@@ -527,6 +577,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const arrow = document.getElementById(`${name}-arrow`);
             if (button && !panel.contains(event.target) && !button.contains(event.target)) {
                 panel.classList.add('hidden');
+                button.setAttribute('aria-expanded', 'false');
                 if (arrow) arrow.classList.remove('rotate-180');
             }
         });
