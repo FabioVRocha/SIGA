@@ -54,6 +54,7 @@ REPORT_ORDERS_BY_STATE_FILTERS_PARAM = 'report_orders_by_state_filters'
 REPORT_ORDERS_LINE_FILTERS_PARAM = 'report_orders_by_line_filters'
 REPORT_DECOMPOSITION_TREE_FILTERS_PARAM = 'report_decomposition_tree_filters'
 REPORT_SALES_CLIENT_YEAR_FILTERS_PARAM = 'report_sales_client_year_filters'
+REPORT_MAP_INTERACTIVE_FILTERS_PARAM = 'report_map_interactive_filters'
 
 ORDER_APPROVAL_STATUS_OPTIONS = [
     {'code': 'S', 'label': 'Aprovado'},
@@ -1855,6 +1856,75 @@ def _normalize_text_for_matching(value):
     return ''.join(ch.lower() for ch in without_accents if ch.isalnum())
 
 
+MAPS_JSON_DIR = Path(__file__).resolve().parent / 'templates' / 'Mapas'
+
+
+def _humanize_map_name(raw):
+    if not raw:
+        return raw
+    cleaned = re.sub(r'mapa', ' ', raw, flags=re.IGNORECASE)
+    cleaned = re.sub(r'municipios?', ' ', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'[^A-Za-z0-9]+', ' ', cleaned)
+    cleaned = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', cleaned)
+    title_cased = ' '.join(part.capitalize() for part in cleaned.split())
+    return title_cased or raw
+
+
+def _build_interactive_map_definitions():
+    definitions = []
+    if not MAPS_JSON_DIR.exists():
+        return definitions
+    seen_ids = set()
+    for path_obj in sorted(MAPS_JSON_DIR.iterdir()):
+        if not path_obj.is_file() or path_obj.suffix.lower() != '.json':
+            continue
+        try:
+            with path_obj.open('r', encoding='utf-8-sig') as handle:
+                data = json.load(handle)
+        except Exception as exc:
+            print(f'Não foi possível carregar o mapa {path_obj.name}: {exc}')
+            continue
+        object_names = list(data.get('objects', {}).keys())
+        if not object_names:
+            continue
+        base_id = re.sub(r'[^a-z0-9]+', '_', path_obj.stem.lower()).strip('_')
+        map_id = base_id or path_obj.stem.lower()
+        if map_id in seen_ids:
+            suffix = 1
+            candidate = map_id
+            while candidate in seen_ids:
+                candidate = f'{map_id}_{suffix}'
+                suffix += 1
+            map_id = candidate
+        seen_ids.add(map_id)
+        normalized_name = _normalize_text_for_matching(path_obj.stem)
+        state_codes = []
+        if normalized_name and 'brasil' in normalized_name:
+            state_codes = list(BRAZIL_STATE_CODES)
+        else:
+            for code, state_label in BRAZIL_STATE_NAMES.items():
+                normalized_state_label = _normalize_text_for_matching(state_label)
+                if normalized_state_label and normalized_state_label in normalized_name:
+                    state_codes.append(code)
+        definitions.append({
+            'id': map_id,
+            'label': _humanize_map_name(path_obj.stem),
+            'file_path': str(path_obj.resolve()),
+            'object_name': object_names[0],
+            'state_codes': state_codes,
+        })
+    definitions.sort(key=lambda item: (0 if 'brasil' in item['id'] else 1, item['label']))
+    return definitions
+
+
+INTERACTIVE_MAP_DEFINITIONS = _build_interactive_map_definitions()
+INTERACTIVE_MAP_DEFINITIONS_BY_ID = {m['id']: m for m in INTERACTIVE_MAP_DEFINITIONS}
+DEFAULT_INTERACTIVE_MAP_ID = ''
+if INTERACTIVE_MAP_DEFINITIONS:
+    brazil_map = next((m for m in INTERACTIVE_MAP_DEFINITIONS if 'brasil' in m['id']), INTERACTIVE_MAP_DEFINITIONS[0])
+    DEFAULT_INTERACTIVE_MAP_ID = brazil_map['id']
+
+
 def _is_total_line_name(name):
     normalized = _normalize_text_for_matching(name)
     return 'total' in normalized or 'geral' in normalized
@@ -1877,6 +1947,49 @@ def _extract_ranger_value_from_obs(value, marker):
     if not segment or not re.search(r'\d', segment):
         return None
     return parse_percentage_like_value(segment)
+
+
+LINE_INFO_CTE = """
+WITH linha_info AS (
+    SELECT
+        sub.pedido,
+        (ARRAY_AGG(sub.linha_value ORDER BY sub.priority))[1] AS linha
+    FROM (
+        SELECT DISTINCT
+            base_data.pedido,
+            CASE
+                WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 'MADRESILVA'
+                WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 'PETRA'
+                WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 'GARLAND'
+                WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 'GLASSMADRE'
+                WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 'CAVILHAS'
+                WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 'SOLARE'
+                WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 'ESPUMA'
+                ELSE 'OUTROS'
+            END AS linha_value,
+            CASE
+                WHEN POSITION('MADRESILVA' IN base_data.group_name_upper) > 0 OR POSITION('* M.' IN base_data.group_name_upper) > 0 THEN 1
+                WHEN POSITION('PETRA' IN base_data.group_name_upper) > 0 OR POSITION('* P.' IN base_data.group_name_upper) > 0 THEN 2
+                WHEN POSITION('GARLAND' IN base_data.group_name_upper) > 0 OR POSITION('* G.' IN base_data.group_name_upper) > 0 THEN 3
+                WHEN POSITION('GLASS' IN base_data.group_name_upper) > 0 OR POSITION('* V.' IN base_data.group_name_upper) > 0 THEN 4
+                WHEN POSITION('CAVILHAS' IN base_data.group_name_upper) > 0 THEN 5
+                WHEN POSITION('SOLARE' IN base_data.group_name_upper) > 0 OR POSITION('* S.' IN base_data.group_name_upper) > 0 THEN 6
+                WHEN POSITION('ESPUMA' IN base_data.group_name_upper) > 0 OR POSITION('* ESPUMA' IN base_data.group_name_upper) > 0 THEN 7
+                ELSE 999
+            END AS priority
+        FROM (
+            SELECT
+                pp.pedido,
+                UPPER(COALESCE(g.grunome, '')) AS group_name_upper
+            FROM pedprodu pp
+            LEFT JOIN produto prod ON prod.produto = pp.pprproduto
+            LEFT JOIN grupo g ON g.grupo = prod.grupo
+            WHERE pp.pedido IS NOT NULL
+        ) base_data
+    ) sub
+    GROUP BY sub.pedido
+)
+"""
 
 
 def normalize_period_code(value):
@@ -2073,6 +2186,458 @@ def load_ranger_metas_entries(user_id, selected_periods=None, selected_vendors=N
         })
 
     return entries, None
+
+
+def load_lista_cidades_entries(user_id):
+    directory = (get_user_parameters(user_id, RANGER_METAS_PATH_PARAM) or '').strip()
+    if not directory:
+        return [], 'Configure o caminho da planilha MetasXPremio.xlsx em Parâmetros do Sistema.'
+
+    path_obj = Path(directory).expanduser()
+    if path_obj.is_dir():
+        path_obj = path_obj / 'MetasXPremio.xlsx'
+    elif path_obj.suffix and path_obj.suffix.lower() not in ('.xlsx', '.xls'):
+        path_obj = path_obj / 'MetasXPremio.xlsx'
+
+    if not path_obj.exists():
+        return [], f"Arquivo não encontrado: {path_obj}"
+
+    try:
+        workbook = openpyxl.load_workbook(path_obj, data_only=True)
+    except Exception as exc:
+        return [], f"Erro ao carregar a planilha: {exc}"
+
+    sheet = None
+    for name in workbook.sheetnames:
+        if name.strip().lower() == 'listacidades':
+            sheet = workbook[name]
+            break
+    if sheet is None:
+        return [], "A aba 'ListaCidades' não foi encontrada na planilha."
+
+    rows = sheet.iter_rows(values_only=True)
+    header = next(rows, None)
+    if not header:
+        return [], "A aba 'ListaCidades' está vazia."
+
+    header_map = {}
+    for idx, column_name in enumerate(header):
+        normalized = _normalize_header_name(column_name)
+        if 'cidibge' in normalized:
+            header_map['cidibge'] = idx
+        elif 'cidnome' in normalized or ('nome' in normalized and 'cidade' in normalized):
+            header_map['cidnome'] = idx
+        elif 'latitude' in normalized:
+            header_map.setdefault('latitude', idx)
+        elif 'longitude' in normalized:
+            header_map.setdefault('longitude', idx)
+        elif 'populacao' in normalized:
+            header_map['populacao'] = idx
+        elif 'estado' in normalized:
+            header_map['estado'] = idx
+
+    if 'cidibge' not in header_map or 'cidnome' not in header_map:
+        return [], "Colunas obrigatórias (cidibge ou Nome Cidade) ausentes em ListaCidades."
+
+    def parse_float(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    entries = []
+    for row in rows:
+        if not row:
+            continue
+        cidibge_idx = header_map.get('cidibge')
+        cidibge_raw = row[cidibge_idx] if cidibge_idx is not None and cidibge_idx < len(row) else None
+        cidibge = str(cidibge_raw).strip() if cidibge_raw is not None else ''
+        if not cidibge:
+            continue
+
+        cidnome_idx = header_map.get('cidnome')
+        cidnome_raw = row[cidnome_idx] if cidnome_idx is not None and cidnome_idx < len(row) else None
+        cidnome = str(cidnome_raw).strip() if cidnome_raw is not None else ''
+
+        latitude = parse_float(row[header_map['latitude']]) if 'latitude' in header_map and header_map['latitude'] < len(row) else None
+        longitude = parse_float(row[header_map['longitude']]) if 'longitude' in header_map and header_map['longitude'] < len(row) else None
+
+        populacao = None
+        if 'populacao' in header_map and header_map['populacao'] < len(row):
+            try:
+                populacao = int(float(row[header_map['populacao']])) if row[header_map['populacao']] not in (None, '') else None
+            except (TypeError, ValueError):
+                populacao = None
+
+        estado = ''
+        if 'estado' in header_map and header_map['estado'] < len(row):
+            estado_raw = row[header_map['estado']]
+            estado = str(estado_raw).strip().upper() if estado_raw not in (None, '') else ''
+
+        entries.append({
+            'cidibge': cidibge,
+            'cidnome': cidnome,
+            'latitude': latitude,
+            'longitude': longitude,
+            'populacao': populacao,
+            'estado': estado,
+        })
+
+    return entries, None
+
+
+def _detect_transaction_column(conn):
+    if not conn:
+        return None
+    candidates = ('pedtransacao', 'pedtransac', 'pedtransa', 'transacao')
+    available_columns = get_table_columns(conn, 'pedido')
+    if not available_columns:
+        return None
+    for candidate in candidates:
+        if candidate in available_columns:
+            return candidate
+    return None
+
+
+def _build_pedido_filter_conditions(filters, transaction_column):
+    clauses = []
+    params = []
+
+    start_date = filters.get('start_date')
+    if start_date:
+        clauses.append("p.peddata >= %s")
+        params.append(start_date)
+
+    end_date = filters.get('end_date')
+    if end_date:
+        clauses.append("p.peddata <= %s")
+        params.append(end_date)
+
+    representante = filters.get('representante') or []
+    if representante:
+        placeholders = ','.join(['%s'] * len(representante))
+        clauses.append(f"COALESCE(p.pedrepres::text, '') IN ({placeholders})")
+        params.extend(representante)
+
+    cliente = filters.get('cliente') or []
+    if cliente:
+        placeholders = ','.join(['%s'] * len(cliente))
+        clauses.append(f"COALESCE(p.pedcliente::text, '') IN ({placeholders})")
+        params.extend(cliente)
+
+    estado = filters.get('estado') or []
+    if estado:
+        placeholders = ','.join(['%s'] * len(estado))
+        clauses.append(
+            f"COALESCE(UPPER(TRIM(COALESCE(c.estado, p.pedentuf::text, ''))), '') IN ({placeholders})"
+        )
+        params.extend(estado)
+
+    linha = filters.get('linha') or []
+    if linha:
+        placeholders = ','.join(['%s'] * len(linha))
+        clauses.append(f"COALESCE(li.linha_value, 'OUTROS') IN ({placeholders})")
+        params.extend(linha)
+
+    status = filters.get('status') or []
+    if status:
+        placeholders = ','.join(['%s'] * len(status))
+        clauses.append(
+            f"UPPER(TRIM(COALESCE(p.pedaprova, ''))) IN ({placeholders})"
+        )
+        params.extend(status)
+
+    situacao = filters.get('situacao') or []
+    if situacao:
+        placeholders = ','.join(['%s'] * len(situacao))
+        clauses.append(
+            f"UPPER(TRIM(COALESCE(p.pedsitua, ''))) IN ({placeholders})"
+        )
+        params.extend(situacao)
+
+    transacoes = filters.get('transacao') or []
+    if transaction_column and transacoes:
+        placeholders = ','.join(['%s'] * len(transacoes))
+        clauses.append(
+            f"COALESCE(CAST(p.{transaction_column} AS TEXT), '') IN ({placeholders})"
+        )
+        params.extend(transacoes)
+
+    return clauses, params
+
+
+def _safe_divide(numerator, denominator):
+    try:
+        if denominator:
+            return numerator / denominator
+    except (TypeError, ZeroDivisionError):
+        pass
+    return 0.0
+
+
+def fetch_city_sales_metrics(filters):
+    city_metrics = []
+    state_totals = defaultdict(float)
+    city_sets_by_state = defaultdict(set)
+    national_total = 0.0
+
+    conn = get_erp_db_connection()
+    if not conn:
+        return city_metrics, state_totals, national_total, city_sets_by_state
+
+    try:
+        transaction_column = _detect_transaction_column(conn)
+        where_clauses, params = _build_pedido_filter_conditions(filters, transaction_column)
+        where_clause = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ''
+
+        pedprodu_columns = get_table_columns(conn, 'pedprodu')
+        has_pprdescped = pedprodu_columns and 'pprdescped' in pedprodu_columns
+        value_expr = (
+            "COALESCE(pp.pprvlsoma, 0) - COALESCE(pp.pprdescped, 0)"
+            if has_pprdescped else
+            "COALESCE(pp.pprvlsoma, 0)"
+        )
+
+        query = f"""
+{LINE_INFO_CTE}
+SELECT
+    COALESCE(NULLIF(TRIM(COALESCE(c.cidibge::text, p.pedentcid::text)), ''), '') AS cidibge,
+    COALESCE(NULLIF(TRIM(COALESCE(c.cidnome, p.pedentcid::text)), ''), '') AS cidnome,
+    COALESCE(UPPER(TRIM(COALESCE(c.estado, p.pedentuf::text, ''))), '') AS estado,
+    SUM({value_expr}) AS pedidos_total,
+    COUNT(DISTINCT NULLIF(TRIM(COALESCE(p.pedcliente::text, '')), '')) AS clientes_positivados
+FROM pedprodu pp
+JOIN pedido p ON pp.pedido = p.pedido
+LEFT JOIN cidade c ON c.cidade = p.pedentcid
+LEFT JOIN linha_info li ON li.pedido = p.pedido
+{where_clause}
+GROUP BY cidibge, cidnome, estado
+ORDER BY pedidos_total DESC
+"""
+        cur = conn.cursor()
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+        cur.close()
+
+        for cidibge, cidnome, state, pedidos_total, clientes in rows:
+            if not cidibge:
+                continue
+
+            state_key = (state or '').upper()
+            pedidos_value = float(pedidos_total or 0.0)
+            national_total += pedidos_value
+            state_totals[state_key] += pedidos_value
+            city_sets_by_state[state_key].add(cidibge)
+
+            city_metrics.append({
+                'cidibge': cidibge,
+                'cidnome': cidnome or cidibge,
+                'estado': state_key,
+                'pedidos_total': pedidos_value,
+                'clientes_positivados': int(clientes or 0),
+            })
+    except Error as err:
+        print(f'Erro ao carregar métricas por cidade: {err}')
+    finally:
+        if conn:
+            conn.close()
+
+    return city_metrics, state_totals, national_total, city_sets_by_state
+
+
+def fetch_distinct_customers_by_state(filters):
+    customers_by_state = defaultdict(int)
+    conn = get_erp_db_connection()
+    if not conn:
+        return customers_by_state
+
+    try:
+        transaction_column = _detect_transaction_column(conn)
+        where_clauses, params = _build_pedido_filter_conditions(filters, transaction_column)
+        where_clause = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ''
+
+        query = f"""
+{LINE_INFO_CTE}
+SELECT
+    COALESCE(UPPER(TRIM(COALESCE(c.estado, p.pedentuf::text, ''))), '') AS estado,
+    COUNT(DISTINCT NULLIF(TRIM(COALESCE(p.pedcliente::text, '')), '')) AS total_customers
+FROM pedido p
+LEFT JOIN cidade c ON c.cidade = p.pedentcid
+LEFT JOIN linha_info li ON li.pedido = p.pedido
+{where_clause}
+GROUP BY estado
+"""
+
+        cur = conn.cursor()
+        cur.execute(query, tuple(params))
+        for state, total in cur.fetchall():
+            state_key = (state or '').upper()
+            customers_by_state[state_key] = int(total or 0)
+        cur.close()
+    except Error as err:
+        print(f'Erro ao buscar clientes positivados por estado: {err}')
+    finally:
+        if conn:
+            conn.close()
+
+    return customers_by_state
+
+
+def fetch_new_clients_by_state(filters):
+    new_clients = defaultdict(int)
+    conn = get_erp_db_connection()
+    if not conn:
+        return new_clients
+
+    if not table_has_column(conn, 'empresa', 'empdtincl'):
+        conn.close()
+        return new_clients
+
+    try:
+        clauses = [
+            "COALESCE(e.emptipo, 0) = 1",
+            "UPPER(TRIM(COALESCE(e.emppess, ''))) = 'J'"
+        ]
+        params = []
+
+        start_date = filters.get('start_date')
+        if start_date:
+            clauses.append("e.empdtincl >= %s")
+            params.append(start_date)
+
+        end_date = filters.get('end_date')
+        if end_date:
+            clauses.append("e.empdtincl <= %s")
+            params.append(end_date)
+
+        estados = filters.get('estado') or []
+        if estados:
+            placeholders = ','.join(['%s'] * len(estados))
+            clauses.append(
+                f"COALESCE(UPPER(TRIM(COALESCE(e.empestado, ''))), '') IN ({placeholders})"
+            )
+            params.extend(estados)
+
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ''
+
+        query = f"""
+SELECT
+    COALESCE(UPPER(TRIM(COALESCE(e.empestado, ''))), '') AS estado,
+    COUNT(DISTINCT COALESCE(e.empresa::text, '')) AS total
+FROM empresa e
+{where_clause}
+GROUP BY estado
+"""
+        cur = conn.cursor()
+        cur.execute(query, tuple(params))
+        for state, total in cur.fetchall():
+            state_key = (state or '').upper()
+            new_clients[state_key] = int(total or 0)
+        cur.close()
+    except Error as err:
+        print(f'Erro ao buscar novos clientes por estado: {err}')
+    finally:
+        if conn:
+            conn.close()
+
+    return new_clients
+
+
+def fetch_clients_in_carteira_by_state(filters):
+    carteira = defaultdict(int)
+    conn = get_erp_db_connection()
+    if not conn:
+        return carteira
+
+    try:
+        clauses = [
+            "UPPER(TRIM(COALESCE(v.venstatus, ''))) = 'A'",
+            "UPPER(TRIM(COALESCE(e.empstatus, ''))) = 'A'",
+            "UPPER(TRIM(COALESCE(e.emppess, ''))) = 'J'"
+        ]
+        params = []
+
+        estados = filters.get('estado') or []
+        if estados:
+            placeholders = ','.join(['%s'] * len(estados))
+            clauses.append(
+                f"COALESCE(UPPER(TRIM(COALESCE(e.empestado, ''))), '') IN ({placeholders})"
+            )
+            params.extend(estados)
+
+        representantes = filters.get('representante') or []
+        if representantes:
+            placeholders = ','.join(['%s'] * len(representantes))
+            clauses.append(f"COALESCE(cm.cmerepseq::text, '') IN ({placeholders})")
+            params.extend(representantes)
+
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ''
+
+        query = f"""
+SELECT
+    COALESCE(UPPER(TRIM(COALESCE(e.empestado, ''))), '') AS estado,
+    COUNT(DISTINCT NULLIF(COALESCE(cm.cmempresa::text, ''), '')) AS total_clients
+FROM cmempre2 cm
+LEFT JOIN empresa e ON e.empresa = cm.cmempresa
+LEFT JOIN vendedor v ON v.vendedor = cm.cmerepseq
+{where_clause}
+GROUP BY estado
+"""
+        cur = conn.cursor()
+        cur.execute(query, tuple(params))
+        for state, total in cur.fetchall():
+            state_key = (state or '').upper()
+            carteira[state_key] = int(total or 0)
+        cur.close()
+    except Error as err:
+        print(f'Erro ao buscar clientes em carteira por estado: {err}')
+    finally:
+        if conn:
+            conn.close()
+
+    return carteira
+
+
+def summarize_state_metrics_for_selection(selected_states, state_summary, national_total):
+    states = [state.strip().upper() for state in selected_states if state and state.strip()]
+    if not states:
+        states = list(BRAZIL_STATE_CODES)
+
+    result = {
+        'pedidos_total': 0.0,
+        'novos_clientes': 0,
+        'clientes_em_carteira': 0,
+        'clientes_positivados': 0,
+        'clientes_positivados_percent': 0.0,
+        'quantidade_cidades': 0,
+        'cidades_positivadas': 0,
+        'cidades_positivadas_percent': 0.0,
+        'representatividade_estado_percent': 0.0,
+    }
+
+    for state_code in states:
+        summary = state_summary.get(state_code, {})
+        result['pedidos_total'] += summary.get('pedidos_total', 0.0)
+        result['novos_clientes'] += summary.get('novos_clientes', 0)
+        result['clientes_em_carteira'] += summary.get('clientes_em_carteira', 0)
+        result['clientes_positivados'] += summary.get('clientes_positivados', 0)
+        result['quantidade_cidades'] += summary.get('cidades_total', 0)
+        result['cidades_positivadas'] += summary.get('cidades_positivadas', 0)
+
+    result['clientes_positivados_percent'] = _safe_divide(
+        result['clientes_positivados'],
+        result['clientes_em_carteira']
+    )
+    result['cidades_positivadas_percent'] = _safe_divide(
+        result['cidades_positivadas'],
+        result['quantidade_cidades']
+    )
+    result['representatividade_estado_percent'] = _safe_divide(
+        result['pedidos_total'],
+        national_total
+    )
+
+    return result
 
 
 def fetch_meta_totals_for_premio(selected_periods, selected_vendors):
@@ -12004,6 +12569,234 @@ def debug_pedidos_aprovados():
 
     except Exception as e:
         return f"Erro: {str(e)}", 500
+
+
+def parse_interactive_map_filters(saved_filters):
+    today = datetime.date.today()
+    first_day_of_month = today.replace(day=1)
+    last_day_of_month = first_day_of_month.replace(
+        day=calendar.monthrange(today.year, today.month)[1]
+    )
+
+    def parse_date_input(value, fallback):
+        if not value:
+            return fallback
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return fallback
+
+    saved_filters = saved_filters or {}
+    start_value = request.args.get('start_date') or saved_filters.get('start_date')
+    end_value = request.args.get('end_date') or saved_filters.get('end_date')
+    start_date = parse_date_input(start_value, first_day_of_month)
+    end_date = parse_date_input(end_value, last_day_of_month)
+
+    def gather_multi(param_name, saved_key, uppercase=False):
+        values = request.args.getlist(param_name)
+        if not values:
+            values = saved_filters.get(saved_key) or []
+        collected = []
+        for item in values:
+            if item is None:
+                continue
+            text = str(item).strip()
+            if not text:
+                continue
+            collected.append(text.upper() if uppercase else text)
+        return collected
+
+    representante_values = gather_multi('representante', 'representante')
+    estado_values = gather_multi('estado', 'estado', uppercase=True)
+    cliente_values = gather_multi('cliente', 'cliente')
+    linha_values = gather_multi('linha', 'linha', uppercase=True)
+    status_values = gather_multi('status', 'status', uppercase=True)
+    situacao_values = gather_multi('situacao', 'situacao', uppercase=True)
+    transacao_values = gather_multi('transacao', 'transacao')
+
+    template_filters = {
+        'start_date': start_date.strftime('%Y-%m-%d'),
+        'end_date': end_date.strftime('%Y-%m-%d'),
+        'representante': representante_values,
+        'estado': estado_values,
+        'cliente': cliente_values,
+        'linha': linha_values,
+        'status': status_values,
+        'situacao': situacao_values,
+        'transacao': transacao_values,
+    }
+
+    query_filters = {
+        'start_date': start_date,
+        'end_date': end_date,
+        'representante': representante_values,
+        'estado': estado_values,
+        'cliente': cliente_values,
+        'linha': linha_values,
+        'status': status_values,
+        'situacao': situacao_values,
+        'transacao': transacao_values,
+    }
+
+    return query_filters, template_filters
+
+
+@app.route('/interactive_map_geojson/<map_id>')
+@login_required
+def interactive_map_geojson(map_id):
+    map_definition = INTERACTIVE_MAP_DEFINITIONS_BY_ID.get(map_id)
+    if not map_definition:
+        abort(404)
+    try:
+        return send_file(map_definition['file_path'], mimetype='application/json')
+    except FileNotFoundError:
+        abort(404)
+
+
+@app.route('/report_map_interactive')
+@login_required
+def report_map_interactive():
+    user_id = session.get('user_id')
+    saved_filters = {}
+    if user_id:
+        raw_saved = get_user_parameters(user_id, REPORT_MAP_INTERACTIVE_FILTERS_PARAM)
+        if raw_saved:
+            try:
+                saved_filters = json.loads(raw_saved) or {}
+            except (TypeError, ValueError):
+                saved_filters = {}
+
+    query_filters, template_filters = parse_interactive_map_filters(saved_filters)
+    city_metrics, state_totals, national_total, city_sets = fetch_city_sales_metrics(query_filters)
+    customers_by_state = fetch_distinct_customers_by_state(query_filters)
+    new_clients_by_state = fetch_new_clients_by_state(query_filters)
+    carteira_by_state = fetch_clients_in_carteira_by_state(query_filters)
+    lista_entries, lista_error = load_lista_cidades_entries(user_id)
+
+    lista_lookup = {entry['cidibge']: entry for entry in lista_entries}
+    lista_state_sets = defaultdict(set)
+    for entry in lista_entries:
+        state_code = (entry.get('estado') or '').upper()
+        if state_code:
+            lista_state_sets[state_code].add(entry['cidibge'])
+    lista_state_counts = {state: len(values) for state, values in lista_state_sets.items()}
+
+    state_summary = {}
+    for code in BRAZIL_STATE_CODES:
+        state_summary[code] = {
+            'pedidos_total': state_totals.get(code, 0.0),
+            'clientes_positivados': customers_by_state.get(code, 0),
+            'novos_clientes': new_clients_by_state.get(code, 0),
+            'clientes_em_carteira': carteira_by_state.get(code, 0),
+            'cidades_positivadas': len(city_sets.get(code, set())),
+            'cidades_total': lista_state_counts.get(code, 0),
+        }
+
+    requested_map_id = request.args.get('map_id') or DEFAULT_INTERACTIVE_MAP_ID
+    default_map_id = requested_map_id if requested_map_id in INTERACTIVE_MAP_DEFINITIONS_BY_ID else DEFAULT_INTERACTIVE_MAP_ID
+    selected_map_definition = INTERACTIVE_MAP_DEFINITIONS_BY_ID.get(default_map_id)
+    initial_states = (
+        selected_map_definition.get('state_codes') if selected_map_definition else []
+    ) or list(BRAZIL_STATE_CODES)
+
+    card_metrics = summarize_state_metrics_for_selection(initial_states, state_summary, national_total)
+
+    for entry in city_metrics:
+        lookup = lista_lookup.get(entry['cidibge'], {})
+        entry['latitude'] = lookup.get('latitude')
+        entry['longitude'] = lookup.get('longitude')
+        entry['population'] = lookup.get('populacao')
+        entry['representatividade_cidade'] = _safe_divide(entry['pedidos_total'], national_total)
+        state_total = state_totals.get(entry['estado'], 0.0)
+        entry['representatividade_estado'] = _safe_divide(entry['pedidos_total'], state_total)
+
+    return render_template(
+        'report_map_interactive.html',
+        page_title="Mapa Interativo",
+        filters=template_filters,
+        vendor_options=get_sales_order_vendors(),
+        customer_options=get_sales_order_customers(),
+        transaction_options=get_sales_order_transactions(),
+        line_options=get_distinct_product_lines(),
+        state_options=get_distinct_states(),
+        status_options=ORDER_APPROVAL_STATUS_OPTIONS,
+        situation_options=ORDER_SITUATION_OPTIONS,
+        map_definitions=INTERACTIVE_MAP_DEFINITIONS,
+        default_map_id=default_map_id,
+        map_geojson_url_template=url_for('interactive_map_geojson', map_id='MAP_ID_PLACEHOLDER'),
+        city_metrics=city_metrics,
+        state_summary=state_summary,
+        national_total=national_total,
+        card_metrics=card_metrics,
+        lista_cidades_error=lista_error,
+        save_filters_url=url_for('save_report_map_interactive_filters'),
+        map_selection_available=len(INTERACTIVE_MAP_DEFINITIONS) > 0,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/report_map_interactive/save_filters', methods=['POST'])
+@login_required
+def save_report_map_interactive_filters():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def ensure_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def sanitize_multi(field_name, uppercase=False):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            cleaned.append(text.upper() if uppercase else text)
+        return cleaned
+
+    def sanitize_date(value):
+        if not value:
+            return ''
+        try:
+            return datetime.datetime.strptime(str(value).strip(), '%Y-%m-%d').strftime('%Y-%m-%d')
+        except (ValueError, TypeError):
+            return ''
+
+    sanitized_filters = {
+        'start_date': sanitize_date(payload.get('start_date')),
+        'end_date': sanitize_date(payload.get('end_date')),
+        'representante': sanitize_multi('representante'),
+        'estado': sanitize_multi('estado', uppercase=True),
+        'cliente': sanitize_multi('cliente'),
+        'linha': sanitize_multi('linha', uppercase=True),
+        'status': sanitize_multi('status', uppercase=True),
+        'situacao': sanitize_multi('situacao', uppercase=True),
+        'transacao': sanitize_multi('transacao'),
+    }
+
+    try:
+        saved = save_user_parameters(
+            user_id,
+            REPORT_MAP_INTERACTIVE_FILTERS_PARAM,
+            json.dumps(sanitized_filters)
+        )
+    except (TypeError, ValueError) as exc:
+        return jsonify({'success': False, 'message': f'Não foi possível processar os filtros: {exc}'}), 400
+
+    if not saved:
+        return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
+
+    return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
 
 
 @app.route('/commercial_reports')

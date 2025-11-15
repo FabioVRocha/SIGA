@@ -1,0 +1,688 @@
+{% extends "base.html" %}
+
+{% block title %}Mapa Interativo{% endblock %}
+{% block page_title %}Mapa Interativo{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-sA+4r+G01X/v2MzvYV2nE1qG9WvPt9g2T0EaMwOVdzo=" crossorigin="" />
+<style>
+    .map-wrapper {
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        background: var(--clr-white);
+        padding: 1rem;
+    }
+
+    .map-button {
+        border: 1px solid var(--clr-border);
+        padding: 0.5rem 1rem;
+        border-radius: 999px;
+        background: var(--clr-light-gray);
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+        transition: background 0.2s ease, border 0.2s ease;
+    }
+
+    .map-button.active {
+        background: var(--clr-light-blue);
+        border-color: var(--clr-light-blue);
+        color: var(--clr-white);
+    }
+
+    .report-card {
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 0.75rem;
+        background: var(--clr-white);
+        padding: 1rem;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    }
+
+    .filter-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        z-index: 999;
+    }
+
+    .filter-modal-content {
+        background: var(--clr-white);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        max-width: 960px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
+    }
+
+    .filter-combobox {
+        border: 1px solid var(--clr-border);
+        border-radius: 0.75rem;
+        overflow: hidden;
+        background: var(--clr-light-gray);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .filter-combobox-header {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        background: var(--clr-white);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-combobox-header input {
+        flex: 1;
+        border: 1px solid var(--clr-border);
+        border-radius: 0.5rem;
+        padding: 0.35rem 0.75rem;
+        background: var(--clr-light-gray);
+    }
+
+    .combobox-options {
+        max-height: 220px;
+        overflow-y: auto;
+        padding: 0.5rem 1rem;
+        background: var(--clr-white);
+    }
+
+    .combobox-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0;
+        cursor: pointer;
+    }
+
+    .combobox-option input {
+        width: 1rem;
+        height: 1rem;
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .hidden {
+        display: none !important;
+    }
+
+    #mapCanvas {
+        width: 100%;
+        min-height: 520px;
+    }
+
+    .filter-status {
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+            <p class="text-lg font-semibold">Mapa Interativo</p>
+            <p class="text-medium-gray text-sm">Visualize os Pedidos Total por cidade com filtros por representante, estado, cliente, linha, status, situação e transação.</p>
+        </div>
+        <div class="flex gap-2">
+            <button id="openFilters" class="px-4 py-2 rounded-full text-white font-semibold" style="background: var(--clr-light-blue);">Filtros</button>
+        </div>
+    </div>
+    {% if lista_cidades_error %}
+    <div class="flash-message warning text-sm">{{ lista_cidades_error }}</div>
+    {% endif %}
+
+    {% if not map_selection_available %}
+    <div class="report-card">
+        <p class="font-semibold text-dark-blue">Nenhum mapa configurado</p>
+        <p class="text-sm text-medium-gray">Adicione arquivos TopoJSON válidos na pasta <code>templates/Mapas</code> para que o mapa possa ser exibido.</p>
+    </div>
+    {% endif %}
+
+    <div class="map-wrapper">
+        <div class="flex flex-wrap gap-2 mb-4" id="mapButtons">
+            {% for map in map_definitions %}
+            <button type="button" class="map-button" data-map-id="{{ map.id }}">{{ map.label }}</button>
+            {% endfor %}
+        </div>
+        <div id="mapStatusMessage" class="text-sm text-medium-gray mb-3"></div>
+        <div id="mapCanvas"></div>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="report-card" id="card-novos-clientes-container">
+            <p class="text-xs uppercase text-medium-gray">Novos Clientes</p>
+            <p id="card-novos-clientes" class="text-2xl font-semibold text-dark-blue">0</p>
+        </div>
+        <div class="report-card">
+            <p class="text-xs uppercase text-medium-gray">Clientes em Carteira</p>
+            <p id="card-clientes-carteira" class="text-2xl font-semibold text-dark-blue">0</p>
+        </div>
+        <div class="report-card">
+            <p class="text-xs uppercase text-medium-gray">Clientes Positivados</p>
+            <p id="card-clientes-positivados" class="text-2xl font-semibold text-dark-blue">0</p>
+        </div>
+        <div class="report-card">
+            <p class="text-xs uppercase text-medium-gray">% de Positivação por Clientes</p>
+            <p id="card-clientes-positivacao" class="text-2xl font-semibold text-dark-blue">0%</p>
+        </div>
+        <div class="report-card">
+            <p class="text-xs uppercase text-medium-gray">Quantidade de Cidades</p>
+            <p id="card-quantidade-cidades" class="text-2xl font-semibold text-dark-blue">0</p>
+        </div>
+        <div class="report-card">
+            <p class="text-xs uppercase text-medium-gray">Cidades Positivadas</p>
+            <p id="card-cidades-positivadas" class="text-2xl font-semibold text-dark-blue">0</p>
+        </div>
+        <div class="report-card">
+            <p class="text-xs uppercase text-medium-gray">% de Positivação por Cidades</p>
+            <p id="card-cidades-positivacao" class="text-2xl font-semibold text-dark-blue">0%</p>
+        </div>
+        <div class="report-card">
+            <p class="text-xs uppercase text-medium-gray">% de Representatividade por Estado</p>
+            <p id="card-representatividade-estado" class="text-2xl font-semibold text-dark-blue">0%</p>
+        </div>
+    </div>
+</div>
+
+<div id="filterModal" class="filter-modal hidden">
+    <div class="filter-modal-content">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Filtros</h2>
+            <button id="closeFilters" class="text-medium-gray text-sm font-semibold">Fechar</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label class="text-sm font-semibold text-medium-gray">Data Inicial</label>
+                <input id="filter-start-date" type="date" value="{{ filters.start_date }}" class="w-full mt-1 p-2 border rounded-md" style="border-color: var(--clr-border);">
+            </div>
+            <div>
+                <label class="text-sm font-semibold text-medium-gray">Data Final</label>
+                <input id="filter-end-date" type="date" value="{{ filters.end_date }}" class="w-full mt-1 p-2 border rounded-md" style="border-color: var(--clr-border);">
+            </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="filter-combobox" data-filter-name="representante">
+                <div class="filter-combobox-header">
+                    <span class="text-sm font-semibold text-medium-gray">Representante</span>
+                    <input type="text" placeholder="Buscar representante" class="combobox-search" />
+                </div>
+                <div class="combobox-options">
+                    {% for option in vendor_options %}
+                    <label class="combobox-option">
+                        <input type="checkbox" name="representante" value="{{ option.code }}" {% if option.code in filters.representante %}checked{% endif %}>
+                        <span>{{ option.name or option.code }}</span>
+                    </label>
+                    {% endfor %}
+                    {% if not vendor_options %}
+                    <p class="text-xs text-medium-gray">Sem representantes disponíveis</p>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="filter-combobox" data-filter-name="estado">
+                <div class="filter-combobox-header">
+                    <span class="text-sm font-semibold text-medium-gray">Estado</span>
+                    <input type="text" placeholder="Buscar estado" class="combobox-search" />
+                </div>
+                <div class="combobox-options">
+                    {% for state in state_options %}
+                    <label class="combobox-option">
+                        <input type="checkbox" name="estado" value="{{ state }}" {% if state in filters.estado %}checked{% endif %}>
+                        <span>{{ state }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="filter-combobox" data-filter-name="cliente">
+                <div class="filter-combobox-header">
+                    <span class="text-sm font-semibold text-medium-gray">Cliente</span>
+                    <input type="text" placeholder="Buscar cliente" class="combobox-search" />
+                </div>
+                <div class="combobox-options">
+                    {% for option in customer_options %}
+                    <label class="combobox-option">
+                        <input type="checkbox" name="cliente" value="{{ option.code }}" {% if option.code in filters.cliente %}checked{% endif %}>
+                        <span>{{ option.name or option.code }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="filter-combobox" data-filter-name="linha">
+                <div class="filter-combobox-header">
+                    <span class="text-sm font-semibold text-medium-gray">Linha</span>
+                    <input type="text" placeholder="Buscar linha" class="combobox-search" />
+                </div>
+                <div class="combobox-options">
+                    {% for line in line_options %}
+                    <label class="combobox-option">
+                        <input type="checkbox" name="linha" value="{{ line }}" {% if line in filters.linha %}checked{% endif %}>
+                        <span>{{ line }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="filter-combobox" data-filter-name="status">
+                <div class="filter-combobox-header">
+                    <span class="text-sm font-semibold text-medium-gray">Status</span>
+                    <input type="text" placeholder="Buscar status" class="combobox-search" />
+                </div>
+                <div class="combobox-options">
+                    {% for option in status_options %}
+                    <label class="combobox-option">
+                        <input type="checkbox" name="status" value="{{ option.code }}" {% if option.code in filters.status %}checked{% endif %}>
+                        <span>{{ option.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="filter-combobox" data-filter-name="situacao">
+                <div class="filter-combobox-header">
+                    <span class="text-sm font-semibold text-medium-gray">Situação</span>
+                    <input type="text" placeholder="Buscar situação" class="combobox-search" />
+                </div>
+                <div class="combobox-options">
+                    {% for option in situation_options %}
+                    <label class="combobox-option">
+                        <input type="checkbox" name="situacao" value="{{ option.code }}" {% if option.code in filters.situacao %}checked{% endif %}>
+                        <span>{{ option.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="filter-combobox" data-filter-name="transacao">
+                <div class="filter-combobox-header">
+                    <span class="text-sm font-semibold text-medium-gray">Transação</span>
+                    <input type="text" placeholder="Buscar transação" class="combobox-search" />
+                </div>
+                <div class="combobox-options">
+                    {% for option in transaction_options %}
+                    <label class="combobox-option">
+                        <input type="checkbox" name="transacao" value="{{ option.code }}" {% if option.code in filters.transacao %}checked{% endif %}>
+                        <span>{{ option.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="modal-actions mt-6">
+            <span id="filterStatus" class="filter-status text-sm"></span>
+            <div class="flex gap-2 flex-wrap">
+                <button id="saveFilterConfiguration" class="px-4 py-2 rounded-full text-white font-semibold" style="background: var(--clr-light-blue);">Salvar filtros</button>
+                <button id="applyFilters" class="px-4 py-2 rounded-full border font-semibold" style="border-color: var(--clr-border);">Aplicar filtros</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o9N1j+AoQBQ1k3gkQ9ZL6Yh1vQ+T9U2bGmQT3W1uPUI=" crossorigin=""></script>
+<script src="https://unpkg.com/topojson-client@3"></script>
+<script>
+const cityMetrics = {{ city_metrics | tojson | safe }};
+const mapDefinitions = {{ map_definitions | tojson | safe }};
+const stateSummary = {{ state_summary | tojson | safe }};
+const filtersConfig = {{ filters | tojson | safe }};
+const cardMetrics = {{ card_metrics | tojson | safe }};
+const nationalTotal = {{ national_total | default(0) }};
+const defaultMapId = "{{ default_map_id }}";
+const mapGeojsonUrlTemplate = {{ map_geojson_url_template | tojson }};
+const saveFiltersUrl = "{{ save_filters_url }}";
+
+const numberFormatter = new Intl.NumberFormat('pt-BR');
+const percentFormatter = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 2 });
+const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const leafletAvailable = typeof L !== 'undefined';
+
+let currentMapId = defaultMapId;
+let mapInstance = null;
+let geojsonLayer = null;
+const geojsonCache = {};
+const cityLookup = cityMetrics.reduce((acc, entry) => {
+    acc[entry.cidibge] = entry;
+    return acc;
+}, {});
+const mapStatusMessage = document.getElementById('mapStatusMessage');
+
+function setStatusMessage(message, isError = false) {
+    if (!mapStatusMessage) {
+        return;
+    }
+    mapStatusMessage.textContent = message || '';
+    mapStatusMessage.style.color = isError ? 'var(--clr-error)' : 'var(--clr-medium-gray)';
+}
+
+function getMapDefinition(id) {
+    return mapDefinitions.find((map) => map.id === id);
+}
+
+function getActiveStates(mapId) {
+    const mapDef = getMapDefinition(mapId);
+    if (!mapDef) {
+        return Object.keys(stateSummary);
+    }
+    if (Array.isArray(mapDef.state_codes) && mapDef.state_codes.length) {
+        return mapDef.state_codes;
+    }
+    return Object.keys(stateSummary);
+}
+
+function updateCardContent(metrics) {
+    document.getElementById('card-novos-clientes').textContent = numberFormatter.format(metrics.novos_clientes);
+    document.getElementById('card-clientes-carteira').textContent = numberFormatter.format(metrics.clientes_em_carteira);
+    document.getElementById('card-clientes-positivados').textContent = numberFormatter.format(metrics.clientes_positivados);
+    document.getElementById('card-clientes-positivacao').textContent = percentFormatter.format(metrics.clientes_positivados_percent);
+    document.getElementById('card-quantidade-cidades').textContent = numberFormatter.format(metrics.quantidade_cidades);
+    document.getElementById('card-cidades-positivadas').textContent = numberFormatter.format(metrics.cidades_positivadas);
+    document.getElementById('card-cidades-positivacao').textContent = percentFormatter.format(metrics.cidades_positivadas_percent);
+    document.getElementById('card-representatividade-estado').textContent = percentFormatter.format(metrics.representatividade_estado_percent);
+}
+
+function summarizeStateMetrics(stateCodes) {
+    const codes = stateCodes.length ? stateCodes : Object.keys(stateSummary);
+    const summary = {
+        pedidos_total: 0,
+        novos_clientes: 0,
+        clientes_em_carteira: 0,
+        clientes_positivados: 0,
+        quantidade_cidades: 0,
+        cidades_positivadas: 0,
+        representatividade_estado_percent: 0,
+    };
+
+    codes.forEach((code) => {
+        const values = stateSummary[code] || {};
+        summary.pedidos_total += values.pedidos_total || 0;
+        summary.novos_clientes += values.novos_clientes || 0;
+        summary.clientes_em_carteira += values.clientes_em_carteira || 0;
+        summary.clientes_positivados += values.clientes_positivados || 0;
+        summary.quantidade_cidades += values.cidades_total || 0;
+        summary.cidades_positivadas += values.cidades_positivadas || 0;
+    });
+
+    summary.clientes_positivados_percent = summary.clientes_em_carteira
+        ? summary.clientes_positivados / summary.clientes_em_carteira
+        : 0;
+    summary.cidades_positivadas_percent = summary.quantidade_cidades
+        ? summary.cidades_positivadas / summary.quantidade_cidades
+        : 0;
+    summary.representatividade_estado_percent = nationalTotal
+        ? summary.pedidos_total / nationalTotal
+        : 0;
+
+    return summary;
+}
+
+function highlightButton(selectedId) {
+    document.querySelectorAll('.map-button').forEach((button) => {
+        button.classList.toggle('active', button.dataset.mapId === selectedId);
+    });
+}
+
+function getTopojsonObject(topojsonData, mapDef) {
+    const objects = topojsonData.objects || {};
+    const objectNames = Object.keys(objects);
+    const key = mapDef?.object_name || objectNames[0];
+    return key ? topojson.feature(topojsonData, objects[key]) : null;
+}
+
+function loadGeojson(mapId) {
+    if (!mapDefinitions.length) {
+        return Promise.resolve(null);
+    }
+    if (geojsonCache[mapId]) {
+        return Promise.resolve(geojsonCache[mapId]);
+    }
+    const url = mapGeojsonUrlTemplate.replace('MAP_ID_PLACEHOLDER', mapId);
+    setStatusMessage('Carregando dados do mapa...');
+    return fetch(url)
+        .then((response) => response.json())
+        .then((topoData) => {
+            const mapDef = getMapDefinition(mapId);
+            const geoJson = getTopojsonObject(topoData, mapDef);
+            if (geoJson) {
+                geojsonCache[mapId] = geoJson;
+            }
+            return geoJson;
+        })
+        .catch((error) => {
+            console.error('Falha ao carregar o mapa:', error);
+            setStatusMessage('Não foi possível carregar o mapa selecionado.', true);
+            return null;
+        });
+}
+
+function getFeatureId(feature) {
+    const props = feature && feature.properties;
+    if (!props) return '';
+    return (props.CD_GEOCMU || props.cd_geocmu || props.code || props.id || '').toString();
+}
+
+function styleFeature() {
+    return {
+        weight: 0.7,
+        color: '#1f3a5f',
+        fillColor: '#93c5fd',
+        fillOpacity: 0.55,
+    };
+}
+
+function highlightFeature(e) {
+    const layer = e.target;
+    layer.setStyle({ weight: 2, color: '#0f172a', fillOpacity: 0.7 });
+}
+
+function resetHighlight(e) {
+    if (geojsonLayer) {
+        geojsonLayer.resetStyle(e.target);
+    }
+}
+
+function bindTooltip(layer, feature) {
+    const id = getFeatureId(feature);
+    const cityData = cityLookup[id] || {};
+    const cityName = cityData.cidnome || feature?.properties?.NM_MUNICIP || 'Cidade';
+    const pedidos = currencyFormatter.format(cityData.pedidos_total || 0);
+    const representatividade = percentFormatter.format(cityData.representatividade_cidade || 0);
+    const population = cityData.population ? numberFormatter.format(cityData.population) : 'Sem dados';
+
+    const content = `Cidade: <strong>${cityName}</strong><br />Pedidos Total: <strong>${pedidos}</strong><br />Representatividade Cidade %: <strong>${representatividade}</strong><br />População: <strong>${population}</strong>`;
+    layer.bindTooltip(content, { sticky: true });
+}
+
+function renderGeojson(geojson) {
+    if (!leafletAvailable || !geojson) {
+        return;
+    }
+    if (geojsonLayer) {
+        geojsonLayer.remove();
+    }
+    geojsonLayer = L.geoJSON(geojson, {
+        style: styleFeature,
+        onEachFeature: (feature, layer) => {
+            layer.on({ mouseover: highlightFeature, mouseout: resetHighlight });
+            bindTooltip(layer, feature);
+        },
+    }).addTo(mapInstance);
+    mapInstance.fitBounds(geojsonLayer.getBounds(), { padding: [40, 40] });
+    setStatusMessage('Mapa carregado.');
+}
+
+function activateMap(mapId) {
+    currentMapId = mapId;
+    highlightButton(mapId);
+    const selectedStates = getActiveStates(mapId);
+    const metrics = summarizeStateMetrics(selectedStates);
+    updateCardContent(metrics);
+    setStatusMessage('Selecionando mapa...', false);
+    if (leafletAvailable) {
+        loadGeojson(mapId).then((geojson) => renderGeojson(geojson));
+    }
+}
+
+function buildFilterSelection(filterName, values) {
+    values.forEach((value) => {
+        const checkbox = document.querySelector(`input[name="${filterName}"][value="${value}"]`);
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+    });
+}
+
+function applySavedFilters() {
+    buildFilterSelection('representante', filtersConfig.representante);
+    buildFilterSelection('estado', filtersConfig.estado);
+    buildFilterSelection('cliente', filtersConfig.cliente);
+    buildFilterSelection('linha', filtersConfig.linha);
+    buildFilterSelection('status', filtersConfig.status);
+    buildFilterSelection('situacao', filtersConfig.situacao);
+    buildFilterSelection('transacao', filtersConfig.transacao);
+}
+
+function collectFilterPayload() {
+    const payload = {
+        start_date: document.getElementById('filter-start-date').value,
+        end_date: document.getElementById('filter-end-date').value,
+        representante: [],
+        estado: [],
+        cliente: [],
+        linha: [],
+        status: [],
+        situacao: [],
+        transacao: [],
+    };
+    ['representante', 'estado', 'cliente', 'linha', 'status', 'situacao', 'transacao'].forEach((name) => {
+        document.querySelectorAll(`input[name="${name}"]:checked`).forEach((checkbox) => {
+            payload[name].push(checkbox.value);
+        });
+    });
+    return payload;
+}
+
+function buildQueryString() {
+    const params = new URLSearchParams();
+    const start = document.getElementById('filter-start-date').value;
+    const end = document.getElementById('filter-end-date').value;
+    if (start) params.set('start_date', start);
+    if (end) params.set('end_date', end);
+    ['representante', 'estado', 'cliente', 'linha', 'status', 'situacao', 'transacao'].forEach((name) => {
+        document.querySelectorAll(`input[name="${name}"]:checked`).forEach((checkbox) => {
+            params.append(name, checkbox.value);
+        });
+    });
+    if (currentMapId) {
+        params.set('map_id', currentMapId);
+    }
+    return params.toString() ? `?${params.toString()}` : '';
+}
+
+function wireComboboxSearch() {
+    document.querySelectorAll('.combobox-search').forEach((input) => {
+        input.addEventListener('input', () => {
+            const query = input.value.trim().toLowerCase();
+            const group = input.closest('.filter-combobox');
+            if (!group) return;
+            group.querySelectorAll('.combobox-option').forEach((option) => {
+                const label = option.textContent.trim().toLowerCase();
+                option.style.display = label.includes(query) ? 'flex' : 'none';
+            });
+        });
+    });
+}
+
+function buildFilterStatus(message, color = 'var(--clr-light-blue)') {
+    const status = document.getElementById('filterStatus');
+    status.textContent = message;
+    status.style.color = color;
+}
+
+function initFilters() {
+    document.getElementById('openFilters').addEventListener('click', () => {
+        document.getElementById('filterModal').classList.remove('hidden');
+    });
+    document.getElementById('closeFilters').addEventListener('click', () => {
+        document.getElementById('filterModal').classList.add('hidden');
+    });
+    document.getElementById('filterModal').addEventListener('click', (event) => {
+        if (event.target === event.currentTarget) {
+            document.getElementById('filterModal').classList.add('hidden');
+        }
+    });
+    document.getElementById('saveFilterConfiguration').addEventListener('click', async () => {
+        const payload = collectFilterPayload();
+        const response = await fetch(saveFiltersUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        buildFilterStatus(result.message, response.ok ? 'var(--clr-success)' : 'var(--clr-error)');
+    });
+    document.getElementById('applyFilters').addEventListener('click', () => {
+        const queryString = buildQueryString();
+        window.location.search = queryString;
+    });
+}
+
+function attachMapButtons() {
+    document.querySelectorAll('.map-button').forEach((button) => {
+        button.addEventListener('click', () => {
+            activateMap(button.dataset.mapId);
+        });
+    });
+}
+
+function initializeMap() {
+    if (!mapDefinitions.length) {
+        return;
+    }
+    if (!leafletAvailable) {
+        setStatusMessage('Leaflet não foi carregado. Verifique a conexão com a internet.', true);
+        return;
+    }
+    mapInstance = L.map('mapCanvas', { zoomControl: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+    }).addTo(mapInstance);
+    activateMap(defaultMapId);
+}
+
+function initializeCards() {
+    updateCardContent(cardMetrics);
+}
+
+function onDomReady(callback) {
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        callback();
+    } else {
+        document.addEventListener('DOMContentLoaded', callback);
+    }
+}
+
+onDomReady(() => {
+    if (!mapDefinitions.length) {
+        setStatusMessage('Nenhum mapa disponível.', true);
+    }
+    if (mapDefinitions.length) {
+        initializeMap();
+        attachMapButtons();
+    }
+    wireComboboxSearch();
+    initFilters();
+    applySavedFilters();
+    initializeCards();
+    highlightButton(defaultMapId);
+});
+</script>
+{% endblock %}
