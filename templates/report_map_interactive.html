@@ -4,7 +4,7 @@
 {% block page_title %}Mapa Interativo{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-sA+4r+G01X/v2MzvYV2nE1qG9WvPt9g2T0EaMwOVdzo=" crossorigin="" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <style>
     .map-wrapper {
         border: 1px solid var(--clr-border);
@@ -59,45 +59,96 @@
         box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
     }
 
+    .filters-panel {
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+        background: var(--clr-white);
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    }
+
+    .filters-panel-header {
+        color: var(--clr-dark-blue);
+    }
+
     .filter-combobox {
+        position: relative;
+    }
+
+    .filter-combobox-trigger {
+        width: 100%;
         border: 1px solid var(--clr-border);
         border-radius: 0.75rem;
-        overflow: hidden;
+        padding: 0.65rem 1rem;
         background: var(--clr-light-gray);
-        display: flex;
-        flex-direction: column;
-    }
-
-    .filter-combobox-header {
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-        background: var(--clr-white);
+        font-weight: 600;
+        color: var(--clr-dark-blue);
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        justify-content: space-between;
+        cursor: pointer;
+        transition: border-color 0.2s ease, background 0.2s ease;
     }
 
-    .filter-combobox-header input {
-        flex: 1;
+    .filter-combobox.open .filter-combobox-trigger {
+        background: var(--clr-white);
+        border-color: var(--clr-light-blue);
+    }
+
+    .filter-combobox-trigger i {
+        transition: transform 0.2s ease;
+    }
+
+    .filter-combobox.open .filter-combobox-trigger i {
+        transform: rotate(180deg);
+    }
+
+    .filter-combobox-panel {
+        position: absolute;
+        top: calc(100% + 0.5rem);
+        left: 0;
+        right: 0;
+        background: var(--clr-white);
+        border: 1px solid rgba(15, 23, 42, 0.12);
+        border-radius: 0.75rem;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.25);
+        padding: 0.75rem 1rem;
+        z-index: 20;
+        display: none;
+    }
+
+    .filter-combobox.opens-up .filter-combobox-panel {
+        top: auto;
+        bottom: calc(100% + 0.5rem);
+    }
+
+    .filter-combobox.open .filter-combobox-panel {
+        display: block;
+    }
+
+    .combobox-search {
+        width: 100%;
         border: 1px solid var(--clr-border);
         border-radius: 0.5rem;
         padding: 0.35rem 0.75rem;
-        background: var(--clr-light-gray);
+        background: #f5f6fa;
     }
 
     .combobox-options {
-        max-height: 220px;
+        margin-top: 0.75rem;
+        max-height: min(280px, 65vh);
         overflow-y: auto;
-        padding: 0.5rem 1rem;
-        background: var(--clr-white);
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
     }
 
     .combobox-option {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.25rem 0;
         cursor: pointer;
+        padding: 0.1rem 0;
     }
 
     .combobox-option input {
@@ -202,132 +253,156 @@
             <h2 class="text-lg font-semibold">Filtros</h2>
             <button id="closeFilters" class="text-medium-gray text-sm font-semibold">Fechar</button>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-                <label class="text-sm font-semibold text-medium-gray">Data Inicial</label>
-                <input id="filter-start-date" type="date" value="{{ filters.start_date }}" class="w-full mt-1 p-2 border rounded-md" style="border-color: var(--clr-border);">
+        <div class="filters-panel">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-sm font-semibold text-medium-gray">Data Inicial</label>
+                        <input id="filter-start-date" type="date" value="{{ filters.start_date }}" class="w-full mt-1 p-2 border rounded-md" style="border-color: var(--clr-border);">
+                    </div>
+                    <div>
+                        <label class="text-sm font-semibold text-medium-gray">Data Final</label>
+                        <input id="filter-end-date" type="date" value="{{ filters.end_date }}" class="w-full mt-1 p-2 border rounded-md" style="border-color: var(--clr-border);">
+                    </div>
+                </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                <div class="filter-combobox" data-filter-name="representante">
+                    <button type="button" class="filter-combobox-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span>Representante</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="filter-combobox-panel">
+                        <input type="text" placeholder="Buscar representante" class="combobox-search" />
+                        <div class="combobox-options">
+                            {% for option in vendor_options %}
+                            <label class="combobox-option">
+                                <input type="checkbox" name="representante" value="{{ option.code }}" {% if option.code in filters.representante %}checked{% endif %}>
+                                <span>{{ option.name or option.code }}</span>
+                            </label>
+                            {% endfor %}
+                            {% if not vendor_options %}
+                            <p class="text-xs text-medium-gray">Sem representantes disponíveis</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-combobox" data-filter-name="estado">
+                    <button type="button" class="filter-combobox-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span>Estado</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="filter-combobox-panel">
+                        <input type="text" placeholder="Buscar estado" class="combobox-search" />
+                        <div class="combobox-options">
+                            {% for state in state_options %}
+                            <label class="combobox-option">
+                                <input type="checkbox" name="estado" value="{{ state }}" {% if state in filters.estado %}checked{% endif %}>
+                                <span>{{ state }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-combobox" data-filter-name="cliente">
+                    <button type="button" class="filter-combobox-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span>Cliente</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="filter-combobox-panel">
+                        <input type="text" placeholder="Buscar cliente" class="combobox-search" />
+                        <div class="combobox-options">
+                            {% for option in customer_options %}
+                            <label class="combobox-option">
+                                <input type="checkbox" name="cliente" value="{{ option.code }}" {% if option.code in filters.cliente %}checked{% endif %}>
+                                <span>{{ option.name or option.code }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-combobox" data-filter-name="linha">
+                    <button type="button" class="filter-combobox-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span>Linha</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="filter-combobox-panel">
+                        <input type="text" placeholder="Buscar linha" class="combobox-search" />
+                        <div class="combobox-options">
+                            {% for line in line_options %}
+                            <label class="combobox-option">
+                                <input type="checkbox" name="linha" value="{{ line }}" {% if line in filters.linha %}checked{% endif %}>
+                                <span>{{ line }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-combobox" data-filter-name="status">
+                    <button type="button" class="filter-combobox-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span>Status</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="filter-combobox-panel">
+                        <input type="text" placeholder="Buscar status" class="combobox-search" />
+                        <div class="combobox-options">
+                            {% for option in status_options %}
+                            <label class="combobox-option">
+                                <input type="checkbox" name="status" value="{{ option.code }}" {% if option.code in filters.status %}checked{% endif %}>
+                                <span>{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-combobox" data-filter-name="situacao">
+                    <button type="button" class="filter-combobox-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span>Situação</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="filter-combobox-panel">
+                        <input type="text" placeholder="Buscar situação" class="combobox-search" />
+                        <div class="combobox-options">
+                            {% for option in situation_options %}
+                            <label class="combobox-option">
+                                <input type="checkbox" name="situacao" value="{{ option.code }}" {% if option.code in filters.situacao %}checked{% endif %}>
+                                <span>{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-combobox" data-filter-name="transacao">
+                    <button type="button" class="filter-combobox-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span>Transação</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="filter-combobox-panel">
+                        <input type="text" placeholder="Buscar transação" class="combobox-search" />
+                        <div class="combobox-options">
+                            {% for option in transaction_options %}
+                            <label class="combobox-option">
+                                <input type="checkbox" name="transacao" value="{{ option.code }}" {% if option.code in filters.transacao %}checked{% endif %}>
+                                <span>{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div>
-                <label class="text-sm font-semibold text-medium-gray">Data Final</label>
-                <input id="filter-end-date" type="date" value="{{ filters.end_date }}" class="w-full mt-1 p-2 border rounded-md" style="border-color: var(--clr-border);">
-            </div>
-        </div>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="filter-combobox" data-filter-name="representante">
-                <div class="filter-combobox-header">
-                    <span class="text-sm font-semibold text-medium-gray">Representante</span>
-                    <input type="text" placeholder="Buscar representante" class="combobox-search" />
+            <div class="modal-actions mt-4">
+                <span id="filterStatus" class="filter-status text-sm"></span>
+                <div class="flex gap-2 flex-wrap">
+                    <button id="saveFilterConfiguration" class="px-4 py-2 rounded-full text-white font-semibold" style="background: var(--clr-light-blue);">Salvar filtros</button>
+                    <button id="applyFilters" class="px-4 py-2 rounded-full border font-semibold" style="border-color: var(--clr-border);">Aplicar filtros</button>
                 </div>
-                <div class="combobox-options">
-                    {% for option in vendor_options %}
-                    <label class="combobox-option">
-                        <input type="checkbox" name="representante" value="{{ option.code }}" {% if option.code in filters.representante %}checked{% endif %}>
-                        <span>{{ option.name or option.code }}</span>
-                    </label>
-                    {% endfor %}
-                    {% if not vendor_options %}
-                    <p class="text-xs text-medium-gray">Sem representantes disponíveis</p>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="filter-combobox" data-filter-name="estado">
-                <div class="filter-combobox-header">
-                    <span class="text-sm font-semibold text-medium-gray">Estado</span>
-                    <input type="text" placeholder="Buscar estado" class="combobox-search" />
-                </div>
-                <div class="combobox-options">
-                    {% for state in state_options %}
-                    <label class="combobox-option">
-                        <input type="checkbox" name="estado" value="{{ state }}" {% if state in filters.estado %}checked{% endif %}>
-                        <span>{{ state }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="filter-combobox" data-filter-name="cliente">
-                <div class="filter-combobox-header">
-                    <span class="text-sm font-semibold text-medium-gray">Cliente</span>
-                    <input type="text" placeholder="Buscar cliente" class="combobox-search" />
-                </div>
-                <div class="combobox-options">
-                    {% for option in customer_options %}
-                    <label class="combobox-option">
-                        <input type="checkbox" name="cliente" value="{{ option.code }}" {% if option.code in filters.cliente %}checked{% endif %}>
-                        <span>{{ option.name or option.code }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="filter-combobox" data-filter-name="linha">
-                <div class="filter-combobox-header">
-                    <span class="text-sm font-semibold text-medium-gray">Linha</span>
-                    <input type="text" placeholder="Buscar linha" class="combobox-search" />
-                </div>
-                <div class="combobox-options">
-                    {% for line in line_options %}
-                    <label class="combobox-option">
-                        <input type="checkbox" name="linha" value="{{ line }}" {% if line in filters.linha %}checked{% endif %}>
-                        <span>{{ line }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="filter-combobox" data-filter-name="status">
-                <div class="filter-combobox-header">
-                    <span class="text-sm font-semibold text-medium-gray">Status</span>
-                    <input type="text" placeholder="Buscar status" class="combobox-search" />
-                </div>
-                <div class="combobox-options">
-                    {% for option in status_options %}
-                    <label class="combobox-option">
-                        <input type="checkbox" name="status" value="{{ option.code }}" {% if option.code in filters.status %}checked{% endif %}>
-                        <span>{{ option.label }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="filter-combobox" data-filter-name="situacao">
-                <div class="filter-combobox-header">
-                    <span class="text-sm font-semibold text-medium-gray">Situação</span>
-                    <input type="text" placeholder="Buscar situação" class="combobox-search" />
-                </div>
-                <div class="combobox-options">
-                    {% for option in situation_options %}
-                    <label class="combobox-option">
-                        <input type="checkbox" name="situacao" value="{{ option.code }}" {% if option.code in filters.situacao %}checked{% endif %}>
-                        <span>{{ option.label }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="filter-combobox" data-filter-name="transacao">
-                <div class="filter-combobox-header">
-                    <span class="text-sm font-semibold text-medium-gray">Transação</span>
-                    <input type="text" placeholder="Buscar transação" class="combobox-search" />
-                </div>
-                <div class="combobox-options">
-                    {% for option in transaction_options %}
-                    <label class="combobox-option">
-                        <input type="checkbox" name="transacao" value="{{ option.code }}" {% if option.code in filters.transacao %}checked{% endif %}>
-                        <span>{{ option.label }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-        <div class="modal-actions mt-6">
-            <span id="filterStatus" class="filter-status text-sm"></span>
-            <div class="flex gap-2 flex-wrap">
-                <button id="saveFilterConfiguration" class="px-4 py-2 rounded-full text-white font-semibold" style="background: var(--clr-light-blue);">Salvar filtros</button>
-                <button id="applyFilters" class="px-4 py-2 rounded-full border font-semibold" style="border-color: var(--clr-border);">Aplicar filtros</button>
             </div>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o9N1j+AoQBQ1k3gkQ9ZL6Yh1vQ+T9U2bGmQT3W1uPUI=" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://unpkg.com/topojson-client@3"></script>
 <script>
 const cityMetrics = {{ city_metrics | tojson | safe }};
@@ -463,10 +538,92 @@ function loadGeojson(mapId) {
         });
 }
 
-function getFeatureId(feature) {
+function normalizeKey(value) {
+    if (!value) {
+        return '';
+    }
+    const normalized = value.toString().toLowerCase();
+    return normalized.replace(/[^a-z0-9]/g, '');
+}
+
+function normalizePropertyMap(properties) {
+    const map = {};
+    if (!properties) {
+        return map;
+    }
+    Object.keys(properties).forEach((key) => {
+        if (key) {
+            const normalizedKey = normalizeKey(key);
+            map[normalizedKey] = key;
+        }
+    });
+    return map;
+}
+
+function findFeatureProperty(feature, keywords = []) {
     const props = feature && feature.properties;
-    if (!props) return '';
-    return (props.CD_GEOCMU || props.cd_geocmu || props.code || props.id || '').toString();
+    if (!props) {
+        return '';
+    }
+    const normalizedMap = normalizePropertyMap(props);
+    for (const candidate of keywords) {
+        if (!candidate) continue;
+        const normalizedCandidate = normalizeKey(candidate);
+        if (!normalizedCandidate) continue;
+        if (normalizedMap[normalizedCandidate]) {
+            return props[normalizedMap[normalizedCandidate]];
+        }
+    }
+    const normalizedKeywords = keywords
+        .map((candidate) => normalizeKey(candidate))
+        .filter(Boolean);
+    for (const key of Object.keys(props)) {
+        const normalizedKey = normalizeKey(key);
+        if (normalizedKey && normalizedKeywords.some((candidate) => normalizedKey.includes(candidate))) {
+            return props[key];
+        }
+    }
+    return '';
+}
+
+function getFeatureId(feature) {
+    const candidate = findFeatureProperty(feature, [
+        'cd_geocmu',
+        'cd_ibge',
+        'codmun',
+        'codibge',
+        'codmunc',
+        'code',
+        'id',
+    ]);
+    return candidate ? candidate.toString() : '';
+}
+
+function getFeatureCityName(feature) {
+    const rawValue = findFeatureProperty(feature, [
+        'nm_munic',
+        'nm_municip',
+        'nm_municipio',
+        'municipio',
+        'municip',
+        'nome',
+        'city',
+        'cidade',
+    ]);
+    const normalizedValue = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
+    if (normalizedValue) {
+        return normalizedValue;
+    }
+    const props = feature?.properties || {};
+    for (const val of Object.values(props)) {
+        if (typeof val === 'string') {
+            const text = val.trim();
+            if (text && /[A-Za-zÀ-ÖØ-öø-ÿ]/.test(text) && text.toLowerCase() !== 'cidade') {
+                return text;
+            }
+        }
+    }
+    return '';
 }
 
 function styleFeature() {
@@ -492,7 +649,7 @@ function resetHighlight(e) {
 function bindTooltip(layer, feature) {
     const id = getFeatureId(feature);
     const cityData = cityLookup[id] || {};
-    const cityName = cityData.cidnome || feature?.properties?.NM_MUNICIP || 'Cidade';
+    const cityName = cityData.cidnome || getFeatureCityName(feature) || 'Cidade';
     const pedidos = currencyFormatter.format(cityData.pedidos_total || 0);
     const representatividade = percentFormatter.format(cityData.representatividade_cidade || 0);
     const population = cityData.population ? numberFormatter.format(cityData.population) : 'Sem dados';
@@ -607,31 +764,123 @@ function buildFilterStatus(message, color = 'var(--clr-light-blue)') {
     status.style.color = color;
 }
 
-function initFilters() {
-    document.getElementById('openFilters').addEventListener('click', () => {
-        document.getElementById('filterModal').classList.remove('hidden');
-    });
-    document.getElementById('closeFilters').addEventListener('click', () => {
-        document.getElementById('filterModal').classList.add('hidden');
-    });
-    document.getElementById('filterModal').addEventListener('click', (event) => {
-        if (event.target === event.currentTarget) {
-            document.getElementById('filterModal').classList.add('hidden');
+function initializeFilterActions() {
+    const saveButton = document.getElementById('saveFilterConfiguration');
+    if (saveButton) {
+        saveButton.addEventListener('click', async () => {
+            const payload = collectFilterPayload();
+            const response = await fetch(saveFiltersUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const result = await response.json();
+            buildFilterStatus(result.message, response.ok ? 'var(--clr-success)' : 'var(--clr-error)');
+        });
+    }
+    const applyButton = document.getElementById('applyFilters');
+    if (applyButton) {
+        applyButton.addEventListener('click', () => {
+            const queryString = buildQueryString();
+            window.location.search = queryString;
+        });
+    }
+}
+
+function initializeFilterModal() {
+    const modal = document.getElementById('filterModal');
+    if (!modal) {
+        return;
+    }
+    const openButton = document.getElementById('openFilters');
+    const closeButton = document.getElementById('closeFilters');
+    const showModal = () => modal.classList.remove('hidden');
+    const hideModal = () => modal.classList.add('hidden');
+
+    if (openButton) {
+        openButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            showModal();
+        });
+    }
+    if (closeButton) {
+        closeButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            hideModal();
+        });
+    }
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            hideModal();
         }
     });
-    document.getElementById('saveFilterConfiguration').addEventListener('click', async () => {
-        const payload = collectFilterPayload();
-        const response = await fetch(saveFiltersUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+}
+
+function initializeComboboxDropdowns() {
+    const comboboxes = Array.from(document.querySelectorAll('.filter-combobox'));
+    const closeAllComboboxes = () => {
+        comboboxes.forEach((combobox) => {
+            if (combobox.classList.contains('open')) {
+                combobox.classList.remove('open');
+                const trigger = combobox.querySelector('.filter-combobox-trigger');
+                if (trigger) {
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
+                combobox.classList.remove('opens-up');
+            }
         });
-        const result = await response.json();
-        buildFilterStatus(result.message, response.ok ? 'var(--clr-success)' : 'var(--clr-error)');
+    };
+
+    const adjustDropdownDirection = (combobox, panel) => {
+        const trigger = combobox.querySelector('.filter-combobox-trigger');
+        if (!trigger || !panel) {
+            return;
+        }
+        const triggerRect = trigger.getBoundingClientRect();
+        const panelHeight = Math.min(panel.scrollHeight, window.innerHeight * 0.65);
+        const spaceBelow = window.innerHeight - triggerRect.bottom;
+        const spaceAbove = triggerRect.top;
+        if (spaceBelow < panelHeight && spaceAbove > panelHeight) {
+            combobox.classList.add('opens-up');
+        } else {
+            combobox.classList.remove('opens-up');
+        }
+    };
+
+    comboboxes.forEach((combobox) => {
+        const trigger = combobox.querySelector('.filter-combobox-trigger');
+        const panel = combobox.querySelector('.filter-combobox-panel');
+        if (!trigger || !panel) {
+            return;
+        }
+        trigger.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const isOpen = combobox.classList.toggle('open');
+            trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            if (isOpen) {
+                requestAnimationFrame(() => adjustDropdownDirection(combobox, panel));
+            } else {
+                combobox.classList.remove('opens-up');
+            }
+        });
+        panel.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+        const searchInput = panel.querySelector('.combobox-search');
+        if (searchInput) {
+            searchInput.addEventListener('focus', () => {
+                combobox.classList.add('open');
+                trigger.setAttribute('aria-expanded', 'true');
+                requestAnimationFrame(() => adjustDropdownDirection(combobox, panel));
+            });
+        }
     });
-    document.getElementById('applyFilters').addEventListener('click', () => {
-        const queryString = buildQueryString();
-        window.location.search = queryString;
+
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('.filter-combobox')) {
+            closeAllComboboxes();
+        }
     });
 }
 
@@ -679,7 +928,9 @@ onDomReady(() => {
         attachMapButtons();
     }
     wireComboboxSearch();
-    initFilters();
+    initializeFilterModal();
+    initializeComboboxDropdowns();
+    initializeFilterActions();
     applySavedFilters();
     initializeCards();
     highlightButton(defaultMapId);
