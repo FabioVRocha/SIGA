@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Mapa Interativo{% endblock %}
-{% block page_title %}Mapa Interativo{% endblock %}
+{% block title %}Mapa de Vendas{% endblock %}
+{% block page_title %}Mapa de Vendas{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
@@ -183,7 +183,7 @@
 <div class="space-y-6">
     <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-            <p class="text-lg font-semibold">Mapa Interativo</p>
+            <p class="text-lg font-semibold">Mapa de Vendas</p>
             <p class="text-medium-gray text-sm">Visualize os Pedidos Total por cidade com filtros por representante, estado, cliente, linha, status, situação e transação.</p>
         </div>
         <div class="flex gap-2">
@@ -391,6 +391,7 @@
             <div class="modal-actions mt-4">
                 <span id="filterStatus" class="filter-status text-sm"></span>
                 <div class="flex gap-2 flex-wrap">
+                    <button id="clearFilters" class="px-4 py-2 rounded-full border font-semibold text-medium-gray" style="border-color: var(--clr-border);">Limpar filtros</button>
                     <button id="saveFilterConfiguration" class="px-4 py-2 rounded-full text-white font-semibold" style="background: var(--clr-light-blue);">Salvar filtros</button>
                     <button id="applyFilters" class="px-4 py-2 rounded-full border font-semibold" style="border-color: var(--clr-border);">Aplicar filtros</button>
                 </div>
@@ -414,6 +415,7 @@ const nationalTotal = {{ national_total | default(0) }};
 const defaultMapId = "{{ default_map_id }}";
 const mapGeojsonUrlTemplate = {{ map_geojson_url_template | tojson }};
 const saveFiltersUrl = "{{ save_filters_url }}";
+const filterNames = ['representante', 'estado', 'cliente', 'linha', 'status', 'situacao', 'transacao'];
 
 const numberFormatter = new Intl.NumberFormat('pt-BR');
 const percentFormatter = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 2 });
@@ -688,7 +690,7 @@ function activateMap(mapId) {
     }
 }
 
-function buildFilterSelection(filterName, values) {
+function buildFilterSelection(filterName, values = []) {
     values.forEach((value) => {
         const checkbox = document.querySelector(`input[name="${filterName}"][value="${value}"]`);
         if (checkbox) {
@@ -698,33 +700,37 @@ function buildFilterSelection(filterName, values) {
 }
 
 function applySavedFilters() {
-    buildFilterSelection('representante', filtersConfig.representante);
-    buildFilterSelection('estado', filtersConfig.estado);
-    buildFilterSelection('cliente', filtersConfig.cliente);
-    buildFilterSelection('linha', filtersConfig.linha);
-    buildFilterSelection('status', filtersConfig.status);
-    buildFilterSelection('situacao', filtersConfig.situacao);
-    buildFilterSelection('transacao', filtersConfig.transacao);
+    filterNames.forEach((name) => buildFilterSelection(name, filtersConfig[name]));
 }
 
 function collectFilterPayload() {
     const payload = {
         start_date: document.getElementById('filter-start-date').value,
         end_date: document.getElementById('filter-end-date').value,
-        representante: [],
-        estado: [],
-        cliente: [],
-        linha: [],
-        status: [],
-        situacao: [],
-        transacao: [],
     };
-    ['representante', 'estado', 'cliente', 'linha', 'status', 'situacao', 'transacao'].forEach((name) => {
+    filterNames.forEach((name) => {
+        payload[name] = [];
         document.querySelectorAll(`input[name="${name}"]:checked`).forEach((checkbox) => {
             payload[name].push(checkbox.value);
         });
     });
     return payload;
+}
+
+function resetFilterInputs() {
+    const startInput = document.getElementById('filter-start-date');
+    const endInput = document.getElementById('filter-end-date');
+    if (startInput) {
+        startInput.value = '';
+    }
+    if (endInput) {
+        endInput.value = '';
+    }
+    filterNames.forEach((name) => {
+        document.querySelectorAll(`input[name="${name}"]`).forEach((checkbox) => {
+            checkbox.checked = false;
+        });
+    });
 }
 
 function buildQueryString() {
@@ -733,7 +739,7 @@ function buildQueryString() {
     const end = document.getElementById('filter-end-date').value;
     if (start) params.set('start_date', start);
     if (end) params.set('end_date', end);
-    ['representante', 'estado', 'cliente', 'linha', 'status', 'situacao', 'transacao'].forEach((name) => {
+    filterNames.forEach((name) => {
         document.querySelectorAll(`input[name="${name}"]:checked`).forEach((checkbox) => {
             params.append(name, checkbox.value);
         });
@@ -783,6 +789,14 @@ function initializeFilterActions() {
         applyButton.addEventListener('click', () => {
             const queryString = buildQueryString();
             window.location.search = queryString;
+        });
+    }
+    const clearButton = document.getElementById('clearFilters');
+    if (clearButton) {
+        clearButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            resetFilterInputs();
+            buildFilterStatus('Filtros limpos', 'var(--clr-medium-gray)');
         });
     }
 }

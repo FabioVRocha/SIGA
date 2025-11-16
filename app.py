@@ -2411,7 +2411,10 @@ JOIN pedido p ON pp.pedido = p.pedido
 LEFT JOIN cidade c ON c.cidade = p.pedentcid
 LEFT JOIN linha_info li ON li.pedido = p.pedido
 {where_clause}
-GROUP BY cidibge, cidnome, estado
+GROUP BY
+    COALESCE(NULLIF(TRIM(COALESCE(c.cidibge::text, p.pedentcid::text)), ''), ''),
+    COALESCE(NULLIF(TRIM(COALESCE(c.cidnome, p.pedentcid::text)), ''), ''),
+    COALESCE(UPPER(TRIM(COALESCE(c.estado, p.pedentuf::text, ''))), '')
 ORDER BY pedidos_total DESC
 """
         cur = conn.cursor()
@@ -2465,7 +2468,7 @@ FROM pedido p
 LEFT JOIN cidade c ON c.cidade = p.pedentcid
 LEFT JOIN linha_info li ON li.pedido = p.pedido
 {where_clause}
-GROUP BY estado
+GROUP BY COALESCE(UPPER(TRIM(COALESCE(c.estado, p.pedentuf::text, ''))), '')
 """
 
         cur = conn.cursor()
@@ -2514,7 +2517,7 @@ def fetch_new_clients_by_state(filters):
         if estados:
             placeholders = ','.join(['%s'] * len(estados))
             clauses.append(
-                f"COALESCE(UPPER(TRIM(COALESCE(e.empestado, ''))), '') IN ({placeholders})"
+                f"COALESCE(UPPER(TRIM(COALESCE(c.estado, ''))), '') IN ({placeholders})"
             )
             params.extend(estados)
 
@@ -2522,11 +2525,12 @@ def fetch_new_clients_by_state(filters):
 
         query = f"""
 SELECT
-    COALESCE(UPPER(TRIM(COALESCE(e.empestado, ''))), '') AS estado,
+    COALESCE(UPPER(TRIM(COALESCE(c.estado, ''))), '') AS estado,
     COUNT(DISTINCT COALESCE(e.empresa::text, '')) AS total
 FROM empresa e
+LEFT JOIN cidade c ON c.cidade = e.empcidade
 {where_clause}
-GROUP BY estado
+GROUP BY COALESCE(UPPER(TRIM(COALESCE(c.estado, ''))), '')
 """
         cur = conn.cursor()
         cur.execute(query, tuple(params))
@@ -2561,7 +2565,7 @@ def fetch_clients_in_carteira_by_state(filters):
         if estados:
             placeholders = ','.join(['%s'] * len(estados))
             clauses.append(
-                f"COALESCE(UPPER(TRIM(COALESCE(e.empestado, ''))), '') IN ({placeholders})"
+                f"COALESCE(UPPER(TRIM(COALESCE(c.estado, ''))), '') IN ({placeholders})"
             )
             params.extend(estados)
 
@@ -2575,13 +2579,14 @@ def fetch_clients_in_carteira_by_state(filters):
 
         query = f"""
 SELECT
-    COALESCE(UPPER(TRIM(COALESCE(e.empestado, ''))), '') AS estado,
+    COALESCE(UPPER(TRIM(COALESCE(c.estado, ''))), '') AS estado,
     COUNT(DISTINCT NULLIF(COALESCE(cm.cmempresa::text, ''), '')) AS total_clients
 FROM cmempre2 cm
 LEFT JOIN empresa e ON e.empresa = cm.cmempresa
 LEFT JOIN vendedor v ON v.vendedor = cm.cmerepseq
+LEFT JOIN cidade c ON c.cidade = e.empcidade
 {where_clause}
-GROUP BY estado
+GROUP BY COALESCE(UPPER(TRIM(COALESCE(c.estado, ''))), '')
 """
         cur = conn.cursor()
         cur.execute(query, tuple(params))
@@ -12712,7 +12717,7 @@ def report_map_interactive():
 
     return render_template(
         'report_map_interactive.html',
-        page_title="Mapa Interativo",
+        page_title="Mapa de Vendas",
         filters=template_filters,
         vendor_options=get_sales_order_vendors(),
         customer_options=get_sales_order_customers(),
