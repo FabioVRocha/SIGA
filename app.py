@@ -3417,7 +3417,6 @@ def fetch_monthly_revenue(year, filters):
                 LEFT JOIN produto p ON tm.priproduto = p.produto
                 LEFT JOIN grupo g ON p.grupo = g.grupo
                 LEFT JOIN opera op ON d.operacao = op.operacao
-                LEFT JOIN vendedor v ON d.vennome = v.vennome
                 WHERE EXTRACT(YEAR FROM tm.pridata) = %s
             """
             params = [year]
@@ -3449,16 +3448,36 @@ def fetch_monthly_revenue(year, filters):
                 params.extend(cities)
 
             vendors = filters.get('vendor')
-            if vendors:
-                placeholders = ','.join(['%s'] * len(vendors))
-                sql += f" AND d.vennome IN ({placeholders})"
-                params.extend(vendors)
-
             vendor_statuses = filters.get('vendor_status')
+            vendor_conditions = []
+            vendor_params = []
+
+            if vendors:
+                vendor_values = vendors if isinstance(vendors, list) else [vendors]
+                vendor_values = [v for v in vendor_values if str(v).strip()]
+                if vendor_values:
+                    placeholders = ','.join(['%s'] * len(vendor_values))
+                    vendor_conditions.append(f"v.vennome IN ({placeholders})")
+                    vendor_params.extend(vendor_values)
+
             if vendor_statuses:
-                placeholders = ','.join(['%s'] * len(vendor_statuses))
-                sql += f" AND v.venstatus IN ({placeholders})"
-                params.extend(vendor_statuses)
+                status_values = vendor_statuses if isinstance(vendor_statuses, list) else [vendor_statuses]
+                status_values = [s for s in status_values if str(s).strip()]
+                if status_values:
+                    placeholders = ','.join(['%s'] * len(status_values))
+                    vendor_conditions.append(f"v.venstatus IN ({placeholders})")
+                    vendor_params.extend(status_values)
+
+            if vendor_conditions:
+                vendor_clause = " AND ".join(vendor_conditions)
+                sql += (
+                    " AND EXISTS ("
+                    "SELECT 1 FROM comnf cf "
+                    "JOIN vendedor v ON cf.comnvende = v.vendedor "
+                    "WHERE cf.comncontr = d.controle "
+                    f"AND {vendor_clause})"
+                )
+                params.extend(vendor_params)
 
             lines = filters.get('line')
             if lines:
@@ -4658,9 +4677,20 @@ def fetch_revenue_by_cfop(filters):
             if filters.get('city'):
                 sql += " AND c.cidnome = %s"
                 params.append(filters['city'])
-            if filters.get('vendor'):
-                sql += " AND d.vennome = %s"
-                params.append(filters['vendor'])
+            vendors = filters.get('vendor')
+            if vendors:
+                vendor_values = vendors if isinstance(vendors, list) else [vendors]
+                vendor_values = [v for v in vendor_values if str(v).strip()]
+                if vendor_values:
+                    placeholders = ','.join(['%s'] * len(vendor_values))
+                    sql += (
+                        " AND EXISTS ("
+                        "SELECT 1 FROM comnf cf "
+                        "JOIN vendedor v ON cf.comnvende = v.vendedor "
+                        "WHERE cf.comncontr = d.controle "
+                        f"AND v.vennome IN ({placeholders}))"
+                    )
+                    params.extend(vendor_values)
 
             if filters.get('line'):
                 matching_group_codes = []
@@ -4786,9 +4816,20 @@ def fetch_revenue_by_line(filters):
             if filters.get('city'):
                 sql += " AND c.cidnnome = %s"
                 params.append(filters['city'])
-            if filters.get('vendor'):
-                sql += " AND d.vennome = %s"
-                params.append(filters['vendor'])
+            vendors = filters.get('vendor')
+            if vendors:
+                vendor_values = vendors if isinstance(vendors, list) else [vendors]
+                vendor_values = [v for v in vendor_values if str(v).strip()]
+                if vendor_values:
+                    placeholders = ','.join(['%s'] * len(vendor_values))
+                    sql += (
+                        " AND EXISTS ("
+                        "SELECT 1 FROM comnf cf "
+                        "JOIN vendedor v ON cf.comnvende = v.vendedor "
+                        "WHERE cf.comncontr = d.controle "
+                        f"AND v.vennome IN ({placeholders}))"
+                    )
+                    params.extend(vendor_values)
 
             if filters.get('line'):
                 matching_group_codes = []
@@ -4920,9 +4961,20 @@ def fetch_average_price(filters):
             if filters.get('city'):
                 sql += " AND c.cidnnome = %s"
                 params.append(filters['city'])
-            if filters.get('vendor'):
-                sql += " AND d.vennome = %s"
-                params.append(filters['vendor'])
+            vendors = filters.get('vendor')
+            if vendors:
+                vendor_values = vendors if isinstance(vendors, list) else [vendors]
+                vendor_values = [v for v in vendor_values if str(v).strip()]
+                if vendor_values:
+                    placeholders = ','.join(['%s'] * len(vendor_values))
+                    sql += (
+                        " AND EXISTS ("
+                        "SELECT 1 FROM comnf cf "
+                        "JOIN vendedor v ON cf.comnvende = v.vendedor "
+                        "WHERE cf.comncontr = d.controle "
+                        f"AND v.vennome IN ({placeholders}))"
+                    )
+                    params.extend(vendor_values)
 
             if filters.get('line'):
                 matching_group_codes = []
@@ -5092,9 +5144,18 @@ def fetch_revenue_by_day(filters):
                 params.extend(cities)
             vendors = filters.get('vendor')
             if vendors:
-                placeholders = ','.join(['%s'] * len(vendors))
-                sql += f" AND d.vennome IN ({placeholders})"
-                params.extend(vendors)
+                vendor_values = vendors if isinstance(vendors, list) else [vendors]
+                vendor_values = [v for v in vendor_values if str(v).strip()]
+                if vendor_values:
+                    placeholders = ','.join(['%s'] * len(vendor_values))
+                    sql += (
+                        " AND EXISTS ("
+                        "SELECT 1 FROM comnf cf "
+                        "JOIN vendedor v ON cf.comnvende = v.vendedor "
+                        "WHERE cf.comncontr = d.controle "
+                        f"AND v.vennome IN ({placeholders}))"
+                    )
+                    params.extend(vendor_values)
 
             lines = filters.get('line')
             if lines:
@@ -5233,9 +5294,20 @@ def fetch_revenue_by_state(filters):
             if filters.get('city'):
                 sql += " AND c.cidnome = %s"
                 params.append(filters['city'])
-            if filters.get('vendor'):
-                sql += " AND d.vennome = %s"
-                params.append(filters['vendor'])
+            vendors = filters.get('vendor')
+            if vendors:
+                vendor_values = vendors if isinstance(vendors, list) else [vendors]
+                vendor_values = [v for v in vendor_values if str(v).strip()]
+                if vendor_values:
+                    placeholders = ','.join(['%s'] * len(vendor_values))
+                    sql += (
+                        " AND EXISTS ("
+                        "SELECT 1 FROM comnf cf "
+                        "JOIN vendedor v ON cf.comnvende = v.vendedor "
+                        "WHERE cf.comncontr = d.controle "
+                        f"AND v.vennome IN ({placeholders}))"
+                    )
+                    params.extend(vendor_values)
 
             if filters.get('line'):
                 matching_group_codes = []
@@ -5366,7 +5438,7 @@ def fetch_revenue_by_vendor(filters):
                     sql += " AND c.cidnome = %s"
                     params.append(filters['city'])
                 if filters.get('vendor'):
-                    sql += " AND d.vennome = %s"
+                    sql += " AND v.vennome = %s"
                     params.append(filters['vendor'])
 
                 if filters.get('line'):
