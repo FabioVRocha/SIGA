@@ -12,6 +12,10 @@ DB_PORT = "5433" # Porta do PostgreSQL (padrão é 5432)
 # Este banco será usado para tabelas auxiliares como usuários do sistema.
 SIGA_DB_NAME = "siga_db" # Nome do seu banco de dados auxiliar SIGA
 
+# --- Configurações do Banco de Dados para MRP ---
+# IMPORTANTE: Use "balanco10" para testes e "madresilva" para produção
+MRP_DB_NAME = "madresilva"  # Nome do banco de dados para consultas MRP (PRODUÇÃO)
+
 # Nome da tabela para armazenar parâmetros de usuário
 USER_PARAMETERS_TABLE = "user_parameters"
 

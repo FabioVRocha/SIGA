@@ -31,7 +31,16 @@ import unicodedata
 import openpyxl
 
 # Importa as configurações do arquivo config.py
-from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE, INVOICE_XML_STORAGE_DIR
+from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE, INVOICE_XML_STORAGE_DIR, MRP_DB_NAME
+
+# Importa funções do módulo MRP
+from mrp_routes import (
+    get_mrp_filters,
+    calculate_mrp,
+    save_mrp_to_database,
+    generate_mrp_excel,
+    generate_mrp_excel_all
+)
 
 # Inicializa a aplicação Flask
 app = Flask(__name__)
@@ -15183,6 +15192,170 @@ def logout():
     session.pop('user_id', None) # Limpa o user_id também
     flash('Você foi desconectado.', 'info')
     return redirect(url_for('login'))
+
+
+# =====================================================
+# ROTAS DO SISTEMA MRP
+# =====================================================
+
+@app.route('/mrp/calculation')
+@login_required
+def mrp_calculation():
+    """
+    Rota para exibir a tela de cálculo MRP.
+    """
+    return render_template(
+        'mrp_calculation.html',
+        page_title="Cálculo MRP",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/mrp/get_filters', methods=['GET'])
+@login_required
+def mrp_get_filters():
+    """
+    API para buscar os filtros disponíveis (pedidos, lotes de carga, lotes de produção).
+    """
+    try:
+        filters = get_mrp_filters()
+        return jsonify(filters)
+    except Exception as e:
+        print(f"Erro ao buscar filtros MRP: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/calculate', methods=['POST'])
+@login_required
+def mrp_calculate():
+    """
+    API para calcular o MRP baseado nos filtros selecionados.
+    """
+    try:
+        filters = request.get_json()
+        produtos = calculate_mrp(filters)
+        return jsonify({'produtos': produtos})
+    except Exception as e:
+        print(f"Erro ao calcular MRP: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/save', methods=['POST'])
+@login_required
+def mrp_save():
+    """
+    API para salvar o cálculo MRP no banco de dados.
+    """
+    try:
+        data = request.get_json()
+        produtos = data.get('produtos', [])
+        filters = data.get('filters', {})
+        usuario = session.get('username', 'Convidado')
+
+        # Salvar no banco de dados
+        success = save_mrp_to_database(produtos, filters, usuario)
+
+        if not success:
+            return jsonify({'error': 'Erro ao salvar MRP no banco de dados'}), 500
+
+        return jsonify({'success': True, 'message': 'MRP salvo com sucesso!'})
+
+    except Exception as e:
+        print(f"Erro ao salvar MRP: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/export_with_op', methods=['POST'])
+@login_required
+def mrp_export_with_op():
+    """
+    API para exportar apenas produtos com OP preenchido.
+    """
+    try:
+        data = request.get_json()
+        produtos = data.get('produtos', [])
+
+        # Gerar Excel apenas com produtos com OP > 0
+        excel_file = generate_mrp_excel(produtos)
+
+        # Retornar arquivo para download
+        return send_file(
+            excel_file,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'MRP_OP_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        )
+
+    except Exception as e:
+        print(f"Erro ao exportar MRP com OP: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/export_all', methods=['POST'])
+@login_required
+def mrp_export_all():
+    """
+    API para exportar todos os produtos calculados (completo).
+    """
+    try:
+        data = request.get_json()
+        produtos = data.get('produtos', [])
+
+        # Gerar Excel com todos os produtos
+        excel_file = generate_mrp_excel_all(produtos)
+
+        # Retornar arquivo para download
+        return send_file(
+            excel_file,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'MRP_Completo_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        )
+
+    except Exception as e:
+        print(f"Erro ao exportar MRP completo: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/save_and_export', methods=['POST'])
+@login_required
+def mrp_save_and_export():
+    """
+    API para salvar o cálculo MRP no banco e gerar arquivo Excel.
+    (Mantida para compatibilidade - usa a nova rota de salvar + exportar com OP)
+    """
+    try:
+        data = request.get_json()
+        produtos = data.get('produtos', [])
+        filters = data.get('filters', {})
+        usuario = session.get('username', 'Convidado')
+
+        # Salvar no banco de dados
+        success = save_mrp_to_database(produtos, filters, usuario)
+
+        if not success:
+            return jsonify({'error': 'Erro ao salvar MRP no banco de dados'}), 500
+
+        # Gerar Excel
+        excel_file = generate_mrp_excel(produtos)
+
+        # Retornar arquivo para download
+        return send_file(
+            excel_file,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'MRP_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        )
+
+    except Exception as e:
+        print(f"Erro ao salvar e exportar MRP: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
+# FIM DAS ROTAS MRP
+# =====================================================
 
 # Adiciona um print para depuração do mapa de URLs
 if __name__ == '__main__':

@@ -709,6 +709,29 @@ document.addEventListener('DOMContentLoaded', () => {
         'filter_separado',
         'filter_carregado',
     ]);
+    const sortColumnToDataColumn = {
+        pedido: 'filter_pedido',
+        lcaseque: 'filter_seq_lote',
+        cliente_codigo: 'filter_cliente_codigo',
+        cliente_nome: 'filter_cliente_nome',
+        cidade_uf: 'filter_cidade_uf',
+        quantidade_total: 'filter_quantidade_total',
+        reservado: 'filter_reservado',
+        separado: 'filter_separado',
+        carregado: 'filter_carregado',
+        linha: 'filter_linha',
+    };
+    const numericSortColumns = new Set([
+        'quantidade_total',
+        'reservado',
+        'separado',
+        'carregado',
+    ]);
+    let currentSortBy = sortByInputs.length > 0 ? sortByInputs[0].value : '';
+    let currentSortOrder = sortOrderInputs.length > 0 ? (sortOrderInputs[0].value || 'desc') : 'desc';
+    if (currentSortOrder !== 'asc' && currentSortOrder !== 'desc') {
+        currentSortOrder = 'asc';
+    }
 
     const normalizeText = (value) => {
         if (!value) {
@@ -718,6 +741,81 @@ document.addEventListener('DOMContentLoaded', () => {
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .toLowerCase();
+    };
+
+    const parseNumericValue = (value) => {
+        if (!value) {
+            return 0;
+        }
+        const normalized = value
+            .toString()
+            .replace(/\./g, '')
+            .replace(/\s/g, '')
+            .replace(',', '.')
+            .replace(/[^\d.-]/g, '');
+        const parsed = parseFloat(normalized);
+        return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    const getCellValueForColumn = (row, sortColumn) => {
+        const dataColumn = sortColumnToDataColumn[sortColumn];
+        if (!dataColumn) {
+            return '';
+        }
+        const cell = row.querySelector(`[data-column="${dataColumn}"]`);
+        return cell ? cell.textContent.trim() : '';
+    };
+
+    const sortTableRows = (column, order) => {
+        if (!column || orderRows.length === 0 || !tableBody) {
+            return;
+        }
+
+        const isNumericColumn = numericSortColumns.has(column);
+
+        orderRows.sort((a, b) => {
+            const rawValueA = getCellValueForColumn(a, column);
+            const rawValueB = getCellValueForColumn(b, column);
+            const valueA = isNumericColumn ? parseNumericValue(rawValueA) : normalizeText(rawValueA);
+            const valueB = isNumericColumn ? parseNumericValue(rawValueB) : normalizeText(rawValueB);
+
+            if (valueA < valueB) {
+                return order === 'asc' ? -1 : 1;
+            }
+            if (valueA > valueB) {
+                return order === 'asc' ? 1 : -1;
+            }
+            return 0;
+        });
+
+        orderRows.forEach((row) => {
+            if (noLocalResultsRow) {
+                tableBody.insertBefore(row, noLocalResultsRow);
+            } else {
+                tableBody.appendChild(row);
+            }
+        });
+    };
+
+    const updateSortIndicators = (activeColumn, order) => {
+        sortableButtons.forEach((button) => {
+            const column = button.dataset.sortColumn;
+            const icon = button.querySelector('.sort-icon');
+            const isActive = Boolean(activeColumn && column === activeColumn);
+
+            button.classList.toggle('active', isActive);
+
+            if (icon) {
+                icon.classList.remove('fa-sort', 'fa-sort-up', 'fa-sort-down');
+                if (!isActive) {
+                    icon.classList.add('fa-sort');
+                } else if (order === 'asc') {
+                    icon.classList.add('fa-sort-up');
+                } else {
+                    icon.classList.add('fa-sort-down');
+                }
+            }
+        });
     };
 
     const filterDropdownOptions = (config, searchTerm) => {
@@ -893,17 +991,17 @@ document.addEventListener('DOMContentLoaded', () => {
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 const column = button.dataset.sortColumn;
-                if (!column) {
+                if (!column || !sortColumnToDataColumn[column]) {
                     return;
                 }
 
-                const currentSortBy = sortByInputs.length > 0 ? sortByInputs[0].value : '';
-                const currentSortOrder = sortOrderInputs.length > 0 ? sortOrderInputs[0].value : 'desc';
                 let nextOrder = 'asc';
-
                 if (currentSortBy === column && currentSortOrder === 'asc') {
                     nextOrder = 'desc';
                 }
+
+                currentSortBy = column;
+                currentSortOrder = nextOrder;
 
                 sortByInputs.forEach((input) => {
                     input.value = column;
@@ -912,18 +1010,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     input.value = nextOrder;
                 });
 
-                const submitTarget = columnFilterForm || filterForm;
-                if (submitTarget) {
-                    submitTarget.submit();
-                } else {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('sort_by', column);
-                    url.searchParams.set('sort_order', nextOrder);
-                    window.location.href = url.toString();
-                }
+                sortTableRows(column, nextOrder);
+                updateSortIndicators(column, nextOrder);
             });
         });
     }
+
+    updateSortIndicators(currentSortBy, currentSortOrder);
 
     const normalizeFilterValue = (value, isNumeric = false) => {
         let normalized = normalizeText(value);
