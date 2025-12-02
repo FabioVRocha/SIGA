@@ -757,6 +757,37 @@ document.addEventListener('DOMContentLoaded', () => {
         return Number.isNaN(parsed) ? 0 : parsed;
     };
 
+    const textCollator = (typeof Intl !== 'undefined' && typeof Intl.Collator === 'function')
+        ? new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' })
+        : null;
+
+    const compareTextValues = (valueA, valueB) => {
+        const normalizedA = normalizeText(valueA);
+        const normalizedB = normalizeText(valueB);
+        if (textCollator) {
+            return textCollator.compare(normalizedA, normalizedB);
+        }
+        if (normalizedA < normalizedB) {
+            return -1;
+        }
+        if (normalizedA > normalizedB) {
+            return 1;
+        }
+        return 0;
+    };
+
+    const compareNumericValues = (valueA, valueB) => {
+        const numericA = parseNumericValue(valueA);
+        const numericB = parseNumericValue(valueB);
+        if (numericA < numericB) {
+            return -1;
+        }
+        if (numericA > numericB) {
+            return 1;
+        }
+        return 0;
+    };
+
     const getCellValueForColumn = (row, sortColumn) => {
         const dataColumn = sortColumnToDataColumn[sortColumn];
         if (!dataColumn) {
@@ -776,16 +807,14 @@ document.addEventListener('DOMContentLoaded', () => {
         orderRows.sort((a, b) => {
             const rawValueA = getCellValueForColumn(a, column);
             const rawValueB = getCellValueForColumn(b, column);
-            const valueA = isNumericColumn ? parseNumericValue(rawValueA) : normalizeText(rawValueA);
-            const valueB = isNumericColumn ? parseNumericValue(rawValueB) : normalizeText(rawValueB);
+            const comparison = isNumericColumn
+                ? compareNumericValues(rawValueA, rawValueB)
+                : compareTextValues(rawValueA, rawValueB);
 
-            if (valueA < valueB) {
-                return order === 'asc' ? -1 : 1;
+            if (comparison === 0) {
+                return 0;
             }
-            if (valueA > valueB) {
-                return order === 'asc' ? 1 : -1;
-            }
-            return 0;
+            return order === 'asc' ? comparison : -comparison;
         });
 
         orderRows.forEach((row) => {

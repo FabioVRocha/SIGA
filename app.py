@@ -12410,6 +12410,13 @@ def report_premio_por_vendedor():
         item['code'] for item in vendor_metadata
         if not selected_statuses or (item['status'] or 'Sem Valor') in selected_statuses
     }
+    ordered_status_filtered_vendors = [
+        item['code'] for item in vendor_metadata
+        if item['code'] and item['code'] in status_filtered_codes
+    ]
+    default_vendor_code = ordered_status_filtered_vendors[0] if ordered_status_filtered_vendors else ''
+    if not selected_vendor or selected_vendor not in status_filtered_codes:
+        selected_vendor = default_vendor_code
     vendor_options_for_template = [
         {
             'code': item['code'],
@@ -12419,10 +12426,7 @@ def report_premio_por_vendedor():
         for item in vendor_metadata
         if item['code'] in status_filtered_codes
     ]
-    if selected_vendor:
-        applied_vendor_filters = [selected_vendor]
-    else:
-        applied_vendor_filters = sorted(code for code in status_filtered_codes if code)
+    applied_vendor_filters = [selected_vendor] if selected_vendor else []
 
     ranger_entries, ranger_error = load_ranger_metas_entries(
         user_id,
@@ -14309,12 +14313,6 @@ def report_orders_by_line():
         label = f"{name} ({normalized})" if name and normalized else name or normalized
         if label not in selected_transaction_labels:
             selected_transaction_labels.append(label)
-
-    analysis_scope_label = CUSTOMER_SCOPE_LABEL_MAP.get(
-        customer_scope_value,
-        CUSTOMER_SCOPE_LABEL_MAP[CUSTOMER_SCOPE_DEFAULT]
-    )
-    column_titles = ['Vendedor', 'Cidade', analysis_scope_label, 'Linha', 'SubGrupo', 'Produto']
 
     def format_date_label(value):
         if not value:
