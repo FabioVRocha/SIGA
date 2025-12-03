@@ -32,42 +32,232 @@
       <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
     </div>
     <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-      <form id="filterForm" method="get" action="{{ url_for('report_revenue_by_vendor') }}" class="bg-white p-6">
-        <div class="grid grid-cols-1 gap-4">
+    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-visible shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
+      <form id="filterForm" method="get" action="{{ url_for('report_revenue_by_vendor') }}" class="bg-white p-6 space-y-5">
+        <input type="hidden" name="filter_applied" value="1">
+        <div class="grid gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-                <label for="year" class="block text-sm font-medium text-gray-700">Ano</label>
-                <input type="number" name="year" id="year" value="{{ filters.year }}" class="mt-1 p-2 border rounded w-full">
+              <label for="year" class="block text-sm font-medium text-gray-700">Ano</label>
+              <input type="number" name="year" id="year" value="{{ filters.year }}" class="mt-1 p-2 border rounded w-full">
             </div>
             <div>
-                <label for="month" class="block text-sm font-medium text-gray-700">Mês</label>
-                <select name="month" id="month" multiple class="mt-1 p-2 border rounded w-full">
-                    {% for m in range(1,13) %}
-                    <option value="{{ m }}" {% if filters.month and (m|string) in filters.month %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Meses</label>
+              <div class="relative w-full">
+                <button type="button" id="month-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                  <span id="month-text" class="truncate">Selecione um ou mais meses</span>
+                  <svg id="month-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <div id="month-options" data-combobox-panel="month" class="hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                  <div class="p-3 border-b border-slate-100 bg-slate-50">
+                    <div class="relative">
+                      <input type="text" placeholder="Buscar meses" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="month">
+                      <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                    </div>
+                  </div>
+                  <div class="max-h-60 overflow-y-auto">
+                    {% for month in month_options %}
+                    <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ month.label }}">
+                      <input type="checkbox" name="month" value="{{ month.value }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.month and month.value in filters.month %}checked{% endif %}>
+                      <span class="text-gray-700">{{ month.label }}</span>
+                    </label>
                     {% endfor %}
-                </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+              <div class="relative w-full">
+                <button type="button" id="state-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                  <span id="state-text" class="truncate">Selecione um ou mais estados</span>
+                  <svg id="state-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <div id="state-options" data-combobox-panel="state" class="hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                  <div class="p-3 border-b border-slate-100 bg-slate-50">
+                    <div class="relative">
+                      <input type="text" placeholder="Buscar estados" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="state">
+                      <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                    </div>
+                  </div>
+                  <div class="max-h-60 overflow-y-auto">
+                    {% for state in state_options %}
+                    {% if state %}
+                    <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ state }}">
+                      <input type="checkbox" name="state" value="{{ state }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.state and state in filters.state %}checked{% endif %}>
+                      <span class="text-gray-700">{{ state }}</span>
+                    </label>
+                    {% endif %}
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
             </div>
             <div>
-                <label for="state" class="block text-sm font-medium text-gray-700">Estado</label>
-                <input type="text" name="state" id="state" value="{{ filters.state or '' }}" class="mt-1 p-2 border rounded w-full">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
+              <div class="relative w-full">
+                <button type="button" id="city-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                  <span id="city-text" class="truncate">Selecione uma ou mais cidades</span>
+                  <svg id="city-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <div id="city-options" data-combobox-panel="city" class="hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                  <div class="p-3 border-b border-slate-100 bg-slate-50">
+                    <div class="relative">
+                      <input type="text" placeholder="Buscar cidades" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="city">
+                      <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                    </div>
+                  </div>
+                  <div class="max-h-60 overflow-y-auto">
+                    {% for city in city_options %}
+                    {% if city %}
+                    <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ city }}">
+                      <input type="checkbox" name="city" value="{{ city }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.city and city in filters.city %}checked{% endif %}>
+                      <span class="text-gray-700">{{ city }}</span>
+                    </label>
+                    {% endif %}
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Status do Vendedor</label>
+              <div class="relative w-full">
+                <button type="button" id="vendor_status-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                  <span id="vendor_status-text" class="truncate">Selecione um ou mais status</span>
+                  <svg id="vendor_status-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <div id="vendor_status-options" data-combobox-panel="vendor_status" class="hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                  <div class="p-3 border-b border-slate-100 bg-slate-50">
+                    <div class="relative">
+                      <input type="text" placeholder="Buscar status" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="vendor_status">
+                      <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                    </div>
+                  </div>
+                  <div class="max-h-56 overflow-y-auto">
+                    {% for status in vendor_status_options %}
+                    {% if status %}
+                    <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ status }}">
+                      <input type="checkbox" name="vendor_status" value="{{ status }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.vendor_status and status in filters.vendor_status %}checked{% endif %}>
+                      <span class="text-gray-700">{{ status }}</span>
+                    </label>
+                    {% endif %}
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
             </div>
             <div>
-                <label for="city" class="block text-sm font-medium text-gray-700">Cidade</label>
-                <input type="text" name="city" id="city" value="{{ filters.city or '' }}" class="mt-1 p-2 border rounded w-full">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Vendedor</label>
+              <div class="relative w-full">
+                <button type="button" id="vendor-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                  <span id="vendor-text" class="truncate">Selecione um ou mais vendedores</span>
+                  <svg id="vendor-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <div id="vendor-options" data-combobox-panel="vendor" class="hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                  <div class="p-3 border-b border-slate-100 bg-slate-50">
+                    <div class="relative">
+                      <input type="text" placeholder="Buscar vendedores" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="vendor">
+                      <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                    </div>
+                  </div>
+                  <div class="max-h-64 overflow-y-auto">
+                    {% for vendor in vendor_options %}
+                    {% if vendor.name %}
+                    {% set label_text = vendor.name %}
+                    <label data-combobox-item class="flex flex-col gap-0.5 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }} {{ vendor.status }}">
+                      <div class="flex items-center gap-2">
+                        <input type="checkbox" name="vendor" value="{{ vendor.name }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.vendor and vendor.name in filters.vendor %}checked{% endif %}>
+                        <span class="text-gray-700 font-medium">{{ vendor.name }}</span>
+                      </div>
+                      {% if vendor.status %}
+                      <span class="text-xs text-slate-500 ml-6">Status: {{ vendor.status }}</span>
+                      {% endif %}
+                    </label>
+                    {% endif %}
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Linha</label>
+              <div class="relative w-full">
+                <button type="button" id="line-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                  <span id="line-text" class="truncate">Selecione uma ou mais linhas</span>
+                  <svg id="line-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <div id="line-options" data-combobox-panel="line" class="hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                  <div class="p-3 border-b border-slate-100 bg-slate-50">
+                    <div class="relative">
+                      <input type="text" placeholder="Buscar linhas" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="line">
+                      <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                    </div>
+                  </div>
+                  <div class="max-h-56 overflow-y-auto">
+                    {% for line in line_options %}
+                    {% if line %}
+                    <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ line }}">
+                      <input type="checkbox" name="line" value="{{ line }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.line and line in filters.line %}checked{% endif %}>
+                      <span class="text-gray-700">{{ line }}</span>
+                    </label>
+                    {% endif %}
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
             </div>
             <div>
-                <label for="vendor" class="block text-sm font-medium text-gray-700">Vendedor</label>
-                <input type="text" name="vendor" id="vendor" value="{{ filters.vendor or '' }}" class="mt-1 p-2 border rounded w-full">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Transações</label>
+              <div class="relative w-full">
+                <button type="button" id="transaction-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                  <span id="transaction-text" class="truncate">Selecione uma ou mais transações</span>
+                  <svg id="transaction-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <div id="transaction-options" data-combobox-panel="transaction" class="hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                  <div class="p-3 border-b border-slate-100 bg-slate-50">
+                    <div class="relative">
+                      <input type="text" placeholder="Buscar transações" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="transaction">
+                      <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                    </div>
+                  </div>
+                  <div class="max-h-64 overflow-y-auto">
+                    {% for option in transaction_options %}
+                    {% set code = option.code %}
+                    {% set label_text = option.label or code %}
+                    {% if code or label_text %}
+                    <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }} {{ code }}">
+                      <input type="checkbox" name="transaction" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.transaction and code in filters.transaction %}checked{% endif %}>
+                      <span class="text-gray-700">
+                        {{ label_text }}
+                        {% if code %}
+                        <span class="text-xs text-slate-500 ml-1">({{ code }})</span>
+                        {% endif %}
+                      </span>
+                    </label>
+                    {% endif %}
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-                <label for="line" class="block text-sm font-medium text-gray-700">Linha</label>
-                <input type="text" name="line" id="line" value="{{ filters.line or '' }}" class="mt-1 p-2 border rounded w-full">
-            </div>
+          </div>
         </div>
-        <div class="mt-4 flex justify-end">
-            <button type="button" id="closeFilterModalBtn" class="mr-2 px-4 py-2 rounded bg-gray-300">Cancelar</button>
-            <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white">Aplicar</button>
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <a href="{{ url_for('report_revenue_by_vendor', ignore_saved='1') }}" class="btn-secondary px-4 py-2 rounded-lg">Limpar</a>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="saveFiltersBtn" class="btn-secondary px-4 py-2 rounded-lg">Salvar filtros</button>
+            <button type="button" id="closeFilterModalBtn" class="btn-secondary px-4 py-2 rounded-lg">Cancelar</button>
+            <button type="submit" class="btn-primary px-4 py-2 rounded-lg">Aplicar</button>
+          </div>
         </div>
+        <p id="saveFiltersFeedback" class="text-sm text-right text-slate-500"></p>
       </form>
     </div>
   </div>
@@ -81,13 +271,184 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterModal = document.getElementById('filterModal');
     const openFilterModalBtn = document.getElementById('openFilterModalBtn');
     const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+    const saveFiltersBtn = document.getElementById('saveFiltersBtn');
+    const filterForm = document.getElementById('filterForm');
+    const saveFiltersFeedback = document.getElementById('saveFiltersFeedback');
+    const saveFiltersUrl = "{{ url_for('save_report_revenue_by_vendor_filters') }}";
 
-    const openModal = () => filterModal.classList.remove('hidden');
-    const closeModal = () => filterModal.classList.add('hidden');
+    const closeAllComboboxPanels = () => {
+        document.querySelectorAll('[data-combobox-panel]').forEach((panel) => {
+            panel.classList.add('hidden');
+            const name = panel.getAttribute('data-combobox-panel');
+            const arrow = document.getElementById(`${name}-arrow`);
+            if (arrow) {
+                arrow.classList.remove('rotate-180');
+            }
+        });
+    };
 
-    openFilterModalBtn.addEventListener('click', openModal);
-    closeFilterModalBtn.addEventListener('click', closeModal);
-    window.addEventListener('click', (e) => { if(e.target === filterModal) closeModal(); });
+    const openModal = () => {
+        closeAllComboboxPanels();
+        if (filterModal) {
+            filterModal.classList.remove('hidden');
+        }
+    };
+    const closeModal = () => {
+        closeAllComboboxPanels();
+        if (filterModal) {
+            filterModal.classList.add('hidden');
+        }
+    };
+
+    if (openFilterModalBtn) {
+        openFilterModalBtn.addEventListener('click', openModal);
+    }
+    if (closeFilterModalBtn) {
+        closeFilterModalBtn.addEventListener('click', closeModal);
+    }
+    if (filterModal) {
+        filterModal.addEventListener('click', (event) => {
+            if (event.target === filterModal) {
+                closeModal();
+            }
+        });
+    }
+
+    const setupCombobox = (name, placeholderText) => {
+        const button = document.getElementById(`${name}-button`);
+        const panel = document.getElementById(`${name}-options`);
+        const textElement = document.getElementById(`${name}-text`);
+        const arrow = document.getElementById(`${name}-arrow`);
+
+        if (!button || !panel || !textElement) {
+            return;
+        }
+
+        const checkboxes = panel.querySelectorAll('input[type="checkbox"]');
+        const searchInput = panel.querySelector(`[data-combobox-search="${name}"]`);
+        const items = panel.querySelectorAll('[data-combobox-item]');
+
+        const updateSelectedText = () => {
+            const selectedLabels = Array.from(checkboxes)
+                .filter((checkbox) => checkbox.checked)
+                .map((checkbox) => {
+                    const label = checkbox.closest('[data-combobox-item]');
+                    return label ? label.getAttribute('data-label') || checkbox.value : checkbox.value;
+                })
+                .filter(Boolean);
+            textElement.textContent = selectedLabels.length ? selectedLabels.join(', ') : placeholderText;
+        };
+
+        const filterItems = () => {
+            const term = ((searchInput && searchInput.value) || '').toLowerCase();
+            items.forEach((item) => {
+                const label = (item.getAttribute('data-label') || '').toLowerCase();
+                item.classList.toggle('hidden', !label.includes(term));
+            });
+        };
+
+        button.addEventListener('click', () => {
+            const isHidden = panel.classList.contains('hidden');
+            closeAllComboboxPanels();
+            if (isHidden) {
+                panel.classList.remove('hidden');
+                if (arrow) {
+                    arrow.classList.add('rotate-180');
+                }
+                setTimeout(() => {
+                    if (searchInput) {
+                        searchInput.focus();
+                    }
+                }, 50);
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!panel.contains(event.target) && !button.contains(event.target)) {
+                panel.classList.add('hidden');
+                if (arrow) {
+                    arrow.classList.remove('rotate-180');
+                }
+            }
+        });
+
+        checkboxes.forEach((checkbox) => checkbox.addEventListener('change', updateSelectedText));
+        if (searchInput) {
+            searchInput.addEventListener('input', filterItems);
+        }
+        filterItems();
+        updateSelectedText();
+    };
+
+    const comboboxConfigs = [
+        { name: 'month', placeholder: 'Selecione um ou mais meses' },
+        { name: 'state', placeholder: 'Selecione um ou mais estados' },
+        { name: 'city', placeholder: 'Selecione uma ou mais cidades' },
+        { name: 'vendor_status', placeholder: 'Selecione um ou mais status' },
+        { name: 'vendor', placeholder: 'Selecione um ou mais vendedores' },
+        { name: 'line', placeholder: 'Selecione uma ou mais linhas' },
+        { name: 'transaction', placeholder: 'Selecione uma ou mais transações' },
+    ];
+    comboboxConfigs.forEach(({ name, placeholder }) => setupCombobox(name, placeholder));
+
+    const showSaveFeedback = (message, type = 'info') => {
+        if (!saveFiltersFeedback) return;
+        let colorClass = 'text-slate-500';
+        if (type === 'success') {
+            colorClass = 'text-emerald-600';
+        } else if (type === 'error') {
+            colorClass = 'text-rose-600';
+        }
+        saveFiltersFeedback.className = `text-sm text-right mt-1 ${colorClass}`;
+        saveFiltersFeedback.textContent = message;
+    };
+
+    if (saveFiltersBtn && filterForm) {
+        saveFiltersBtn.addEventListener('click', async () => {
+            const formData = new FormData(filterForm);
+            const payload = {};
+            formData.forEach((value, key) => {
+                if (key === 'filter_applied') {
+                    return;
+                }
+                if (payload[key]) {
+                    if (!Array.isArray(payload[key])) {
+                        payload[key] = [payload[key]];
+                    }
+                    payload[key].push(value);
+                } else {
+                    payload[key] = value;
+                }
+            });
+            payload.year = formData.get('year') || new Date().getFullYear();
+            const multiValueFields = ['month', 'state', 'city', 'vendor', 'vendor_status', 'line', 'transaction'];
+            multiValueFields.forEach((field) => {
+                if (!(field in payload)) {
+                    payload[field] = [];
+                } else if (!Array.isArray(payload[field])) {
+                    payload[field] = [payload[field]];
+                }
+            });
+            try {
+                const response = await fetch(saveFiltersUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const result = await response.json().catch(() => ({}));
+                if (response.ok && result && result.success) {
+                    showSaveFeedback(result.message || 'Filtros salvos com sucesso.', 'success');
+                } else if (response.status === 401) {
+                    showSaveFeedback('Sessão expirada. Faça login novamente para salvar filtros.', 'error');
+                } else {
+                    showSaveFeedback((result && result.message) || 'Não foi possível salvar os filtros.', 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao salvar filtros de Faturamento por Vendedor:', error);
+                showSaveFeedback('Erro de comunicação ao salvar os filtros.', 'error');
+            }
+        });
+    }
 
     const ctx = document.getElementById('vendorRevenueChart').getContext('2d');
     const labels = {{ chart_labels | tojson }};

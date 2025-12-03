@@ -64,6 +64,9 @@ REPORT_ORDERS_LINE_FILTERS_PARAM = 'report_orders_by_line_filters'
 REPORT_DECOMPOSITION_TREE_FILTERS_PARAM = 'report_decomposition_tree_filters'
 REPORT_SALES_CLIENT_YEAR_FILTERS_PARAM = 'report_sales_client_year_filters'
 REPORT_MAP_INTERACTIVE_FILTERS_PARAM = 'report_map_interactive_filters'
+REPORT_REVENUE_BY_DAY_FILTERS_PARAM = 'report_revenue_by_day_filters'
+REPORT_REVENUE_BY_STATE_FILTERS_PARAM = 'report_revenue_by_state_filters'
+REPORT_REVENUE_BY_VENDOR_FILTERS_PARAM = 'report_revenue_by_vendor_filters'
 
 ORDER_APPROVAL_STATUS_OPTIONS = [
     {'code': 'S', 'label': 'Aprovado'},
@@ -4671,28 +4674,41 @@ def fetch_revenue_by_cfop(filters):
                         sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
                         params.extend(valid_months)
 
-            if filters.get('state'):
-                sql += ' AND c.estado = %s'
-                params.append(filters['state'])
-            if filters.get('city'):
-                sql += " AND c.cidnome = %s"
-                params.append(filters['city'])
-            vendors = filters.get('vendor')
-            if vendors:
-                vendor_values = vendors if isinstance(vendors, list) else [vendors]
-                vendor_values = [v for v in vendor_values if str(v).strip()]
-                if vendor_values:
-                    placeholders = ','.join(['%s'] * len(vendor_values))
-                    sql += (
-                        " AND EXISTS ("
-                        "SELECT 1 FROM comnf cf "
-                        "JOIN vendedor v ON cf.comnvende = v.vendedor "
-                        "WHERE cf.comncontr = d.controle "
-                        f"AND v.vennome IN ({placeholders}))"
-                    )
-                    params.extend(vendor_values)
+            states = [state for state in (filters.get('state') or []) if state]
+            if states:
+                placeholders = ','.join(['%s'] * len(states))
+                sql += f" AND UPPER(c.estado) IN ({placeholders})"
+                params.extend([state.upper() for state in states])
+            cities = [city for city in (filters.get('city') or []) if city]
+            if cities:
+                placeholders = ','.join(['%s'] * len(cities))
+                sql += f" AND c.cidnome IN ({placeholders})"
+                params.extend(cities)
+            vendor_values = [v for v in (filters.get('vendor') or []) if v]
+            vendor_status_values = [v for v in (filters.get('vendor_status') or []) if v]
+            vendor_conditions = []
+            vendor_params = []
+            if vendor_values:
+                placeholders = ','.join(['%s'] * len(vendor_values))
+                vendor_conditions.append(f"v.vennome IN ({placeholders})")
+                vendor_params.extend(vendor_values)
+            if vendor_status_values:
+                placeholders = ','.join(['%s'] * len(vendor_status_values))
+                vendor_conditions.append(f"UPPER(v.venstatus) IN ({placeholders})")
+                vendor_params.extend([status.upper() for status in vendor_status_values])
+            if vendor_conditions:
+                vendor_clause = " AND ".join(vendor_conditions)
+                sql += (
+                    " AND EXISTS ("
+                    "SELECT 1 FROM comnf cf "
+                    "JOIN vendedor v ON cf.comnvende = v.vendedor "
+                    "WHERE cf.comncontr = d.controle "
+                    f"AND {vendor_clause})"
+                )
+                params.extend(vendor_params)
 
-            if filters.get('line'):
+            lines = [line for line in (filters.get('line') or []) if line]
+            if lines:
                 matching_group_codes = []
                 temp_conn = get_erp_db_connection()
                 if temp_conn:
@@ -4702,7 +4718,7 @@ def fetch_revenue_by_cfop(filters):
                         groups_data = temp_cur.fetchall()
                         temp_cur.close()
                         for code, name in groups_data:
-                            if get_product_line(name) == filters['line']:
+                            if get_product_line(name) in lines:
                                 matching_group_codes.append(code)
                     except Error as e:
                         print(f'Erro ao buscar grupos para filtro de linha: {e}')
@@ -4714,7 +4730,6 @@ def fetch_revenue_by_cfop(filters):
                     params.extend(matching_group_codes)
                 else:
                     sql += " AND FALSE"
-
             if selected_transactions:
                 placeholders = ','.join(['%s'] * len(selected_transactions))
                 sql += f" AND op.opetransac IN ({placeholders})"
@@ -4725,28 +4740,28 @@ def fetch_revenue_by_cfop(filters):
                 sql += f" AND op.operacao IN ({placeholders})"
                 params.extend(selected_cfops)
 
-            sql += " GROUP BY op.operacao, op.opetransac ORDER BY op.operacao"
+            sql += ' GROUP BY c.estado, op.opetransac'
 
             cur.execute(sql, tuple(params))
             results = cur.fetchall()
-            for cfop, bruto, ipi, st, liquido, transac in results:
+            state_totals = {}
+            for uf, liquido, transac in results:
                 sign = transaction_signs.get(str(transac), '+')
                 mult = -1 if sign == '-' else 1
-                data.append({
-                    'cfop': cfop,
-                    'valor_bruto': float(bruto or 0) * mult,
-                    'valor_ipi': float(ipi or 0) * mult,
-                    'valor_st': float(st or 0) * mult,
-                    'valor_liquido': float(liquido or 0) * mult
-                })
+                state_key = uf or 'N/D'
+                state_totals[state_key] = state_totals.get(state_key, 0.0) + float(liquido or 0) * mult
+
+            for state, total in state_totals.items():
+                data.append({'state': state, 'valor_liquido': total})
+
+            data.sort(key=lambda x: x['state'])
             cur.close()
         except Error as e:
-            print(f'Erro ao buscar faturamento por CFOP: {e}')
+            print(f'Erro ao buscar faturamento por estado: {e}')
         finally:
             conn.close()
 
     return data
-
 
 def fetch_revenue_by_line(filters):
     """Retorna o faturamento agregado por linha de produto."""
@@ -5092,6 +5107,20 @@ def fetch_revenue_by_day(filters):
                 if selected_transactions_str:
                     selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
                     transaction_signs = {t: '+' for t in selected_transactions}
+            filter_transactions = []
+            raw_transactions = filters.get('transaction')
+            if raw_transactions:
+                source = raw_transactions if isinstance(raw_transactions, list) else [raw_transactions]
+                for entry in source:
+                    if entry is None:
+                        continue
+                    text = str(entry).strip()
+                    if text:
+                        filter_transactions.append(text)
+            if filter_transactions:
+                selected_transactions = filter_transactions
+                for code in filter_transactions:
+                    transaction_signs.setdefault(code, '+')
             selected_cfops_str = get_user_parameters(
                 user_id, f'{report_id}_selected_report_cfops'
             )
@@ -5143,19 +5172,31 @@ def fetch_revenue_by_day(filters):
                 sql += f" AND c.cidnome IN ({placeholders})"
                 params.extend(cities)
             vendors = filters.get('vendor')
-            if vendors:
-                vendor_values = vendors if isinstance(vendors, list) else [vendors]
-                vendor_values = [v for v in vendor_values if str(v).strip()]
+            vendor_statuses = filters.get('vendor_status')
+            vendor_values = vendors if isinstance(vendors, list) else ([vendors] if vendors else [])
+            vendor_values = [v for v in vendor_values if str(v).strip()]
+            vendor_status_values = vendor_statuses if isinstance(vendor_statuses, list) else ([vendor_statuses] if vendor_statuses else [])
+            vendor_status_values = [str(v).strip().upper() for v in vendor_status_values if str(v).strip()]
+            if vendor_values or vendor_status_values:
+                conditions = []
                 if vendor_values:
-                    placeholders = ','.join(['%s'] * len(vendor_values))
-                    sql += (
-                        " AND EXISTS ("
-                        "SELECT 1 FROM comnf cf "
-                        "JOIN vendedor v ON cf.comnvende = v.vendedor "
-                        "WHERE cf.comncontr = d.controle "
-                        f"AND v.vennome IN ({placeholders}))"
-                    )
-                    params.extend(vendor_values)
+                    vendor_placeholders = ','.join(['%s'] * len(vendor_values))
+                    conditions.append(f"v.vennome IN ({vendor_placeholders})")
+                if vendor_status_values:
+                    status_placeholders = ','.join(['%s'] * len(vendor_status_values))
+                    conditions.append(f"COALESCE(v.venstatus, '') IN ({status_placeholders})")
+                extra_cond = ''
+                if conditions:
+                    extra_cond = ' AND ' + ' AND '.join(conditions)
+                sql += (
+                    " AND EXISTS ("
+                    "SELECT 1 FROM comnf cf "
+                    "JOIN vendedor v ON cf.comnvende = v.vendedor "
+                    "WHERE cf.comncontr = d.controle"
+                    f"{extra_cond})"
+                )
+                params.extend(vendor_values)
+                params.extend(vendor_status_values)
 
             lines = filters.get('line')
             if lines:
@@ -5228,14 +5269,21 @@ def fetch_revenue_by_state(filters):
             transaction_signs = parse_transaction_signs(
                 get_user_parameters(user_id, f'{report_id}_invoice_transaction_signs')
             )
-            selected_transactions = list(transaction_signs.keys())
+            transaction_filters = filters.get('transaction') or []
+            selected_transactions = [str(t).strip() for t in transaction_filters if str(t).strip()]
             if not selected_transactions:
-                selected_transactions_str = get_user_parameters(
-                    user_id, f'{report_id}_selected_invoice_transactions'
-                )
-                if selected_transactions_str:
-                    selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
-                    transaction_signs = {t: '+' for t in selected_transactions}
+                selected_transactions = list(transaction_signs.keys())
+                if not selected_transactions:
+                    selected_transactions_str = get_user_parameters(
+                        user_id, f'{report_id}_selected_invoice_transactions'
+                    )
+                    if selected_transactions_str:
+                        selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
+                        transaction_signs = {t: '+' for t in selected_transactions}
+            for trans in selected_transactions:
+                trans_key = str(trans).strip()
+                if trans_key and trans_key not in transaction_signs:
+                    transaction_signs[trans_key] = '+'
 
             selected_cfops_str = get_user_parameters(
                 user_id, f'{report_id}_selected_report_cfops'
@@ -5288,28 +5336,43 @@ def fetch_revenue_by_state(filters):
                             sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
                             params.extend(valid_months)
 
-            if filters.get('state'):
-                sql += ' AND c.estado = %s'
-                params.append(filters['state'])
-            if filters.get('city'):
-                sql += " AND c.cidnome = %s"
-                params.append(filters['city'])
-            vendors = filters.get('vendor')
-            if vendors:
-                vendor_values = vendors if isinstance(vendors, list) else [vendors]
-                vendor_values = [v for v in vendor_values if str(v).strip()]
-                if vendor_values:
-                    placeholders = ','.join(['%s'] * len(vendor_values))
-                    sql += (
-                        " AND EXISTS ("
-                        "SELECT 1 FROM comnf cf "
-                        "JOIN vendedor v ON cf.comnvende = v.vendedor "
-                        "WHERE cf.comncontr = d.controle "
-                        f"AND v.vennome IN ({placeholders}))"
-                    )
-                    params.extend(vendor_values)
+            states = [state for state in (filters.get('state') or []) if state]
+            if states:
+                placeholders = ','.join(['%s'] * len(states))
+                sql += f" AND UPPER(c.estado) IN ({placeholders})"
+                params.extend([state.upper() for state in states])
 
-            if filters.get('line'):
+            cities = [city for city in (filters.get('city') or []) if city]
+            if cities:
+                placeholders = ','.join(['%s'] * len(cities))
+                sql += f" AND c.cidnome IN ({placeholders})"
+                params.extend(cities)
+
+            vendor_conditions = []
+            vendor_params = []
+            vendor_values = [v for v in (filters.get('vendor') or []) if v]
+            if vendor_values:
+                placeholders = ','.join(['%s'] * len(vendor_values))
+                vendor_conditions.append(f"v.vennome IN ({placeholders})")
+                vendor_params.extend(vendor_values)
+            vendor_status_values = [status for status in (filters.get('vendor_status') or []) if status]
+            if vendor_status_values:
+                placeholders = ','.join(['%s'] * len(vendor_status_values))
+                vendor_conditions.append(f"UPPER(v.venstatus) IN ({placeholders})")
+                vendor_params.extend([status.upper() for status in vendor_status_values])
+            if vendor_conditions:
+                vendor_clause = " AND ".join(vendor_conditions)
+                sql += (
+                    " AND EXISTS ("
+                    "SELECT 1 FROM comnf cf "
+                    "JOIN vendedor v ON cf.comnvende = v.vendedor "
+                    "WHERE cf.comncontr = d.controle "
+                    f"AND {vendor_clause})"
+                )
+                params.extend(vendor_params)
+
+            lines = [line for line in (filters.get('line') or []) if line]
+            if lines:
                 matching_group_codes = []
                 temp_conn = get_erp_db_connection()
                 if temp_conn:
@@ -5319,7 +5382,7 @@ def fetch_revenue_by_state(filters):
                         groups_data = temp_cur.fetchall()
                         temp_cur.close()
                         for code, name in groups_data:
-                            if get_product_line(name) == filters['line']:
+                            if get_product_line(name) in lines:
                                 matching_group_codes.append(code)
                     except Error as e:
                         print(f'Erro ao buscar grupos para filtro de linha: {e}')
@@ -5373,19 +5436,29 @@ def fetch_revenue_by_vendor(filters):
 
     if conn:
         try:
+            cur = conn.cursor()
+
             user_id = session.get('user_id')
             report_id = 'report_revenue_by_vendor'
             transaction_signs = parse_transaction_signs(
                 get_user_parameters(user_id, f'{report_id}_invoice_transaction_signs')
             )
-            selected_transactions = list(transaction_signs.keys())
+            transaction_filters = filters.get('transaction') or []
+            selected_transactions = [str(t).strip() for t in transaction_filters if str(t).strip()]
             if not selected_transactions:
-                selected_transactions_str = get_user_parameters(
-                    user_id, f'{report_id}_selected_invoice_transactions'
-                )
-                if selected_transactions_str:
-                    selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
-                    transaction_signs = {t: '+' for t in selected_transactions}
+                selected_transactions = list(transaction_signs.keys())
+                if not selected_transactions:
+                    selected_transactions_str = get_user_parameters(
+                        user_id, f'{report_id}_selected_invoice_transactions'
+                    )
+                    if selected_transactions_str:
+                        selected_transactions = [t.strip() for t in selected_transactions_str.split(',') if t.strip()]
+                        transaction_signs = {t: '+' for t in selected_transactions}
+            for trans in selected_transactions:
+                trans_key = str(trans).strip()
+                if trans_key and trans_key not in transaction_signs:
+                    transaction_signs[trans_key] = '+'
+
             selected_cfops_str = get_user_parameters(
                 user_id, f'{report_id}_selected_report_cfops'
             )
@@ -5393,25 +5466,33 @@ def fetch_revenue_by_vendor(filters):
             if selected_cfops_str:
                 selected_cfops = [c.strip() for c in selected_cfops_str.split(',') if c.strip()]
 
-            try:
-                cur = conn.cursor()
-                sql = """
-                        SELECT COALESCE(v.vennome, 'Sem Vendedor') AS vennome,
-                               SUM(tm.privltotal) AS valor_liquido,
-                               op.opetransac
-                        FROM doctos d
-                        LEFT JOIN empresa e ON d.notclifor = e.empresa
-                        LEFT JOIN cidade c ON d.noscidade = c.cidade
-                        LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
-                        LEFT JOIN ntvped1 np ON np.ntvnota = d.controle
-                        LEFT JOIN comnf cf ON d.notdocto = cf.comncontr::text
-                        LEFT JOIN vendedor v ON cf.comnvende = v.vendedor
-                        LEFT JOIN produto p ON tm.priproduto = p.produto
-                        LEFT JOIN grupo g ON p.grupo = g.grupo
-                        LEFT JOIN opera op ON d.operacao = op.operacao
-                        WHERE EXTRACT(YEAR FROM tm.pridata) = %s
-                """
-                params = [filters.get('year')]
+            sql = """
+                SELECT COALESCE(v.vennome, 'Sem Vendedor') AS vennome,
+                       SUM(tm.privltotal) AS valor_liquido,
+                       op.opetransac
+                FROM doctos d
+                LEFT JOIN empresa e ON d.notclifor = e.empresa
+                LEFT JOIN cidade c ON d.noscidade = c.cidade
+                LEFT JOIN toqmovi tm ON d.controle = tm.itecontrol
+                LEFT JOIN comnf cf ON d.controle = cf.comncontr
+                LEFT JOIN vendedor v ON cf.comnvende = v.vendedor
+                LEFT JOIN produto p ON tm.priproduto = p.produto
+                LEFT JOIN grupo g ON p.grupo = g.grupo
+                LEFT JOIN opera op ON d.operacao = op.operacao
+                WHERE 1=1
+            """
+            params = []
+
+            if filters.get('start_date'):
+                sql += " AND tm.pridata >= %s"
+                params.append(filters['start_date'])
+            if filters.get('end_date'):
+                sql += " AND tm.pridata <= %s"
+                params.append(filters['end_date'])
+
+            if not filters.get('start_date') and not filters.get('end_date'):
+                sql += " AND EXTRACT(YEAR FROM tm.pridata) = %s"
+                params.append(filters.get('year'))
 
                 months = filters.get('month')
                 if months:
@@ -5425,73 +5506,87 @@ def fetch_revenue_by_vendor(filters):
                     if valid_months:
                         if len(valid_months) == 1:
                             sql += " AND EXTRACT(MONTH FROM tm.pridata) = %s"
-                            params.append(valid_months[0])    
+                            params.append(valid_months[0])
                         else:
                             placeholders = ','.join(['%s'] * len(valid_months))
                             sql += f" AND EXTRACT(MONTH FROM tm.pridata) IN ({placeholders})"
                             params.extend(valid_months)
 
-                if filters.get('state'):
-                    sql += ' AND c.estado = %s'
-                    params.append(filters['state'])
-                if filters.get('city'):
-                    sql += " AND c.cidnome = %s"
-                    params.append(filters['city'])
-                if filters.get('vendor'):
-                    sql += " AND v.vennome = %s"
-                    params.append(filters['vendor'])
+            states = [state for state in (filters.get('state') or []) if state]
+            if states:
+                placeholders = ','.join(['%s'] * len(states))
+                sql += f" AND UPPER(c.estado) IN ({placeholders})"
+                params.extend([state.upper() for state in states])
 
-                if filters.get('line'):
-                    matching_group_codes = []
-                    temp_conn = get_erp_db_connection()
-                    if temp_conn:
-                        try:
-                            temp_cur = temp_conn.cursor()
-                            temp_cur.execute("SELECT grupo, grunome FROM grupo;")
-                            groups_data = temp_cur.fetchall()
-                            temp_cur.close()
-                            for code, name in groups_data:
-                                if get_product_line(name) == filters['line']:
-                                    matching_group_codes.append(code)
-                        except Error as e:
-                            print(f'Erro ao buscar grupos para filtro de linha: {e}')
-                        finally:
-                            temp_conn.close()
-                    if matching_group_codes:
-                        placeholders = ','.join(['%s'] * len(matching_group_codes))
-                        sql += f" AND g.grupo IN ({placeholders})"
-                        params.extend(matching_group_codes)
-                    else:
-                        sql += " AND FALSE"
+            cities = [city for city in (filters.get('city') or []) if city]
+            if cities:
+                placeholders = ','.join(['%s'] * len(cities))
+                sql += f" AND c.cidnome IN ({placeholders})"
+                params.extend(cities)
 
-                if selected_transactions:
-                    placeholders = ','.join(['%s'] * len(selected_transactions))
-                    sql += f" AND op.opetransac IN ({placeholders})"
-                    params.extend(selected_transactions)
-                if selected_cfops:
-                    placeholders = ','.join(['%s'] * len(selected_cfops))
-                    sql += f" AND op.operacao IN ({placeholders})"
-                    params.extend(selected_cfops)
-                sql += " GROUP BY COALESCE(v.vennome, 'Sem Vendedor'), op.opetransac"
+            vendor_values = [v for v in (filters.get('vendor') or []) if v]
+            if vendor_values:
+                placeholders = ','.join(['%s'] * len(vendor_values))
+                sql += f" AND v.vennome IN ({placeholders})"
+                params.extend(vendor_values)
 
-                cur.execute(sql, tuple(params))
-                results = cur.fetchall()
-                vendor_totals = {}
-                for name, liquido, transac in results:
-                    vendor = name
-                    sign = transaction_signs.get(str(transac), '+')
-                    mult = -1 if sign == '-' else 1
-                    vendor_totals[vendor] = vendor_totals.get(vendor, 0.0) + float(liquido or 0) * mult
+            vendor_status_values = [status for status in (filters.get('vendor_status') or []) if status]
+            if vendor_status_values:
+                placeholders = ','.join(['%s'] * len(vendor_status_values))
+                sql += f" AND UPPER(v.venstatus) IN ({placeholders})"
+                params.extend([status.upper() for status in vendor_status_values])
 
-                for vendor, total in vendor_totals.items():
-                    data.append({'vendor': vendor, 'valor_liquido': total})
+            lines = [line for line in (filters.get('line') or []) if line]
+            if lines:
+                matching_group_codes = []
+                temp_conn = get_erp_db_connection()
+                if temp_conn:
+                    try:
+                        temp_cur = temp_conn.cursor()
+                        temp_cur.execute("SELECT grupo, grunome FROM grupo;")
+                        groups_data = temp_cur.fetchall()
+                        temp_cur.close()
+                        for code, name in groups_data:
+                            if get_product_line(name) in lines:
+                                matching_group_codes.append(code)
+                    except Error as e:
+                        print(f'Erro ao buscar grupos para filtro de linha: {e}')
+                    finally:
+                        temp_conn.close()
+                if matching_group_codes:
+                    placeholders = ','.join(['%s'] * len(matching_group_codes))
+                    sql += f" AND g.grupo IN ({placeholders})"
+                    params.extend(matching_group_codes)
+                else:
+                    sql += " AND FALSE"
 
-                data.sort(key=lambda x: x['vendor'])
-                cur.close()
-            except UndefinedColumn:
-                conn.rollback()
-                cur.close()
-                data.clear()
+            if selected_transactions:
+                placeholders = ','.join(['%s'] * len(selected_transactions))
+                sql += f" AND op.opetransac IN ({placeholders})"
+                params.extend(selected_transactions)
+
+            if selected_cfops:
+                placeholders = ','.join(['%s'] * len(selected_cfops))
+                sql += f" AND op.operacao IN ({placeholders})"
+                params.extend(selected_cfops)
+
+            sql += ' GROUP BY COALESCE(v.vennome, \'Sem Vendedor\'), op.opetransac'
+
+
+            cur.execute(sql, tuple(params))
+            results = cur.fetchall()
+            vendor_totals = {}
+            for vennome, liquido, transac in results:
+                sign = transaction_signs.get(str(transac), '+')
+                mult = -1 if sign == '-' else 1
+                vendor_key = vennome or 'Sem Vendedor'
+                vendor_totals[vendor_key] = vendor_totals.get(vendor_key, 0.0) + float(liquido or 0) * mult
+
+            for vendor, total in vendor_totals.items():
+                data.append({'vendor': vendor, 'valor_liquido': total})
+
+            data.sort(key=lambda x: x['vendor'])
+            cur.close()
         except Error as e:
             print(f'Erro ao buscar faturamento por vendedor: {e}')
         finally:
@@ -12193,30 +12288,230 @@ def report_customer_sales():
 @app.route('/report_revenue_by_state')
 @login_required
 def report_revenue_by_state():
-    current_year = int(request.args.get('year', datetime.date.today().year))
-    filters = {
-        'start_date': request.args.get('start_date'),
-        'end_date': request.args.get('end_date'),
-        'year': current_year,
-        'month': request.args.getlist('month'),
-        'state': request.args.get('state'),
-        'city': request.args.get('city'),
-        'vendor': request.args.get('vendor'),
-        'line': request.args.get('line')
+    def normalize_multi(values, uppercase=False):
+        if values is None:
+            return []
+        source = values if isinstance(values, list) else [values]
+        normalized = []
+        for value in source:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            if uppercase:
+                text = text.upper()
+            normalized.append(text)
+        return normalized
+
+    def normalize_months(values):
+        if values is None:
+            return []
+        source = values if isinstance(values, list) else [values]
+        normalized = []
+        for value in source:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            try:
+                month_num = int(text)
+            except ValueError:
+                continue
+            if 1 <= month_num <= 12:
+                normalized.append(str(month_num))
+        return normalized
+
+    filter_applied_flag = (request.args.get('filter_applied') or '').strip() == '1'
+    ignore_saved_flag = (request.args.get('ignore_saved') or '').strip() == '1'
+    user_id = session.get('user_id')
+
+    saved_filters = {}
+    if user_id:
+        saved_raw = get_user_parameters(user_id, REPORT_REVENUE_BY_STATE_FILTERS_PARAM)
+        if saved_raw:
+            try:
+                saved_filters = json.loads(saved_raw) or {}
+            except (ValueError, TypeError):
+                saved_filters = {}
+
+    current_year_default = datetime.date.today().year
+    year_input = request.args.get('year', type=int)
+
+    filters_template = {
+        'year': year_input,
+        'month': normalize_months(request.args.getlist('month')),
+        'state': normalize_multi(request.args.getlist('state'), uppercase=True),
+        'city': normalize_multi(request.args.getlist('city')),
+        'vendor': normalize_multi(request.args.getlist('vendor')),
+        'vendor_status': normalize_multi(request.args.getlist('vendor_status'), uppercase=True),
+        'line': normalize_multi(request.args.getlist('line'), uppercase=True),
+        'transaction': normalize_multi(request.args.getlist('transaction')),
     }
+
+    def normalize_saved(value, uppercase=False, is_month=False):
+        if value is None:
+            return []
+        if is_month:
+            return normalize_months(value if isinstance(value, list) else [value])
+        return normalize_multi(value if isinstance(value, list) else [value], uppercase=uppercase)
+
+    use_saved_defaults = bool(saved_filters) and not filter_applied_flag and not ignore_saved_flag
+    if use_saved_defaults:
+        multi_fields = [
+            ('month', False, True),
+            ('state', True, False),
+            ('city', False, False),
+            ('vendor', False, False),
+            ('vendor_status', True, False),
+            ('line', True, False),
+            ('transaction', False, False),
+        ]
+        for field_name, uppercase, is_month in multi_fields:
+            if filters_template.get(field_name):
+                continue
+            saved_value = saved_filters.get(field_name)
+            restored = normalize_saved(saved_value, uppercase=uppercase, is_month=is_month)
+            if restored:
+                filters_template[field_name] = restored
+
+    if not filters_template['year']:
+        saved_year = saved_filters.get('year') if saved_filters else None
+        try:
+            filters_template['year'] = int(saved_year)
+        except (TypeError, ValueError):
+            filters_template['year'] = current_year_default
+
+    filters = filters_template.copy()
     data = fetch_revenue_by_state(filters)
     chart_labels = [row['state'] for row in data]
     chart_values = [row['valor_liquido'] for row in data]
     total_liquido = sum(chart_values)
+
+    month_names_pt = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ]
+    month_options = [
+        {'value': str(idx), 'label': f"{str(idx).zfill(2)} - {label}"}
+        for idx, label in enumerate(month_names_pt, start=1)
+    ]
+
+    vendor_options = []
+    for name, status in get_distinct_vendors():
+        vendor_options.append({
+            'name': (name or '').strip(),
+            'status': (status or '').strip()
+        })
+
     return render_template(
         'report_revenue_by_state.html',
         filters=filters,
         chart_labels=chart_labels,
         chart_values=chart_values,
         total_liquido=total_liquido,
+        month_options=month_options,
+        state_options=get_distinct_states(),
+        city_options=get_distinct_cities(),
+        vendor_options=vendor_options,
+        vendor_status_options=get_distinct_vendor_statuses(),
+        line_options=get_distinct_product_lines(),
+        transaction_options=get_sales_order_transactions(),
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
+
+
+@app.route('/report_revenue_by_state/save_filters', methods=['POST'])
+@login_required
+def save_report_revenue_by_state_filters():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def ensure_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def deduplicate_preserve_order(values):
+        seen = set()
+        ordered = []
+        for value in values:
+            if value in seen:
+                continue
+            seen.add(value)
+            ordered.append(value)
+        return ordered
+
+    def sanitize_year(value):
+        try:
+            year_int = int(value)
+            return year_int if year_int > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    def sanitize_multi(field_name, uppercase=False):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            if uppercase:
+                text = text.upper()
+            cleaned.append(text)
+        return deduplicate_preserve_order(cleaned)
+
+    def sanitize_months(field_name):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            try:
+                month_int = int(text)
+            except ValueError:
+                continue
+            if 1 <= month_int <= 12:
+                cleaned.append(str(month_int))
+        return deduplicate_preserve_order(cleaned)
+
+    sanitized_filters = {
+        'year': sanitize_year(payload.get('year')),
+        'month': sanitize_months('month'),
+        'state': sanitize_multi('state', uppercase=True),
+        'city': sanitize_multi('city'),
+        'vendor': sanitize_multi('vendor'),
+        'vendor_status': sanitize_multi('vendor_status', uppercase=True),
+        'line': sanitize_multi('line', uppercase=True),
+        'transaction': sanitize_multi('transaction'),
+    }
+    if not sanitized_filters['year']:
+        sanitized_filters['year'] = datetime.date.today().year
+
+    try:
+        saved = save_user_parameters(
+            user_id,
+            REPORT_REVENUE_BY_STATE_FILTERS_PARAM,
+            json.dumps(sanitized_filters)
+        )
+        if not saved:
+            raise RuntimeError('Falha ao salvar filtros.')
+        return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
+    except Exception as err:
+        print(f'Erro ao salvar filtros de Faturamento por Estado: {err}')
+        return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
 
 @app.route('/report_revenue_by_line')
 @login_required
@@ -12272,15 +12567,108 @@ def report_average_price():
 @app.route('/report_revenue_by_day')
 @login_required
 def report_revenue_by_day():
-    current_year = int(request.args.get('year', datetime.date.today().year))
-    filters = {
-        'year': current_year,
-        'month': request.args.getlist('month'),
-        'state': request.args.getlist('state'),
-        'city': request.args.getlist('city'),
-        'vendor': request.args.getlist('vendor'),
-        'line': request.args.getlist('line')
+    def normalize_multi(values, uppercase=False):
+        if values is None:
+            return []
+        source = values if isinstance(values, list) else [values]
+        normalized = []
+        for value in source:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            if uppercase:
+                text = text.upper()
+            normalized.append(text)
+        return normalized
+
+    def normalize_months(values):
+        if values is None:
+            return []
+        source = values if isinstance(values, list) else [values]
+        normalized = []
+        for value in source:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            try:
+                month_num = int(text)
+            except ValueError:
+                continue
+            if 1 <= month_num <= 12:
+                normalized.append(str(month_num))
+        return normalized
+
+    filter_applied_flag = (request.args.get('filter_applied') or '').strip() == '1'
+    ignore_saved_flag = (request.args.get('ignore_saved') or '').strip() == '1'
+    user_id = session.get('user_id')
+
+    saved_filters = {}
+    if user_id:
+        saved_raw = get_user_parameters(user_id, REPORT_REVENUE_BY_DAY_FILTERS_PARAM)
+        if saved_raw:
+            try:
+                saved_filters = json.loads(saved_raw) or {}
+            except (ValueError, TypeError):
+                saved_filters = {}
+
+    current_year_default = datetime.date.today().year
+    year_input = request.args.get('year', type=int)
+
+    filters_template = {
+        'year': year_input,
+        'month': normalize_months(request.args.getlist('month')),
+        'state': normalize_multi(request.args.getlist('state'), uppercase=True),
+        'city': normalize_multi(request.args.getlist('city')),
+        'vendor': normalize_multi(request.args.getlist('vendor')),
+        'vendor_status': normalize_multi(request.args.getlist('vendor_status'), uppercase=True),
+        'line': normalize_multi(request.args.getlist('line'), uppercase=True),
+        'transaction': normalize_multi(request.args.getlist('transaction')),
     }
+
+    def normalize_saved(value, uppercase=False, is_month=False):
+        if value is None:
+            return []
+        if is_month:
+            return normalize_months(value if isinstance(value, list) else [value])
+        return normalize_multi(value if isinstance(value, list) else [value], uppercase=uppercase)
+
+    use_saved_defaults = bool(saved_filters) and not filter_applied_flag and not ignore_saved_flag
+    if use_saved_defaults:
+        if not filters_template['year']:
+            saved_year = saved_filters.get('year')
+            try:
+                filters_template['year'] = int(saved_year)
+            except (TypeError, ValueError):
+                filters_template['year'] = None
+        multi_fields = [
+            ('month', False, True),
+            ('state', True, False),
+            ('city', False, False),
+            ('vendor', False, False),
+            ('vendor_status', True, False),
+            ('line', True, False),
+            ('transaction', False, False),
+        ]
+        for field_name, uppercase, is_month in multi_fields:
+            if filters_template.get(field_name):
+                continue
+            saved_value = saved_filters.get(field_name)
+            restored = normalize_saved(saved_value, uppercase=uppercase, is_month=is_month)
+            if restored:
+                filters_template[field_name] = restored
+
+    if not filters_template['year']:
+        saved_year = saved_filters.get('year') if saved_filters else None
+        try:
+            filters_template['year'] = int(saved_year)
+        except (TypeError, ValueError):
+            filters_template['year'] = current_year_default
+
+    filters = filters_template.copy()
     data = fetch_revenue_by_day(filters)
     chart_labels = [row['day'] for row in data]
     chart_values = [row['valor_liquido'] for row in data]
@@ -12294,8 +12682,21 @@ def report_revenue_by_day():
                 continue
     else:
         months_selected = set(range(1, 13))
-    business_days = count_business_days(current_year, months_selected)
+    business_days = count_business_days(filters['year'], months_selected)
     daily_average = total_liquido / business_days if business_days else 0
+
+    month_names_pt = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ]
+    month_options = []
+    for idx, label in enumerate(month_names_pt, start=1):
+        month_options.append({'value': str(idx), 'label': f"{str(idx).zfill(2)} - {label}"})
+
+    vendor_options = []
+    for name, status in get_distinct_vendors():
+        vendor_options.append({'name': (name or '').strip(), 'status': (status or '').strip()})
+
     return render_template(
         'report_revenue_by_day.html',
         filters=filters,
@@ -12303,39 +12704,335 @@ def report_revenue_by_day():
         chart_values=chart_values,
         total_liquido=total_liquido,
         daily_average=daily_average,
-        states=get_distinct_states(),
-        cities=get_distinct_cities(),
-        vendors=get_distinct_vendors(),
-        product_lines=get_distinct_product_lines(),
+        month_options=month_options,
+        state_options=get_distinct_states(),
+        city_options=get_distinct_cities(),
+        vendor_options=vendor_options,
+        vendor_status_options=get_distinct_vendor_statuses(),
+        line_options=get_distinct_product_lines(),
+        transaction_options=get_sales_order_transactions(),
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
 
+
+@app.route('/report_revenue_by_day/save_filters', methods=['POST'])
+@login_required
+def save_report_revenue_by_day_filters():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def ensure_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def deduplicate_preserve_order(values):
+        seen = set()
+        ordered = []
+        for value in values:
+            if value in seen:
+                continue
+            seen.add(value)
+            ordered.append(value)
+        return ordered
+
+    def sanitize_year(value):
+        try:
+            year_int = int(value)
+            return year_int if year_int > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    def sanitize_multi(field_name, uppercase=False):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            if uppercase:
+                text = text.upper()
+            cleaned.append(text)
+        return deduplicate_preserve_order(cleaned)
+
+    def sanitize_months(field_name):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            try:
+                month_int = int(text)
+            except ValueError:
+                continue
+            if 1 <= month_int <= 12:
+                cleaned.append(str(month_int))
+        return deduplicate_preserve_order(cleaned)
+
+    sanitized_filters = {
+        'year': sanitize_year(payload.get('year')),
+        'month': sanitize_months('month'),
+        'state': sanitize_multi('state', uppercase=True),
+        'city': sanitize_multi('city'),
+        'vendor': sanitize_multi('vendor'),
+        'vendor_status': sanitize_multi('vendor_status', uppercase=True),
+        'line': sanitize_multi('line', uppercase=True),
+        'transaction': sanitize_multi('transaction'),
+    }
+    if not sanitized_filters['year']:
+        sanitized_filters['year'] = datetime.date.today().year
+
+    try:
+        saved = save_user_parameters(
+            user_id,
+            REPORT_REVENUE_BY_DAY_FILTERS_PARAM,
+            json.dumps(sanitized_filters)
+        )
+        if not saved:
+            raise RuntimeError('Falha ao salvar filtros.')
+        return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
+    except Exception as err:
+        print(f'Erro ao salvar filtros de Faturamento por Dia: {err}')
+        return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
+
 @app.route('/report_revenue_by_vendor')
 @login_required
 def report_revenue_by_vendor():
-    current_year = int(request.args.get('year', datetime.date.today().year))
-    filters = {
-        'year': current_year,
-        'month': request.args.getlist('month'),
-        'state': request.args.get('state'),
-        'city': request.args.get('city'),
-        'vendor': request.args.get('vendor'),
-        'line': request.args.get('line')
+    def normalize_multi(values, uppercase=False):
+        if values is None:
+            return []
+        source = values if isinstance(values, list) else [values]
+        normalized = []
+        for value in source:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            if uppercase:
+                text = text.upper()
+            normalized.append(text)
+        return normalized
+
+    def normalize_months(values):
+        if values is None:
+            return []
+        source = values if isinstance(values, list) else [values]
+        normalized = []
+        for value in source:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            try:
+                month_num = int(text)
+            except ValueError:
+                continue
+            if 1 <= month_num <= 12:
+                normalized.append(str(month_num))
+        return normalized
+
+    filter_applied_flag = (request.args.get('filter_applied') or '').strip() == '1'
+    ignore_saved_flag = (request.args.get('ignore_saved') or '').strip() == '1'
+    user_id = session.get('user_id')
+
+    saved_filters = {}
+    if user_id:
+        saved_raw = get_user_parameters(user_id, REPORT_REVENUE_BY_VENDOR_FILTERS_PARAM)
+        if saved_raw:
+            try:
+                saved_filters = json.loads(saved_raw) or {}
+            except (ValueError, TypeError):
+                saved_filters = {}
+
+    current_year_default = datetime.date.today().year
+    year_input = request.args.get('year', type=int)
+
+    filters_template = {
+        'year': year_input,
+        'month': normalize_months(request.args.getlist('month')),
+        'state': normalize_multi(request.args.getlist('state'), uppercase=True),
+        'city': normalize_multi(request.args.getlist('city')),
+        'vendor': normalize_multi(request.args.getlist('vendor')),
+        'vendor_status': normalize_multi(request.args.getlist('vendor_status'), uppercase=True),
+        'line': normalize_multi(request.args.getlist('line'), uppercase=True),
+        'transaction': normalize_multi(request.args.getlist('transaction')),
     }
+
+    def normalize_saved(value, uppercase=False, is_month=False):
+        if value is None:
+            return []
+        if is_month:
+            return normalize_months(value if isinstance(value, list) else [value])
+        return normalize_multi(value if isinstance(value, list) else [value], uppercase=uppercase)
+
+    use_saved_defaults = bool(saved_filters) and not filter_applied_flag and not ignore_saved_flag
+    if use_saved_defaults:
+        multi_fields = [
+            ('month', False, True),
+            ('state', True, False),
+            ('city', False, False),
+            ('vendor', False, False),
+            ('vendor_status', True, False),
+            ('line', True, False),
+            ('transaction', False, False),
+        ]
+        for field_name, uppercase, is_month in multi_fields:
+            if filters_template.get(field_name):
+                continue
+            saved_value = saved_filters.get(field_name)
+            restored = normalize_saved(saved_value, uppercase=uppercase, is_month=is_month)
+            if restored:
+                filters_template[field_name] = restored
+
+    if not filters_template['year']:
+        saved_year = saved_filters.get('year') if saved_filters else None
+        try:
+            filters_template['year'] = int(saved_year)
+        except (TypeError, ValueError):
+            filters_template['year'] = current_year_default
+
+    filters = filters_template.copy()
     data = fetch_revenue_by_vendor(filters)
     chart_labels = [row['vendor'] for row in data]
     chart_values = [row['valor_liquido'] for row in data]
     total_liquido = sum(chart_values)
+
+    month_names_pt = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ]
+    month_options = [
+        {'value': str(idx), 'label': f"{str(idx).zfill(2)} - {label}"}
+        for idx, label in enumerate(month_names_pt, start=1)
+    ]
+
+    vendor_options = []
+    for name, status in get_distinct_vendors():
+        vendor_options.append({
+            'name': (name or '').strip(),
+            'status': (status or '').strip()
+        })
+
     return render_template(
         'report_revenue_by_vendor.html',
         filters=filters,
         chart_labels=chart_labels,
         chart_values=chart_values,
         total_liquido=total_liquido,
+        month_options=month_options,
+        state_options=get_distinct_states(),
+        city_options=get_distinct_cities(),
+        vendor_options=vendor_options,
+        vendor_status_options=get_distinct_vendor_statuses(),
+        line_options=get_distinct_product_lines(),
+        transaction_options=get_sales_order_transactions(),
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
+
+
+@app.route('/report_revenue_by_vendor/save_filters', methods=['POST'])
+@login_required
+def save_report_revenue_by_vendor_filters():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuário não autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def ensure_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def deduplicate_preserve_order(values):
+        seen = set()
+        ordered = []
+        for value in values:
+            if value in seen:
+                continue
+            seen.add(value)
+            ordered.append(value)
+        return ordered
+
+    def sanitize_year(value):
+        try:
+            year_int = int(value)
+            return year_int if year_int > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    def sanitize_multi(field_name, uppercase=False):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            if uppercase:
+                text = text.upper()
+            cleaned.append(text)
+        return deduplicate_preserve_order(cleaned)
+
+    def sanitize_months(field_name):
+        values = ensure_list(payload.get(field_name))
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            try:
+                month_int = int(text)
+            except ValueError:
+                continue
+            if 1 <= month_int <= 12:
+                cleaned.append(str(month_int))
+        return deduplicate_preserve_order(cleaned)
+
+    sanitized_filters = {
+        'year': sanitize_year(payload.get('year')),
+        'month': sanitize_months('month'),
+        'state': sanitize_multi('state', uppercase=True),
+        'city': sanitize_multi('city'),
+        'vendor': sanitize_multi('vendor'),
+        'vendor_status': sanitize_multi('vendor_status', uppercase=True),
+        'line': sanitize_multi('line', uppercase=True),
+        'transaction': sanitize_multi('transaction'),
+    }
+    if not sanitized_filters['year']:
+        sanitized_filters['year'] = datetime.date.today().year
+
+    try:
+        saved = save_user_parameters(
+            user_id,
+            REPORT_REVENUE_BY_VENDOR_FILTERS_PARAM,
+            json.dumps(sanitized_filters)
+        )
+        if not saved:
+            raise RuntimeError('Falha ao salvar filtros.')
+        return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
+    except Exception as err:
+        print(f'Erro ao salvar filtros de Faturamento por Vendedor: {err}')
+        return jsonify({'success': False, 'message': 'Não foi possível salvar os filtros.'}), 500
 
 
 @app.route('/report_premio_por_vendedor')
