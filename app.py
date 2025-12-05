@@ -9209,11 +9209,7 @@ def get_order_header_data(conn, pedido_value):
                     ao.acaopedi AS pedido,
                     CASE
                         WHEN COALESCE(lp.lotcod::text, '') <> '' THEN
-                            lp.lotcod::text ||
-                            CASE
-                                WHEN COALESCE(lp.lotdes, '') <> '' THEN ' - ' || lp.lotdes
-                                ELSE ''
-                            END
+                            lp.lotcod::text || ' - ' || COALESCE(lp.lotdes, '')
                         ELSE ''
                     END AS lot_display
                 FROM acaorde2 ao
@@ -9238,6 +9234,8 @@ def get_order_header_data(conn, pedido_value):
                 WHEN COALESCE(p.pedentuf::text, '') <> '' THEN p.pedentuf::text
                 ELSE ''
             END AS estado,
+            COALESCE(p.pedaprova, '') AS approval_status_code,
+            COALESCE(p.pedsitua, '') AS situation_code,
             COALESCE(pl.production_lots_display, '') AS production_lots_display,
             {load_lot_select},
             COALESCE(rc.rgcdes, '') AS regcar_description
@@ -9274,6 +9272,8 @@ def get_order_header_data(conn, pedido_value):
         load_lot_code,
         load_lot_description,
         regcar_description,
+        approval_status_code,
+        situation_code,
     ) = header_row
 
     header_data = {
@@ -9285,6 +9285,8 @@ def get_order_header_data(conn, pedido_value):
         'lote_producao': production_lots_display or '',
         'lote_carga': '',
         'regcar_description': regcar_description or '',
+        'status': '',
+        'situacao': '',
     }
 
     if isinstance(peddata, (datetime.date, datetime.datetime)):
@@ -9293,10 +9295,11 @@ def get_order_header_data(conn, pedido_value):
         header_data['data_pedido'] = str(peddata)
 
     if load_lot_code:
-        load_lot_str = str(load_lot_code)
-        if load_lot_description:
-            load_lot_str = f"{load_lot_str} - {load_lot_description}"
+        load_lot_str = f"{load_lot_code} - {load_lot_description or ''}"
         header_data['lote_carga'] = load_lot_str
+
+    header_data['status'] = approval_status_code or ''
+    header_data['situacao'] = situation_code or ''
 
     return header_data, None
 
@@ -9660,6 +9663,13 @@ def fetch_logistics_order_details(pedido_code):
         f"LPAD({sequencia_expr}, 10, '0') ELSE {sequencia_expr} END"
     )
 
+    def format_movement_date(value):
+        if isinstance(value, datetime.datetime):
+            return value.strftime('%d/%m/%Y %H:%M')
+        if isinstance(value, datetime.date):
+            return value.strftime('%d/%m/%Y')
+        return str(value) if value else ''
+
     try:
         items_cur = conn.cursor()
         items_query = f"""
@@ -9678,7 +9688,15 @@ def fetch_logistics_order_details(pedido_code):
                 SUM(
                     CASE WHEN UPPER(COALESCE(pm.prjmovtip, '')) = 'C'
                         THEN COALESCE(pm.prjmquant, 0) ELSE 0 END
-                ) AS carregado
+                ) AS carregado,
+                MAX(
+                    CASE WHEN UPPER(COALESCE(pm.prjmovtip, '')) = 'E'
+                        THEN pm.prjmovdat ELSE NULL END
+                ) AS data_separacao,
+                MAX(
+                    CASE WHEN UPPER(COALESCE(pm.prjmovtip, '')) = 'C'
+                        THEN pm.prjmovdat ELSE NULL END
+                ) AS data_embarque
             FROM projmovi pm
             {pedprodu_join}
             LEFT JOIN produto prod ON prod.produto = pp.pprproduto
@@ -9698,6 +9716,8 @@ def fetch_logistics_order_details(pedido_code):
                 reservado_raw,
                 separado_raw,
                 carregado_raw,
+                data_separacao_raw,
+                data_embarque_raw,
             ) = row
 
             try:
@@ -9723,6 +9743,8 @@ def fetch_logistics_order_details(pedido_code):
                     'reservado': reservado,
                     'separado': separado,
                     'carregado': carregado,
+                    'data_separacao': format_movement_date(data_separacao_raw),
+                    'data_embarque': format_movement_date(data_embarque_raw),
                     'kpi_status': calculate_order_kpi(reservado, separado, carregado),
                 }
             )

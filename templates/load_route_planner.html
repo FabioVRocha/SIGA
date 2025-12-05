@@ -1397,6 +1397,8 @@
                 <div><span class="font-semibold">Cidade:</span> <span id="orderDetailCidade">--</span></div>
                 <div><span class="font-semibold">UF:</span> <span id="orderDetailUF">--</span></div>
                 <div><span class="font-semibold">Data do Pedido:</span> <span id="orderDetailDataPedido">--</span></div>
+                <div><span class="font-semibold">Status:</span> <span id="orderDetailStatus">--</span></div>
+                <div><span class="font-semibold">Situação:</span> <span id="orderDetailSituacao">--</span></div>
                 <div class="md:col-span-2"><span class="font-semibold">Lote de Produção:</span> <span id="orderDetailLoteProducao">--</span></div>
                 <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="orderDetailLoteCarga">--</span></div>
             </div>
@@ -1409,7 +1411,9 @@
                             <th scope="col" class="px-4 py-3 text-left">Produto</th>
                             <th scope="col" class="px-4 py-3 text-right">Reservado</th>
                             <th scope="col" class="px-4 py-3 text-right">Separado</th>
+                            <th scope="col" class="px-4 py-3 text-right">Data Separação</th>
                             <th scope="col" class="px-4 py-3 text-right">Carregado</th>
+                            <th scope="col" class="px-4 py-3 text-right">Data Embarque</th>
                         </tr>
                     </thead>
                     <tbody id="orderDetailTableBody" class="text-sm text-dark-blue"></tbody>
@@ -1660,6 +1664,8 @@
         cidade: document.getElementById('orderDetailCidade'),
         uf: document.getElementById('orderDetailUF'),
         dataPedido: document.getElementById('orderDetailDataPedido'),
+        status: document.getElementById('orderDetailStatus'),
+        situacao: document.getElementById('orderDetailSituacao'),
         loteProducao: document.getElementById('orderDetailLoteProducao'),
         loteCarga: document.getElementById('orderDetailLoteCarga'),
     };
@@ -1718,6 +1724,17 @@
             return;
         }
         element.textContent = safeText(value, '--');
+    };
+
+    const setFieldRawText = (element, value) => {
+        if (!element) {
+            return;
+        }
+        if (value === null || value === undefined) {
+            element.textContent = '';
+            return;
+        }
+        element.textContent = String(value);
     };
 
     const setFieldList = (element, value) => {
@@ -1969,16 +1986,26 @@
             separadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
             separadoCell.textContent = formatNumber(item.separado);
 
+            const dataSeparacaoCell = document.createElement('td');
+            dataSeparacaoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            dataSeparacaoCell.textContent = safeText(item.data_separacao, '--');
+
             const carregadoCell = document.createElement('td');
             carregadoCell.className = 'py-3 px-4 whitespace-nowrap text-right';
             carregadoCell.textContent = formatNumber(item.carregado);
+
+            const dataEmbarqueCell = document.createElement('td');
+            dataEmbarqueCell.className = 'py-3 px-4 whitespace-nowrap text-right';
+            dataEmbarqueCell.textContent = safeText(item.data_embarque, '--');
 
             row.appendChild(codeCell);
             row.appendChild(sequenceCell);
             row.appendChild(productCell);
             row.appendChild(reservadoCell);
             row.appendChild(separadoCell);
+            row.appendChild(dataSeparacaoCell);
             row.appendChild(carregadoCell);
+            row.appendChild(dataEmbarqueCell);
 
             detailTableBody.appendChild(row);
         });
@@ -1995,6 +2022,8 @@
         setFieldText(detailFields.cidade, header.cidade);
         setFieldText(detailFields.uf, header.uf);
         setFieldText(detailFields.dataPedido, header.data_pedido);
+        setFieldRawText(detailFields.status, header.status);
+        setFieldRawText(detailFields.situacao, header.situacao);
         setFieldList(detailFields.loteProducao, header.lote_producao);
         setFieldText(detailFields.loteCarga, header.lote_carga);
         renderItems(Array.isArray(data.items) ? data.items : []);
