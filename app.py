@@ -9268,12 +9268,12 @@ def get_order_header_data(conn, pedido_value):
         cliente,
         cidade,
         estado,
+        approval_status_code,
+        situation_code,
         production_lots_display,
         load_lot_code,
         load_lot_description,
         regcar_description,
-        approval_status_code,
-        situation_code,
     ) = header_row
 
     header_data = {
@@ -9286,7 +9286,9 @@ def get_order_header_data(conn, pedido_value):
         'lote_carga': '',
         'regcar_description': regcar_description or '',
         'status': '',
+        'status_codigo': '',
         'situacao': '',
+        'situacao_codigo': '',
     }
 
     if isinstance(peddata, (datetime.date, datetime.datetime)):
@@ -9295,11 +9297,18 @@ def get_order_header_data(conn, pedido_value):
         header_data['data_pedido'] = str(peddata)
 
     if load_lot_code:
-        load_lot_str = f"{load_lot_code} - {load_lot_description or ''}"
+        description = load_lot_description or ''
+        separator = ' - ' if description else ''
+        load_lot_str = f"{load_lot_code}{separator}{description}".strip()
         header_data['lote_carga'] = load_lot_str
 
-    header_data['status'] = approval_status_code or ''
-    header_data['situacao'] = situation_code or ''
+    status_code = (approval_status_code or '').strip().upper()
+    situation_code = (situation_code or '').strip().upper()
+
+    header_data['status_codigo'] = status_code
+    header_data['situacao_codigo'] = situation_code
+    header_data['status'] = ORDER_APPROVAL_STATUS_LABELS.get(status_code, status_code)
+    header_data['situacao'] = ORDER_SITUATION_LABELS.get(situation_code, situation_code)
 
     return header_data, None
 

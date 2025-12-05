@@ -345,6 +345,8 @@
                 <div><span class="font-semibold">Cidade:</span> <span id="orderDetailsCidade">--</span></div>
                 <div><span class="font-semibold">UF:</span> <span id="orderDetailsUf">--</span></div>
                 <div><span class="font-semibold">Data do Pedido:</span> <span id="orderDetailsDataPedido">--</span></div>
+                <div><span class="font-semibold">Status:</span> <span id="orderDetailsStatus">--</span></div>
+                <div><span class="font-semibold">Situação:</span> <span id="orderDetailsSituacao">--</span></div>
                 <div class="md:col-span-2"><span class="font-semibold">Lote de Produção:</span> <span id="orderDetailsLoteProducao">--</span></div>
                 <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="orderDetailsLoteCarga">--</span></div>
             </div>
@@ -414,6 +416,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const orderDetailsCidadeEl = document.getElementById('orderDetailsCidade');
     const orderDetailsUfEl = document.getElementById('orderDetailsUf');
     const orderDetailsDataEl = document.getElementById('orderDetailsDataPedido');
+    const orderDetailsStatusEl = document.getElementById('orderDetailsStatus');
+    const orderDetailsSituacaoEl = document.getElementById('orderDetailsSituacao');
     const orderDetailsLoteProducaoEl = document.getElementById('orderDetailsLoteProducao');
     const orderDetailsLoteCargaEl = document.getElementById('orderDetailsLoteCarga');
     const orderDetailsLoadingEl = document.getElementById('orderDetailsLoading');
@@ -521,6 +525,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setTextContent(orderDetailsCidadeEl, header.cidade);
         setTextContent(orderDetailsUfEl, header.uf);
         setTextContent(orderDetailsDataEl, header.data_pedido);
+        setTextContent(orderDetailsStatusEl, header.status || header.status_codigo);
+        setTextContent(orderDetailsSituacaoEl, header.situacao || header.situacao_codigo);
         setListContent(orderDetailsLoteProducaoEl, header.lote_producao);
         setTextContent(orderDetailsLoteCargaEl, header.lote_carga);
     };
