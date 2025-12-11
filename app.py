@@ -16430,6 +16430,27 @@ def gerencial_parameters():
     )
 
 
+def _fetch_user_by_id(user_id):
+    """
+    Obtém um usuário pelo ID retornando um dicionário simples ou None.
+    """
+    conn = get_siga_db_connection()
+    user = None
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT id, username FROM users WHERE id = %s", (user_id,))
+            row = cur.fetchone()
+            if row:
+                user = {'id': row[0], 'username': row[1]}
+            cur.close()
+        except Error as e:
+            print(f"Erro ao buscar usuário {user_id}: {e}")
+        finally:
+            conn.close()
+    return user
+
+
 @app.route('/users_list')
 @login_required
 def users_list():
@@ -16465,6 +16486,140 @@ def users_list():
             if conn:
                 conn.close()
     return render_template('users_list.html', users=users, filters=filters, page_title="Lista de Usuários", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+
+
+@app.route('/users/<int:user_id>')
+@login_required
+def user_detail(user_id):
+    """
+    Exibe os detalhes básicos de um usuário.
+    """
+    user = _fetch_user_by_id(user_id)
+    if not user:
+        flash('Usuário não encontrado.', 'warning')
+        return redirect(url_for('users_list'))
+
+    return render_template(
+        'user_detail.html',
+        user=user,
+        page_title=f"Usuário #{user_id}",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/users/<int:user_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_user(user_id):
+    """
+    Permite alterar o nome de usuário e opcionalmente redefinir a senha.
+    """
+    user = _fetch_user_by_id(user_id)
+    if not user:
+        flash('Usuário não encontrado.', 'warning')
+        return redirect(url_for('users_list'))
+
+    form_errors = []
+    form_data = {'username': user['username']}
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        form_data['username'] = username
+
+        if not username:
+            form_errors.append('O campo usuário é obrigatório.')
+
+        if password or confirm_password:
+            if password != confirm_password:
+                form_errors.append('As senhas informadas não coincidem.')
+
+        if not form_errors:
+            conn = get_siga_db_connection()
+            if conn:
+                try:
+                    cur = conn.cursor()
+                    updates = []
+                    params = []
+
+                    if username != user['username']:
+                        updates.append("username = %s")
+                        params.append(username)
+
+                    if password:
+                        updates.append("password_hash = %s")
+                        params.append(generate_password_hash(password))
+
+                    if updates:
+                        params.append(user_id)
+                        update_sql = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
+                        cur.execute(update_sql, tuple(params))
+                        conn.commit()
+                        flash('Usuário atualizado com sucesso.', 'success')
+                        user = _fetch_user_by_id(user_id)
+                        cur.close()
+                        return redirect(url_for('user_detail', user_id=user_id))
+                    else:
+                        flash('Nenhuma alteração foi realizada.', 'info')
+                        cur.close()
+                        return redirect(url_for('user_detail', user_id=user_id))
+                except psycopg2.IntegrityError:
+                    conn.rollback()
+                    form_errors.append('Nome de usuário já existe. Escolha outro.')
+                except Error as e:
+                    conn.rollback()
+                    print(f"Erro ao atualizar usuário {user_id}: {e}")
+                    form_errors.append('Erro ao atualizar o usuário. Tente novamente.')
+                finally:
+                    conn.close()
+            else:
+                form_errors.append('Não foi possível conectar ao banco de dados para atualizar o usuário.')
+
+    return render_template(
+        'user_edit.html',
+        user=user,
+        form_data=form_data,
+        form_errors=form_errors,
+        page_title=f"Editar Usuário #{user_id}",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/users/<int:user_id>/delete', methods=['POST'])
+@login_required
+def delete_user(user_id):
+    """
+    Remove um usuário definitivamente.
+    """
+    target_user = _fetch_user_by_id(user_id)
+    if not target_user:
+        flash('Usuário não encontrado.', 'warning')
+        return redirect(url_for('users_list'))
+
+    if session.get('user_id') == user_id:
+        flash('Você não pode excluir o próprio usuário enquanto estiver logado.', 'danger')
+        return redirect(url_for('users_list'))
+
+    conn = get_siga_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+            conn.commit()
+            cur.close()
+            flash('Usuário excluído com sucesso.', 'success')
+        except Error as e:
+            conn.rollback()
+            print(f"Erro ao excluir usuário {user_id}: {e}")
+            flash('Erro ao excluir usuário. Tente novamente.', 'danger')
+        finally:
+            conn.close()
+    else:
+        flash('Não foi possível conectar ao banco de dados para excluir o usuário.', 'danger')
+
+    return redirect(url_for('users_list'))
 
 @app.route('/logout')
 def logout():

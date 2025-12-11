@@ -18,7 +18,8 @@
             <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
                 <tr>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tl-lg">ID</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tr-lg">Usuário</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Usuário</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tr-lg">Ações</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -26,6 +27,21 @@
                 <tr class="hover:bg-blue-50">
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ user[0] }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ user[1] }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <div class="flex items-center gap-3" data-user-id="{{ user[0] }}">
+                            <a href="{{ url_for('user_detail', user_id=user[0]) }}" class="icon-button text-blue-600 hover:text-blue-800" title="Visualizar usuário" aria-label="Visualizar usuário">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="{{ url_for('edit_user', user_id=user[0]) }}" class="icon-button text-amber-500 hover:text-amber-600" title="Editar usuário" aria-label="Editar usuário">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <form action="{{ url_for('delete_user', user_id=user[0]) }}" method="POST" class="inline-flex" onsubmit="return confirm('Tem certeza que deseja excluir este usuário?');">
+                                <button type="submit" class="icon-button text-red-600 hover:text-red-700" title="Excluir usuário" aria-label="Excluir usuário">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
