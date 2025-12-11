@@ -1,5 +1,36 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<style>
+    @media print {
+        body, html {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+        }
+        .sidebar,
+        .main-header,
+        .flash-message,
+        .no-print,
+        #filterModal {
+            display: none !important;
+        }
+        .main-content {
+            margin: 0 !important;
+            padding: 0.5in !important;
+            background: #fff !important;
+        }
+        #cfopReportWrapper {
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block title %}Faturamento por CFOP{% endblock %}
 
 {% block page_title %}Faturamento por CFOP{% endblock %}
@@ -11,12 +42,20 @@
 {% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
-    <div class="flex justify-between items-center mb-4">
+<div id="cfopReportWrapper" class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md text-xs md:text-sm leading-tight">
+    <div class="flex justify-between items-center flex-wrap gap-3 mb-4">
         <h2 class="text-xl font-semibold text-gray-800">Faturamento por CFOP</h2>
-        <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
-            <i class="fas fa-filter mr-2"></i> Filtrar
-        </button>
+        <div class="flex items-center gap-2 no-print">
+            <button type="button" id="printReportBtn" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+                <i class="fas fa-print mr-2"></i> Imprimir
+            </button>
+            <button type="button" id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+                <i class="fas fa-filter mr-2"></i> Filtrar
+            </button>
+        </div>
+    </div>
+    <div class="text-sm text-gray-600 mb-4" id="selectedPeriodDescription">
+        {{ period_description }}
     </div>
     <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
@@ -31,7 +70,7 @@
             </thead>
             <tbody>
                 {% for row in data %}
-                <tr class="odd:bg-white even:bg-gray-100">
+                <tr class="odd:bg-white even:bg-gray-100 border-b border-gray-200 last:border-b-0">
                     <td class="px-4 py-2">{{ row.cfop }}</td>
                     <td class="px-4 py-2 text-right">{{ row.valor_bruto | format_currency_brl }}</td>
                     <td class="px-4 py-2 text-right">{{ row.valor_ipi | format_currency_brl }}</td>
@@ -294,6 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const openFilterModalBtn = document.getElementById('openFilterModalBtn');
     const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
     const saveFiltersBtn = document.getElementById('saveFiltersBtn');
+    const printReportBtn = document.getElementById('printReportBtn');
     const filterForm = document.getElementById('filterForm');
     const saveFiltersFeedback = document.getElementById('saveFiltersFeedback');
     const saveFiltersUrl = "{{ url_for('save_report_revenue_by_cfop_filters') }}";
@@ -324,6 +364,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.target === filterModal) {
             closeModal();
         }
+    });
+    printReportBtn?.addEventListener('click', () => {
+        closeAllComboboxPanels();
+        window.print();
     });
 
     const setupCombobox = (name, placeholderText) => {
