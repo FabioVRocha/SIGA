@@ -5854,6 +5854,7 @@ def invoices_mirror():
                     COALESCE(MAX(g.grunome), '') AS grunome_agg,
                     COALESCE(MAX(d.notserie), '') AS notserie,
                     COALESCE(MAX(d.notcodac), '') AS notcodac,
+                    COALESCE(MAX(d.vollcaseq), 0) AS vollcaseq,
                     op.opetransac
                 FROM
                     doctos d
@@ -5964,7 +5965,8 @@ def invoices_mirror():
                     'grunome': row[10], # grunome_agg
                     'notserie': row[11],
                     'notcodac': row[12],
-                    'operacao': row[13] # Código da transação
+                    'vollcaseq': row[13],
+                    'operacao': row[14] # Código da transação
                 }
 
                 # Normaliza os dados de série e chave de acesso para o template
