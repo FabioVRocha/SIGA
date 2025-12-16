@@ -10,6 +10,7 @@ import calendar  # Para cálculo de dias úteis
 from functools import wraps # Para criar um decorador de login
 # Importa as funções para hashing de senhas
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 import re # Para expressões regulares, usado para parsear rgcdes
 import json # Para lidar com dados JSON (para parâmetros de usuário)
 import math
@@ -23,6 +24,7 @@ import base64
 import mimetypes
 import ssl
 from pathlib import Path
+import uuid
 import threading
 from io import BytesIO
 import zipfile
@@ -46,6 +48,94 @@ from mrp_routes import (
 app = Flask(__name__)
 # Define a chave secreta importada do config.py
 app.secret_key = SECRET_KEY
+
+USER_PHOTO_SUBDIR = Path('uploads') / 'users'
+USER_PHOTO_DIRECTORY = Path(app.static_folder) / USER_PHOTO_SUBDIR
+ALLOWED_USER_PHOTO_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+
+def _ensure_user_photo_directory():
+    try:
+        USER_PHOTO_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+
+
+_ensure_user_photo_directory()
+
+
+def normalize_user_photo_path(path_value):
+    """
+    Converte o caminho salvo da foto para um formato consistente (usando '/').
+    """
+    if not path_value:
+        return None
+    candidate = str(path_value).strip()
+    if not candidate:
+        return None
+    candidate = candidate.replace('\\', '/')
+    while '//' in candidate:
+        candidate = candidate.replace('//', '/')
+    candidate = candidate.lstrip('/')
+    return candidate or None
+
+
+def save_user_photo_file(file_storage):
+    """
+    Salva a foto enviada para o diretório de uploads e retorna o caminho relativo.
+    """
+    if not file_storage or not file_storage.filename:
+        return None, None
+
+    filename = secure_filename(file_storage.filename)
+    if not filename:
+        return None, 'Selecione um arquivo de imagem válido.'
+
+    if '.' not in filename:
+        return None, 'Formato de arquivo inválido. Utilize imagens PNG, JPG, JPEG, GIF ou WEBP.'
+
+    extension = filename.rsplit('.', 1)[1].lower()
+    if extension not in ALLOWED_USER_PHOTO_EXTENSIONS:
+        return None, 'Formato de imagem inválido. Utilize PNG, JPG, JPEG, GIF ou WEBP.'
+
+    unique_name = f"{uuid.uuid4().hex}.{extension}"
+    target_path = USER_PHOTO_DIRECTORY / unique_name
+
+    try:
+        _ensure_user_photo_directory()
+        file_storage.save(target_path)
+    except OSError as exc:
+        return None, f"Não foi possível salvar a foto do usuário: {exc}"
+
+    relative_path = (USER_PHOTO_SUBDIR / unique_name).as_posix()
+    return relative_path, None
+
+
+def delete_user_photo_file(relative_path):
+    """
+    Remove o arquivo de foto associado a um usuário, se existir.
+    """
+    normalized_relative = normalize_user_photo_path(relative_path)
+    if not normalized_relative:
+        return
+
+    parts = [part for part in normalized_relative.split('/') if part]
+    if not parts:
+        return
+
+    target_path = Path(app.static_folder).joinpath(*parts)
+    try:
+        resolved_target = target_path.resolve()
+        resolved_directory = USER_PHOTO_DIRECTORY.resolve()
+        resolved_target.relative_to(resolved_directory)
+    except (ValueError, FileNotFoundError):
+        return
+
+    try:
+        if target_path.exists():
+            target_path.unlink()
+    except OSError:
+        pass
 
 AVAILABLE_PARAMETER_REPORTS = [
     ('report_revenue_comparison', 'Comparativo de Faturamento'),
@@ -1276,6 +1366,10 @@ def init_siga_db():
                 ALTER TABLE users
                 ALTER COLUMN password_hash TYPE VARCHAR(255)
             """)
+            cur.execute("""
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS photo_filename VARCHAR(255)
+            """)
             # Cria a tabela de parâmetros de usuário
             cur.execute(f"""
                 CREATE TABLE IF NOT EXISTS {USER_PARAMETERS_TABLE} (
@@ -1313,6 +1407,17 @@ def login_required(f):
         return f(*args, **kwargs)
         # Em um ambiente de produção, você também verificaria a validade da sessão, etc.
     return decorated_function
+
+
+@app.context_processor
+def inject_sidebar_user_photo():
+    """
+    Disponibiliza a foto do usuário logado para todos os templates.
+    """
+    return {
+        'sidebar_user_photo': session.get('user_photo')
+    }
+
 
 def get_user_parameters(user_id, param_name):
     """
@@ -1535,7 +1640,7 @@ def login():
         if conn:
             try:
                 cur = conn.cursor()
-                cur.execute("SELECT id, username, password_hash FROM users WHERE username = %s", (username,))
+                cur.execute("SELECT id, username, password_hash, photo_filename FROM users WHERE username = %s", (username,))
                 user = cur.fetchone()
                 cur.close()
                 conn.close()
@@ -1544,6 +1649,7 @@ def login():
                     session['logged_in'] = True
                     session['username'] = user[1] # user[1] é o username
                     session['user_id'] = user[0] # Armazena o ID do usuário na sessão
+                    session['user_photo'] = normalize_user_photo_path(user[3])
                     flash('Login realizado com sucesso!', 'success')
                     return redirect(url_for('dashboard'))
                 else:
@@ -1565,6 +1671,8 @@ def register():
         username = request.form['username']
         password = request.form['password']
         confirm_password = request.form['confirm_password']
+        photo_file = request.files.get('photo')
+        photo_filename = None
 
         if not username or not password or not confirm_password:
             flash('Todos os campos são obrigatórios.', 'warning')
@@ -1574,25 +1682,41 @@ def register():
             flash('As senhas não coincidem.', 'danger')
             return render_template('register.html')
 
+        if photo_file and photo_file.filename:
+            photo_filename, photo_error = save_user_photo_file(photo_file)
+            if photo_error:
+                flash(photo_error, 'danger')
+                return render_template('register.html')
+
         hashed_password = generate_password_hash(password)
 
         conn = get_siga_db_connection()
         if conn:
             try:
                 cur = conn.cursor()
-                cur.execute("INSERT INTO users (username, password_hash) VALUES (%s, %s)", (username, hashed_password))
+                cur.execute(
+                    "INSERT INTO users (username, password_hash, photo_filename) VALUES (%s, %s, %s)",
+                    (username, hashed_password, photo_filename)
+                )
                 conn.commit()
                 cur.close()
                 flash('Usuário cadastrado com sucesso! Faça login para continuar.', 'success')
                 return redirect(url_for('login'))
             except psycopg2.IntegrityError: # Erro de violação de unicidade (username já existe)
+                if photo_filename:
+                    delete_user_photo_file(photo_filename)
                 flash('Nome de usuário já existe. Por favor, escolha outro.', 'danger')
             except Error as e:
                 print(f"Erro ao cadastrar usuário: {e}")
+                if photo_filename:
+                    delete_user_photo_file(photo_filename)
                 flash(f"Erro ao cadastrar usuário: {e}", "danger")
             finally:
                 if conn:
                     conn.close()
+        else:
+            if photo_filename:
+                delete_user_photo_file(photo_filename)
     return render_template('register.html')
 
 @app.route('/')
@@ -16441,10 +16565,14 @@ def _fetch_user_by_id(user_id):
     if conn:
         try:
             cur = conn.cursor()
-            cur.execute("SELECT id, username FROM users WHERE id = %s", (user_id,))
+            cur.execute("SELECT id, username, photo_filename FROM users WHERE id = %s", (user_id,))
             row = cur.fetchone()
             if row:
-                user = {'id': row[0], 'username': row[1]}
+                user = {
+                    'id': row[0],
+                    'username': row[1],
+                    'photo_filename': normalize_user_photo_path(row[2])
+                }
             cur.close()
         except Error as e:
             print(f"Erro ao buscar usuário {user_id}: {e}")
@@ -16523,6 +16651,8 @@ def edit_user(user_id):
 
     form_errors = []
     form_data = {'username': user['username']}
+    previous_photo_filename = user.get('photo_filename')
+    uploaded_photo_filename = None
 
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -16536,6 +16666,14 @@ def edit_user(user_id):
         if password or confirm_password:
             if password != confirm_password:
                 form_errors.append('As senhas informadas não coincidem.')
+
+        if not form_errors:
+            photo_file = request.files.get('photo')
+            if photo_file and photo_file.filename:
+                uploaded_photo_filename, photo_error = save_user_photo_file(photo_file)
+                if photo_error:
+                    form_errors.append(photo_error)
+                    uploaded_photo_filename = None
 
         if not form_errors:
             conn = get_siga_db_connection()
@@ -16553,13 +16691,25 @@ def edit_user(user_id):
                         updates.append("password_hash = %s")
                         params.append(generate_password_hash(password))
 
+                    if uploaded_photo_filename is not None:
+                        updates.append("photo_filename = %s")
+                        params.append(uploaded_photo_filename)
+
                     if updates:
                         params.append(user_id)
                         update_sql = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
                         cur.execute(update_sql, tuple(params))
                         conn.commit()
                         flash('Usuário atualizado com sucesso.', 'success')
-                        user = _fetch_user_by_id(user_id)
+                        updated_user = _fetch_user_by_id(user_id)
+                        if uploaded_photo_filename and previous_photo_filename and previous_photo_filename != uploaded_photo_filename:
+                            delete_user_photo_file(previous_photo_filename)
+                        if session.get('user_id') == user_id:
+                            target_user = updated_user or user
+                            session['username'] = target_user['username']
+                            new_photo_for_session = target_user.get('photo_filename') or uploaded_photo_filename
+                            session['user_photo'] = normalize_user_photo_path(new_photo_for_session)
+                        user = updated_user or user
                         cur.close()
                         return redirect(url_for('user_detail', user_id=user_id))
                     else:
@@ -16568,14 +16718,20 @@ def edit_user(user_id):
                         return redirect(url_for('user_detail', user_id=user_id))
                 except psycopg2.IntegrityError:
                     conn.rollback()
+                    if uploaded_photo_filename:
+                        delete_user_photo_file(uploaded_photo_filename)
                     form_errors.append('Nome de usuário já existe. Escolha outro.')
                 except Error as e:
                     conn.rollback()
                     print(f"Erro ao atualizar usuário {user_id}: {e}")
+                    if uploaded_photo_filename:
+                        delete_user_photo_file(uploaded_photo_filename)
                     form_errors.append('Erro ao atualizar o usuário. Tente novamente.')
                 finally:
                     conn.close()
             else:
+                if uploaded_photo_filename:
+                    delete_user_photo_file(uploaded_photo_filename)
                 form_errors.append('Não foi possível conectar ao banco de dados para atualizar o usuário.')
 
     return render_template(
@@ -16611,6 +16767,8 @@ def delete_user(user_id):
             cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
             conn.commit()
             cur.close()
+            if target_user.get('photo_filename'):
+                delete_user_photo_file(target_user['photo_filename'])
             flash('Usuário excluído com sucesso.', 'success')
         except Error as e:
             conn.rollback()
@@ -16631,6 +16789,7 @@ def logout():
     session.pop('logged_in', None)
     session.pop('username', None)
     session.pop('user_id', None) # Limpa o user_id também
+    session.pop('user_photo', None)
     flash('Você foi desconectado.', 'info')
     return redirect(url_for('login'))
 

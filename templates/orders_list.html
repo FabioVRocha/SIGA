@@ -143,7 +143,77 @@
     .status-legend-color.blue {
         background-color: #2563eb;
     }
+    .loading-overlay {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(15, 23, 42, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        transition: opacity 0.2s ease;
+    }
+    .loading-overlay.hidden {
+        display: none !important;
+    }
+    .loading-modal {
+        width: min(22rem, 90vw);
+        background-color: var(--clr-card-bg);
+        border: 1px solid var(--clr-border);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.45);
+        text-align: center;
+    }
+    .loading-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--clr-dark-blue);
+        margin-bottom: 0.25rem;
+    }
+    .loading-description {
+        font-size: 0.85rem;
+        color: var(--clr-text-secondary);
+        margin-bottom: 1rem;
+    }
+    .loading-progress {
+        width: 100%;
+        height: 0.5rem;
+        border-radius: 9999px;
+        background-color: var(--clr-light-gray);
+        overflow: hidden;
+    }
+    .loading-progress-bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--clr-light-blue), var(--clr-dark-blue));
+        border-radius: 9999px;
+    }
+    .loading-progress-bar.animate-progress {
+        animation: loadingProgressBar 1.5s ease-in-out infinite;
+    }
+    @keyframes loadingProgressBar {
+        0% {
+            width: 0%;
+        }
+        70% {
+            width: 100%;
+        }
+        100% {
+            width: 100%;
+        }
+    }
 </style>
+
+<div id="loadingOverlay" class="loading-overlay" aria-live="polite" aria-busy="true" role="status">
+    <div class="loading-modal">
+        <p class="loading-title">Atualizando pedidos</p>
+        <p class="loading-description">Aguarde enquanto a lista é carregada.</p>
+        <div class="loading-progress" aria-hidden="true">
+            <div id="loadingProgressBar" class="loading-progress-bar animate-progress"></div>
+        </div>
+    </div>
+</div>
 
 <div class="space-y-6">
     <section class="list-section">
@@ -707,6 +777,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const tableBody = columnFilterForm ? columnFilterForm.querySelector('tbody') : null;
     const orderRows = tableBody ? Array.from(tableBody.querySelectorAll('tr[data-order-row="true"]')) : [];
     const noLocalResultsRow = document.getElementById('noLocalResultsRow');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingProgressBar = document.getElementById('loadingProgressBar');
     const numericFilterNames = new Set([
         'filter_quantidade_total',
         'filter_reservado',
@@ -731,6 +803,57 @@ document.addEventListener('DOMContentLoaded', () => {
         'separado',
         'carregado',
     ]);
+    const restartLoadingAnimation = () => {
+        if (!loadingProgressBar) {
+            return;
+        }
+        loadingProgressBar.classList.remove('animate-progress');
+        void loadingProgressBar.offsetWidth;
+        loadingProgressBar.classList.add('animate-progress');
+    };
+    const showLoadingOverlay = () => {
+        if (!loadingOverlay) {
+            return;
+        }
+        restartLoadingAnimation();
+        loadingOverlay.classList.remove('hidden');
+    };
+    const hideLoadingOverlay = () => {
+        if (!loadingOverlay) {
+            return;
+        }
+        loadingOverlay.classList.add('hidden');
+    };
+    window.addEventListener('load', () => {
+        hideLoadingOverlay();
+    });
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+            hideLoadingOverlay();
+        }
+    });
+    window.addEventListener('beforeunload', () => {
+        showLoadingOverlay();
+    });
+    const resolveInitialOverlay = () => {
+        hideLoadingOverlay();
+    };
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        requestAnimationFrame(resolveInitialOverlay);
+    } else {
+        document.addEventListener('readystatechange', () => {
+            if (document.readyState === 'interactive') {
+                requestAnimationFrame(resolveInitialOverlay);
+            }
+        }, { once: true });
+    }
+    [filterForm, columnFilterForm].forEach((form) => {
+        if (form) {
+            form.addEventListener('submit', () => {
+                showLoadingOverlay();
+            });
+        }
+    });
     let currentSortBy = sortByInputs.length > 0 ? sortByInputs[0].value : '';
     let currentSortOrder = sortOrderInputs.length > 0 ? (sortOrderInputs[0].value || 'desc') : 'desc';
     if (currentSortOrder !== 'asc' && currentSortOrder !== 'desc') {
@@ -1143,12 +1266,18 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             applyLocalTableFilters();
             if (columnFilterForm) {
-                columnFilterForm.submit();
+                showLoadingOverlay();
+                if (typeof columnFilterForm.requestSubmit === 'function') {
+                    columnFilterForm.requestSubmit();
+                } else {
+                    columnFilterForm.submit();
+                }
             } else {
                 const url = new URL(window.location.href);
                 columnFilterInputs.forEach((input) => {
                     url.searchParams.delete(input.name);
                 });
+                showLoadingOverlay();
                 window.location.href = url.toString();
             }
         });
@@ -1499,6 +1628,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (clearFiltersBtn) {
         clearFiltersBtn.addEventListener('click', () => {
+            showLoadingOverlay();
             window.location = "{{ url_for('orders_list') }}";
         });
     }
