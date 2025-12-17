@@ -1,0 +1,812 @@
+{% extends "base.html" %}
+
+{% block title %}Pedidos em Carteira Não Faturados{% endblock %}
+
+{% block page_title %}Pedidos em Carteira Não Faturados{% endblock %}
+
+{% block header_action %}
+<a href="{{ url_for('commercial_reports') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+    <i class="fas fa-arrow-left mr-2"></i> Voltar
+</a>
+{% endblock %}
+
+{% block content %}
+<style>
+.tree-table thead th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.tree-toggle-btn {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    border: 1px solid #cbd5f5;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #1f3a5f;
+    background-color: #fff;
+    transition: background-color 0.2s;
+}
+.tree-toggle-btn:hover {
+    background-color: #eef2ff;
+}
+.tree-row.hidden-row {
+    display: none;
+}
+.level-badge {
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.combobox-panel {
+    max-height: 16rem;
+}
+#filterModal {
+    background: rgba(15,23,42,0.35);
+}
+.save-feedback {
+    font-size: 0.85rem;
+}
+</style>
+
+<div class="space-y-6">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div class="flex flex-wrap items-center gap-4 mb-6">
+            <div>
+                <h2 class="text-2xl font-semibold text-gray-800">Pedidos em Carteira Não Faturados</h2>
+                <p class="text-sm text-gray-500">Matriz com valores pendentes agrupados por representante, cliente, lote de produção, pedido e produto.</p>
+            </div>
+            <div class="flex-1"></div>
+            <button id="openFilterModalBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+                <i class="fas fa-filter mr-2"></i> Filtrar
+            </button>
+        </div>
+        <div class="flex flex-wrap gap-3 text-sm mb-4">
+            {% if period_label %}
+            <div class="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-100">
+                <span class="font-semibold">Período:</span>
+                <span>{{ period_label }}</span>
+            </div>
+            {% endif %}
+            {% if selected_vendor_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Representantes:</span>
+                {% for label in selected_vendor_labels %}
+                <span class="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-200">{{ label }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_state_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Estados:</span>
+                {% for state in selected_state_labels %}
+                <span class="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200">{{ state }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_customer_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Clientes:</span>
+                {% for customer in selected_customer_labels %}
+                <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">{{ customer }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_line_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Linhas:</span>
+                {% for line in selected_line_labels %}
+                <span class="bg-purple-50 text-purple-700 px-3 py-1 rounded-full border border-purple-200">{{ line }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_status_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Status:</span>
+                {% for status in selected_status_labels %}
+                <span class="bg-sky-50 text-sky-700 px-3 py-1 rounded-full border border-sky-200">{{ status }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_situation_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Situação:</span>
+                {% for situation in selected_situation_labels %}
+                <span class="bg-amber-50 text-amber-700 px-3 py-1 rounded-full border border-amber-200">{{ situation }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_transaction_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Transações:</span>
+                {% for transaction in selected_transaction_labels %}
+                <span class="bg-pink-50 text-pink-700 px-3 py-1 rounded-full border border-pink-200">{{ transaction }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                <p class="text-sm text-slate-500">Valor Pendente</p>
+                <p class="text-2xl font-semibold text-slate-800">{{ summary_totals.total_value | format_currency_brl }}</p>
+            </div>
+            <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                <p class="text-sm text-slate-500">Pedidos Impactados</p>
+                <p class="text-2xl font-semibold text-slate-800">{{ summary_totals.orders_count }}</p>
+            </div>
+            <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                <p class="text-sm text-slate-500">Itens Pendentes</p>
+                <p class="text-2xl font-semibold text-slate-800">{{ summary_totals.items_count }}</p>
+            </div>
+            <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                <p class="text-sm text-slate-500">Ticket Médio por Pedido</p>
+                <p class="text-2xl font-semibold text-slate-800">{{ summary_totals.average_per_order | format_currency_brl }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 xl:col-span-2">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800">Matriz por Representante</h3>
+                    <p class="text-sm text-gray-500">Clique no ícone “+” para expandir níveis e detalhar o valor pendente.</p>
+                </div>
+                <div class="text-sm text-gray-500">Itens exibidos: {{ pending_rows_count }}</div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="tree-table w-full">
+                    <thead>
+                        <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
+                            <th class="px-4 py-2">Nível</th>
+                            <th class="px-4 py-2 text-right">Quantidade pendente</th>
+                            <th class="px-4 py-2 text-right">Valor pendente</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pendingTreeBody" class="text-sm text-slate-700">
+                        <tr>
+                            <td colspan="3" class="text-center text-slate-500 py-6">Carregando dados...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800">Valor pendente por mês</h3>
+                    <p class="text-sm text-gray-500">Distribuição mensal dos pedidos a faturar.</p>
+                </div>
+            </div>
+            <div class="w-full min-h-[360px] flex items-center justify-center">
+                <canvas id="pendingChart" class="w-full h-full"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="filterModal" class="fixed inset-0 z-40 hidden">
+  <div class="flex items-center justify-center min-h-screen px-4 py-8">
+    <div class="absolute inset-0" id="filterModalBackdrop"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl">
+      <form id="filterForm" method="get" action="{{ url_for('report_orders_pending_billing') }}" class="p-6 space-y-6">
+        <input type="hidden" name="filter_applied" value="1">
+        <div class="flex justify-between items-start">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800">Filtros</h3>
+                <p class="text-sm text-gray-500">Defina os filtros e clique em Aplicar para atualizar a visualização.</p>
+            </div>
+            <button type="button" id="filterModalCloseIcon" class="text-slate-500 hover:text-slate-700"><i class="fas fa-times fa-lg"></i></button>
+        </div>
+        <div class="grid grid-cols-1 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="start_date" class="block text-sm font-medium text-gray-700">Data inicial</label>
+                    <input type="date" name="start_date" id="start_date" value="{{ filters.start_date }}" class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label for="end_date" class="block text-sm font-medium text-gray-700">Data final</label>
+                    <input type="date" name="end_date" id="end_date" value="{{ filters.end_date }}" class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Representantes</label>
+                <div class="relative">
+                    <button type="button" id="vendor-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                        <span id="vendor-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg class="w-5 h-5 ml-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="vendor-options" data-combobox-panel="vendor" class="combobox-panel hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar representantes" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="vendor">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for option in vendor_options %}
+                            {% set code = option.code %}
+                            {% set name = option.name %}
+                            {% set label_text = name %}
+                            {% if code and name %}
+                                {% set label_text = name ~ ' (' ~ code ~ ')' %}
+                            {% elif code %}
+                                {% set label_text = code %}
+                            {% endif %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }}">
+                                <input type="checkbox" name="vendor" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.vendor and code in filters.vendor %}checked{% endif %}>
+                                <span class="text-gray-700">{{ label_text }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Estados</label>
+                    <div class="relative">
+                        <button type="button" id="state-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                            <span id="state-text" class="truncate">Selecione uma ou mais opções</span>
+                            <svg class="w-5 h-5 ml-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div id="state-options" data-combobox-panel="state" class="combobox-panel hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                            <div class="p-3 border-b border-slate-100 bg-slate-50">
+                                <div class="relative">
+                                    <input type="text" placeholder="Buscar estados" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="state">
+                                    <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                                </div>
+                            </div>
+                            <div class="max-h-64 overflow-y-auto">
+                                {% for state in state_options %}
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ state }}">
+                                    <input type="checkbox" name="state" value="{{ state }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.state and state in filters.state %}checked{% endif %}>
+                                    <span class="text-gray-700">{{ state }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Clientes</label>
+                    <div class="relative">
+                        <button type="button" id="customer-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                            <span id="customer-text" class="truncate">Selecione uma ou mais opções</span>
+                            <svg class="w-5 h-5 ml-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div id="customer-options" data-combobox-panel="customer" class="combobox-panel hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                            <div class="p-3 border-b border-slate-100 bg-slate-50">
+                                <div class="relative">
+                                    <input type="text" placeholder="Buscar clientes" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="customer">
+                                    <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                                </div>
+                            </div>
+                            <div class="max-h-64 overflow-y-auto">
+                                {% for option in customer_options %}
+                                {% set code = option.code %}
+                                {% set name = option.name %}
+                                {% set label_text = name %}
+                                {% if code and name %}
+                                    {% set label_text = name ~ ' (' ~ code ~ ')' %}
+                                {% elif code %}
+                                    {% set label_text = code %}
+                                {% endif %}
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }}">
+                                    <input type="checkbox" name="customer" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.customer and code in filters.customer %}checked{% endif %}>
+                                    <span class="text-gray-700">{{ label_text }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Linhas</label>
+                    <div class="relative">
+                        <button type="button" id="line-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                            <span id="line-text" class="truncate">Selecione uma ou mais opções</span>
+                            <svg class="w-5 h-5 ml-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div id="line-options" data-combobox-panel="line" class="combobox-panel hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                            <div class="p-3 border-b border-slate-100 bg-slate-50">
+                                <div class="relative">
+                                    <input type="text" placeholder="Buscar linhas" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="line">
+                                    <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                                </div>
+                            </div>
+                            <div class="max-h-64 overflow-y-auto">
+                                {% for line in line_options %}
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ line }}">
+                                    <input type="checkbox" name="line" value="{{ line }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.line and line in filters.line %}checked{% endif %}>
+                                    <span class="text-gray-700">{{ line }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <div class="relative">
+                        <button type="button" id="status-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                            <span id="status-text" class="truncate">Selecione uma ou mais opções</span>
+                            <svg class="w-5 h-5 ml-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div id="status-options" data-combobox-panel="status" class="combobox-panel hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                            <div class="p-3 border-b border-slate-100 bg-slate-50">
+                                <div class="relative">
+                                    <input type="text" placeholder="Buscar status" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="status">
+                                    <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                                </div>
+                            </div>
+                            <div class="max-h-64 overflow-y-auto">
+                                {% for option in status_options %}
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ option.label }}">
+                                    <input type="checkbox" name="status" value="{{ option.code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.status and option.code in filters.status %}checked{% endif %}>
+                                    <span class="text-gray-700">{{ option.label }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Situação</label>
+                    <div class="relative">
+                        <button type="button" id="situation-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                            <span id="situation-text" class="truncate">Selecione uma ou mais opções</span>
+                            <svg class="w-5 h-5 ml-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div id="situation-options" data-combobox-panel="situation" class="combobox-panel hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                            <div class="p-3 border-b border-slate-100 bg-slate-50">
+                                <div class="relative">
+                                    <input type="text" placeholder="Buscar situações" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="situation">
+                                    <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                                </div>
+                            </div>
+                            <div class="max-h-64 overflow-y-auto">
+                                {% for option in situation_options %}
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ option.label }}">
+                                    <input type="checkbox" name="situation" value="{{ option.code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.situation and option.code in filters.situation %}checked{% endif %}>
+                                    <span class="text-gray-700">{{ option.label }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Transações</label>
+                    <div class="relative">
+                        <button type="button" id="transaction-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm flex justify-between items-center">
+                            <span id="transaction-text" class="truncate">Selecione uma ou mais opções</span>
+                            <svg class="w-5 h-5 ml-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div id="transaction-options" data-combobox-panel="transaction" class="combobox-panel hidden absolute z-30 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                            <div class="p-3 border-b border-slate-100 bg-slate-50">
+                                <div class="relative">
+                                    <input type="text" placeholder="Buscar transações" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="transaction">
+                                    <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                                </div>
+                            </div>
+                            <div class="max-h-64 overflow-y-auto">
+                                {% for option in transaction_options %}
+                                {% set code = option.code %}
+                                {% set label_text = option.label %}
+                                {% set display_text = label_text %}
+                                {% if code and label_text %}
+                                    {% set display_text = label_text ~ ' (' ~ code ~ ')' %}
+                                {% elif code %}
+                                    {% set display_text = code %}
+                                {% endif %}
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ display_text }}">
+                                    <input type="checkbox" name="transaction" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.transaction and code in filters.transaction %}checked{% endif %}>
+                                    <span class="text-gray-700">{{ display_text }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="flex flex-wrap gap-3 justify-between items-center pt-4 border-t border-slate-200">
+            <div id="saveFeedbackMessage" class="text-sm"></div>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" id="saveFiltersBtn" class="btn-secondary px-4 py-2 rounded-lg">Salvar filtros</button>
+                <button type="submit" class="btn-primary px-4 py-2 rounded-lg">Aplicar filtros</button>
+            </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const treeData = {{ tree_data | tojson }};
+const chartLabels = {{ chart_labels | tojson }};
+const chartValues = {{ chart_values | tojson }};
+const nodeLookup = new Map();
+const treeBody = document.getElementById('pendingTreeBody');
+
+function formatCurrency(value) {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+}
+
+function formatNumber(value) {
+    return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value || 0);
+}
+
+function registerNodes(nodes, parentId = null) {
+    if (!Array.isArray(nodes)) {
+        return;
+    }
+    nodes.forEach((node) => {
+        nodeLookup.set(node.id, { ...node, parentId });
+        if (Array.isArray(node.children) && node.children.length) {
+            registerNodes(node.children, node.id);
+        }
+    });
+}
+
+function renderTreeTable() {
+    if (!treeBody) return;
+    treeBody.innerHTML = '';
+    nodeLookup.clear();
+    registerNodes(treeData, null);
+
+    if (!treeData.length) {
+        const emptyRow = document.createElement('tr');
+        emptyRow.innerHTML = '<td colspan="3" class="text-center text-slate-500 py-6">Nenhum pedido pendente encontrado para os filtros selecionados.</td>';
+        treeBody.appendChild(emptyRow);
+        return;
+    }
+
+    treeData.forEach((node) => {
+        treeBody.appendChild(createTreeRow(node, 0, null));
+    });
+}
+
+function createTreeRow(node, depth, parentId) {
+    const tr = document.createElement('tr');
+    tr.className = 'tree-row border-b border-slate-100';
+    tr.dataset.nodeId = node.id;
+    tr.dataset.depth = depth;
+    if (parentId) {
+        tr.dataset.parentId = parentId;
+    }
+
+    const levelStyles = {
+        'vendor': 'bg-indigo-50 text-indigo-700',
+        'client': 'bg-blue-50 text-blue-700',
+        'production_lot': 'bg-emerald-50 text-emerald-700',
+        'order': 'bg-amber-50 text-amber-700',
+        'product': 'bg-slate-100 text-slate-700'
+    };
+    const levelLabels = {
+        'vendor': 'Representante',
+        'client': 'Cliente',
+        'production_lot': 'Lote de Produção',
+        'order': 'Pedido',
+        'product': 'Produto'
+    };
+
+    const nameCell = document.createElement('td');
+    nameCell.className = 'px-4 py-3 align-top';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'flex flex-col';
+
+    const mainRow = document.createElement('div');
+    mainRow.className = 'flex items-center gap-2';
+
+    const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+    if (hasChildren) {
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'tree-toggle-btn tree-toggle-icon';
+        toggleBtn.setAttribute('aria-expanded', 'false');
+        toggleBtn.innerHTML = '<i class="fas fa-plus text-xs"></i>';
+        toggleBtn.addEventListener('click', () => toggleNode(node.id));
+        mainRow.appendChild(toggleBtn);
+    } else {
+        const spacer = document.createElement('span');
+        spacer.style.width = '1.75rem';
+        mainRow.appendChild(spacer);
+    }
+
+    const labelWrapper = document.createElement('div');
+    labelWrapper.style.paddingLeft = `${depth * 0.75}rem`;
+    labelWrapper.className = 'flex flex-col';
+    const labelText = document.createElement('span');
+    labelText.className = 'font-medium text-slate-800';
+    labelText.textContent = node.label;
+    labelWrapper.appendChild(labelText);
+
+    const levelBadge = document.createElement('span');
+    levelBadge.className = `level-badge ${levelStyles[node.level] || 'bg-slate-100 text-slate-700'}`;
+    levelBadge.textContent = levelLabels[node.level] || 'Nível';
+    labelWrapper.appendChild(levelBadge);
+
+    if (node.level === 'order') {
+        const meta = node.metadata || {};
+        const metaPieces = [];
+        if (meta.order_date) metaPieces.push(meta.order_date);
+        if (meta.status) metaPieces.push(`Status: ${meta.status}`);
+        if (meta.situation) metaPieces.push(`Situação: ${meta.situation}`);
+        if (meta.transaction) metaPieces.push(`Transação: ${meta.transaction}`);
+        if (metaPieces.length) {
+            const metaText = document.createElement('span');
+            metaText.className = 'text-xs text-slate-500';
+            metaText.textContent = metaPieces.join(' • ');
+            labelWrapper.appendChild(metaText);
+        }
+    } else if (node.level === 'product') {
+        const meta = node.metadata || {};
+        const metaPieces = [`Qtd pend.: ${formatNumber(node.quantity)}`];
+        if (meta.unit_value !== undefined) {
+            metaPieces.push(`Unit.: ${formatCurrency(meta.unit_value || 0)}`);
+        }
+        const metaText = document.createElement('span');
+        metaText.className = 'text-xs text-slate-500';
+        metaText.textContent = metaPieces.join(' • ');
+        labelWrapper.appendChild(metaText);
+    }
+
+    mainRow.appendChild(labelWrapper);
+    wrapper.appendChild(mainRow);
+    nameCell.appendChild(wrapper);
+    tr.appendChild(nameCell);
+
+    const qtyCell = document.createElement('td');
+    qtyCell.className = 'px-4 py-3 text-right text-slate-600';
+    qtyCell.textContent = formatNumber(node.quantity);
+    tr.appendChild(qtyCell);
+
+    const valueCell = document.createElement('td');
+    valueCell.className = 'px-4 py-3 text-right font-semibold text-slate-800';
+    valueCell.textContent = formatCurrency(node.value);
+    tr.appendChild(valueCell);
+
+    return tr;
+}
+
+function toggleNode(nodeId) {
+    const row = treeBody.querySelector(`[data-node-id="${nodeId}"]`);
+    if (!row) return;
+    const isExpanded = row.dataset.expanded === 'true';
+    row.dataset.expanded = isExpanded ? 'false' : 'true';
+    updateToggleIcon(row, !isExpanded);
+    if (isExpanded) {
+        collapseDescendants(nodeId);
+    } else {
+        insertChildren(nodeId);
+    }
+}
+
+function updateToggleIcon(row, expanded) {
+    const btn = row.querySelector('.tree-toggle-icon');
+    if (!btn) return;
+    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    btn.innerHTML = expanded ? '<i class="fas fa-minus text-xs"></i>' : '<i class="fas fa-plus text-xs"></i>';
+}
+
+function insertChildren(nodeId) {
+    const parentRow = treeBody.querySelector(`[data-node-id="${nodeId}"]`);
+    const node = nodeLookup.get(nodeId);
+    if (!parentRow || !node || !Array.isArray(node.children) || !node.children.length) {
+        return;
+    }
+    const parentDepth = parseInt(parentRow.dataset.depth || '0', 10);
+    let referenceRow = parentRow;
+    node.children.forEach((child) => {
+        const childRow = createTreeRow(child, parentDepth + 1, nodeId);
+        referenceRow.insertAdjacentElement('afterend', childRow);
+        referenceRow = childRow;
+    });
+}
+
+function collapseDescendants(nodeId) {
+    const rows = Array.from(treeBody.querySelectorAll('tr'));
+    rows.forEach((row) => {
+        if (row.dataset.nodeId === nodeId) {
+            return;
+        }
+        if (isDescendantRow(row, nodeId)) {
+            row.remove();
+        }
+    });
+}
+
+function isDescendantRow(row, ancestorId) {
+    let currentParent = row.dataset.parentId || '';
+    while (currentParent) {
+        if (currentParent === ancestorId) {
+            return true;
+        }
+        const parentRow = treeBody.querySelector(`tr[data-node-id="${currentParent}"]`);
+        currentParent = parentRow ? parentRow.dataset.parentId || '' : '';
+    }
+    return false;
+}
+
+renderTreeTable();
+
+const chartCanvas = document.getElementById('pendingChart');
+if (chartCanvas && typeof Chart !== 'undefined') {
+    const ctx = chartCanvas.getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: chartLabels,
+            datasets: [{
+                label: 'Valor pendente',
+                data: chartValues,
+                backgroundColor: 'rgba(79, 70, 229, 0.7)',
+                borderColor: 'rgba(79, 70, 229, 1)',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => formatCurrency(ctx.parsed.x)
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        callback: (value) => formatCurrency(value)
+                    },
+                    grid: { display: false }
+                },
+                y: {
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+}
+
+const filterModal = document.getElementById('filterModal');
+const filterForm = document.getElementById('filterForm');
+const openFilterModalBtn = document.getElementById('openFilterModalBtn');
+const filterModalCloseIcon = document.getElementById('filterModalCloseIcon');
+const filterModalBackdrop = document.getElementById('filterModalBackdrop');
+
+function openFilterModal() {
+    filterModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+}
+function closeFilterModal() {
+    filterModal.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+}
+if (openFilterModalBtn) openFilterModalBtn.addEventListener('click', openFilterModal);
+if (filterModalCloseIcon) filterModalCloseIcon.addEventListener('click', closeFilterModal);
+if (filterModalBackdrop) filterModalBackdrop.addEventListener('click', closeFilterModal);
+
+function closeAllComboboxPanels(exceptionPanel = null) {
+    document.querySelectorAll('[data-combobox-panel]').forEach((panel) => {
+        if (exceptionPanel && panel === exceptionPanel) {
+            return;
+        }
+        panel.classList.add('hidden');
+    });
+}
+
+const comboboxConfigs = ['vendor', 'state', 'customer', 'line', 'status', 'situation', 'transaction'];
+comboboxConfigs.forEach((name) => {
+    const button = document.getElementById(`${name}-button`);
+    const panel = document.querySelector(`[data-combobox-panel="${name}"]`);
+    const text = document.getElementById(`${name}-text`);
+    if (!button || !panel || !text) return;
+
+    const updateLabel = () => {
+        const checked = panel.querySelectorAll('input[type="checkbox"]:checked');
+        if (!checked.length) {
+            text.textContent = 'Selecione uma ou mais opções';
+        } else if (checked.length === 1) {
+            const label = checked[0].closest('[data-combobox-item]')?.getAttribute('data-label') || '1 selecionado';
+            text.textContent = label;
+        } else {
+            text.textContent = `${checked.length} selecionados`;
+        }
+    };
+    updateLabel();
+
+    button.addEventListener('click', () => {
+        const isHidden = panel.classList.contains('hidden');
+        closeAllComboboxPanels(panel);
+        if (isHidden) {
+            panel.classList.remove('hidden');
+        } else {
+            panel.classList.add('hidden');
+        }
+    });
+
+    panel.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+        checkbox.addEventListener('change', updateLabel);
+    });
+
+    const searchInput = panel.querySelector(`[data-combobox-search="${name}"]`);
+    if (searchInput) {
+        const items = panel.querySelectorAll('[data-combobox-item]');
+        searchInput.addEventListener('input', () => {
+            const term = searchInput.value.trim().toLowerCase();
+            items.forEach((item) => {
+                const label = (item.getAttribute('data-label') || '').toLowerCase();
+                item.style.display = label.includes(term) ? '' : 'none';
+            });
+        });
+    }
+
+    document.addEventListener('click', (event) => {
+        if (!panel.contains(event.target) && !button.contains(event.target)) {
+            panel.classList.add('hidden');
+        }
+    });
+});
+
+const saveFiltersBtn = document.getElementById('saveFiltersBtn');
+if (saveFiltersBtn && filterForm) {
+    saveFiltersBtn.addEventListener('click', async () => {
+        const formData = new FormData(filterForm);
+        const payload = {};
+        for (const [key, value] of formData.entries()) {
+            if (!payload[key]) {
+                payload[key] = [];
+            }
+            payload[key].push(value);
+        }
+        ['start_date', 'end_date'].forEach((field) => {
+            if (payload[field] && Array.isArray(payload[field])) {
+                payload[field] = payload[field][0];
+            }
+        });
+        try {
+            const response = await fetch('{{ url_for("save_report_orders_pending_billing_filters") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json().catch(() => ({}));
+            showSaveFeedback(result?.message || 'Filtros salvos.', response.ok ? 'success' : 'error');
+        } catch (error) {
+            console.error('Erro ao salvar filtros:', error);
+            showSaveFeedback('Não foi possível salvar os filtros.', 'error');
+        }
+    });
+}
+
+function showSaveFeedback(message, status) {
+    const target = document.getElementById('saveFeedbackMessage');
+    if (!target) return;
+    target.textContent = message;
+    target.className = status === 'success' ? 'text-emerald-600 save-feedback' : 'text-rose-600 save-feedback';
+    setTimeout(() => {
+        target.textContent = '';
+    }, 5000);
+}
+</script>
+{% endblock %}

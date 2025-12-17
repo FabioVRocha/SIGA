@@ -36,6 +36,11 @@
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Pedidos por Linha</h2>
         <p class="text-medium-gray">Visualize o valor total dos pedidos agrupados por linha de produto.</p>
     </a>
+    <a href="{{ url_for('report_orders_pending_billing') }}" class="card p-6 text-center flex flex-col items-center justify-center">
+        <div class="text-icon-amber mb-4"><i class="fas fa-layer-group fa-3x"></i></div>
+        <h2 class="text-xl font-semibold text-dark-blue mb-2">Pedidos em Carteira Não Faturados</h2>
+        <p class="text-medium-gray">Acompanhe valores pendentes com hierarquia por representante, cliente, lote, pedido e produto.</p>
+    </a>
     <a href="{{ url_for('report_premio_por_vendedor') }}" class="card p-6 text-center flex flex-col items-center justify-center">
         <div class="text-icon-amber mb-4"><i class="fas fa-award fa-3x"></i></div>
         <h2 class="text-xl font-semibold text-dark-blue mb-2">Prêmio por Vendedor</h2>
