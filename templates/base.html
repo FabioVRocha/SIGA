@@ -39,6 +39,11 @@
             background-color: var(--clr-dashboard-bg); /* Fundo geral */
         }
 
+        img, video, svg {
+            max-width: 100%;
+            height: auto;
+        }
+
         .flash-message { padding: 1rem; margin-bottom: 1rem; border-radius: 0.5rem; font-weight: 600; }
         .flash-message.success { background-color: var(--clr-success); color: var(--clr-white); border: 1px solid var(--clr-success); }
         .flash-message.danger { background-color: var(--clr-error); color: var(--clr-white); border: 1px solid var(--clr-error); }
@@ -51,7 +56,7 @@
             background-color: var(--clr-sidebar-bg);
             color: var(--clr-white);
             width: 280px; /* Largura da sidebar */
-            padding: 1.5rem;
+            padding: 0.75rem 1.5rem 1.5rem; /* reduz o espaço superior para aproximar a logo do topo */
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
             position: fixed; /* Fixa a sidebar na tela */
             height: 100vh; /* Altura total da viewport */
@@ -64,12 +69,12 @@
         .sidebar-header {
             font-size: 1.5rem;
             font-weight: 700;
-            margin-bottom: 2rem;
+            margin-bottom: 0,5rem; /* aproxima os botões em relação ao título */
             display: flex;
             flex-direction: column;
             align-items: center;
             text-align: center;
-            gap: 0.75rem;
+            gap: 0.15rem; /* diminui ainda mais o espaçamento entre a logo e o título */
             padding-bottom: 0.5rem;
         }
 
@@ -100,6 +105,7 @@
         }
 
         .sidebar-title-text {
+            font-size: 2rem;
             letter-spacing: 0.05em;
         }
 
@@ -207,18 +213,18 @@
         }
         .sidebar-footer {
             margin-top: auto;
-            padding-top: 1.5rem;
+            padding-top: 0.75rem; /* reduz espaço superior do bloco do usuário */
             border-top: 1px solid rgba(255, 255, 255, 0.2);
         }
         .sidebar-user {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 1rem;
+            gap: 0.5rem; /* diminui espaçamento interno */
         }
         .sidebar-user-avatar {
-            width: 56px;
-            height: 56px;
+            width: 48px;
+            height: 48px;
             border-radius: 9999px;
             overflow: hidden;
             background: rgba(255, 255, 255, 0.15);
@@ -282,6 +288,13 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 1rem;
+        }
+
+        .main-header-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
         }
 
         .main-header h1 {
@@ -310,6 +323,29 @@
         .main-header .search-bar i {
             color: var(--clr-medium-gray);
             margin-right: 0.5rem;
+        }
+
+        .mobile-sidebar-toggle {
+            background: var(--clr-light-blue);
+            color: var(--clr-white);
+            border: none;
+            width: 2.75rem;
+            height: 2.75rem;
+            border-radius: 0.75rem;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            transition: transform 0.2s ease, background-color 0.2s ease;
+        }
+
+        .mobile-sidebar-toggle:hover {
+            background-color: var(--clr-dark-blue);
+            transform: translateY(-1px);
+        }
+
+        .sidebar-backdrop {
+            display: none;
         }
 
         /* Cards do Dashboard */
@@ -533,17 +569,80 @@
             box-shadow: 0 0 0 2px rgba(79, 131, 204, 0.25); /* Adiciona um anel de foco discreto */
             border-radius: 0.25rem; /* Opcional: arredonda o anel de foco */
         }
+        .table-scroll {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: min(85vw, 320px);
+                height: 100vh;
+                transform: translateX(-100%);
+                z-index: 40;
+                transition: transform 0.3s ease-in-out;
+            }
+
+            body.sidebar-collapsed .sidebar {
+                width: min(85vw, 320px);
+            }
+
+            body.sidebar-mobile-open .sidebar {
+                transform: translateX(0);
+            }
+
+            .sidebar-backdrop {
+                position: fixed;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.45);
+                z-index: 30;
+            }
+
+            body.sidebar-mobile-open .sidebar-backdrop {
+                display: block;
+            }
+
+            .collapse-button {
+                display: none;
+            }
+
+            .main-content {
+                margin-left: 0;
+                padding: 1.25rem;
+            }
+
+            body.sidebar-collapsed .main-content {
+                margin-left: 0;
+            }
+
+            .main-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .main-header .search-bar {
+                width: 100%;
+            }
+
+            .mobile-sidebar-toggle {
+                display: inline-flex;
+            }
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
 <body class="flex flex-col md:flex-row min-h-screen">
     <!-- Sidebar -->
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="sidebar-logo">
                 <img src="{{ url_for('static', filename='Logo2.png') }}" alt="Logo SIGA">
             </div>
-            <span class="sidebar-title-text menu-text text-lg font-semibold">SIGA</span>
+            <span class="sidebar-title-text menu-text font-semibold">SIGA</span>
             <button id="sidebar-toggle" class="collapse-button" type="button" aria-label="Alternar menu lateral">
                 <i class="fas fa-angles-left"></i>
             </button>
@@ -698,12 +797,18 @@
             </div>
         </div>
     </div>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
 
     <!-- Main Content -->
     <div class="main-content">
         <!-- Main Header -->
         <div class="main-header">
-            <h1>{% block page_title %}{% endblock %}</h1>
+            <div class="main-header-title">
+                <button id="mobile-sidebar-toggle" class="mobile-sidebar-toggle" type="button" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1>{% block page_title %}{% endblock %}</h1>
+            </div>
             {% block header_action %}
             <div class="search-bar">
                 <i class="fas fa-search"></i>
@@ -745,6 +850,9 @@
             const collapseButton = document.getElementById('sidebar-toggle');
             const collapseButtonIcon = collapseButton ? collapseButton.querySelector('i') : null;
             const SIDEBAR_COLLAPSED_KEY = 'sigaSidebarCollapsed';
+            const mobileToggle = document.getElementById('mobile-sidebar-toggle');
+            const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+            const isMobileViewport = () => window.matchMedia('(max-width: 1024px)').matches;
 
             const setCollapseButtonIcon = (collapsed) => {
                 if (!collapseButtonIcon) return;
@@ -773,6 +881,16 @@
                     } catch (error) {
                         // Ignora erros de armazenamento, como navegação privada
                     }
+                }
+            };
+
+            const setMobileSidebarOpen = (open) => {
+                document.body.classList.toggle('sidebar-mobile-open', open);
+                if (mobileToggle) {
+                    mobileToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                }
+                if (open) {
+                    applySidebarCollapsedState(false, { persist: false });
                 }
             };
 
@@ -866,6 +984,44 @@
                     activateSidebarItem(currentPath);
                 });
             }
+
+            if (mobileToggle) {
+                mobileToggle.addEventListener('click', () => {
+                    const isOpen = document.body.classList.contains('sidebar-mobile-open');
+                    setMobileSidebarOpen(!isOpen);
+                });
+            }
+
+            if (sidebarBackdrop) {
+                sidebarBackdrop.addEventListener('click', () => {
+                    setMobileSidebarOpen(false);
+                });
+            }
+
+            sidebarItems.forEach((item) => {
+                if (item.tagName === 'A') {
+                    item.addEventListener('click', () => {
+                        if (isMobileViewport()) {
+                            setMobileSidebarOpen(false);
+                        }
+                    });
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                if (!isMobileViewport()) {
+                    setMobileSidebarOpen(false);
+                }
+            });
+
+            const tables = document.querySelectorAll('table');
+            tables.forEach((table) => {
+                if (table.closest('.table-scroll, .table-wrapper, .table-container')) return;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-scroll';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            });
         });
     </script>
     {% block scripts %}
@@ -873,4 +1029,3 @@
     {% endblock %}
 </body>
 </html>
-

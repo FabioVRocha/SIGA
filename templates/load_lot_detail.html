@@ -73,6 +73,7 @@
                         </button>
                     </th>
                     <th scope="col" class="px-4 py-3 text-left">Cliente</th>
+                    <th scope="col" class="px-4 py-3 text-left">Cidade/UF</th>
                     <th scope="col" class="px-4 py-3 text-right">Quantidade</th>
                     <th scope="col" class="px-4 py-3 text-right">Total M³</th>
                     <th scope="col" class="px-4 py-3 text-right rounded-tr-lg">Valor Total</th>
@@ -84,8 +85,15 @@
                     {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
                     <tr class="detail-order-row hover-row text-sm text-dark-blue" data-sequence="{{ order.sequencia if order.sequencia is not none else '' }}" style="background-color: {{ row_bg }};">
                         <td class="py-2 px-4 whitespace-nowrap font-semibold">{{ order.pedido }}</td>
-                        <td class="py-2 px-4 whitespace-nowrap">{{ order.sequencia or '—' }}</td>
+                        <td class="py-2 px-4 whitespace-nowrap">{{ order.sequencia or '-' }}</td>
                         <td class="py-2 px-4 whitespace-nowrap">{{ order.cliente }}</td>
+                        <td class="py-2 px-4 whitespace-nowrap">
+                            {% if order.cidade or order.estado %}
+                                {{ order.cidade or '-' }}{% if order.estado %} / {{ order.estado }}{% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                         <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.quantidade_total|format_decimal_br }}</td>
                         <td class="py-2 px-4 whitespace-nowrap text-right">{{ order.total_m3|format_decimal_br(3) }}</td>
                         <td class="py-2 px-4 whitespace-nowrap text-right font-semibold">{{ order.valor_total|format_currency_brl }}</td>
@@ -93,7 +101,7 @@
                     {% endfor %}
                 {% else %}
                     <tr>
-                        <td colspan="6" class="px-4 py-6 text-center text-slate-500">Nenhum pedido ou assistência vinculado ao lote.</td>
+                        <td colspan="7" class="px-4 py-6 text-center text-slate-500">Nenhum pedido ou assistência vinculado ao lote.</td>
                     </tr>
                 {% endif %}
             </tbody>

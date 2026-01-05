@@ -25,6 +25,7 @@
             <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="midias">Mídias Assistências</button>
             <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="xml">XML</button>
             <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="metas">Metas &amp; Prêmios</button>
+            <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="contas-receber">Contas a Receber</button>
         </nav>
     </div>
     <form action="{{ url_for('gerencial_parameters') }}" method="POST" class="space-y-6">
@@ -188,10 +189,92 @@
             </div>
         </div>
 
+        <div class="tab-panel hidden space-y-6" data-tab-panel="contas-receber">
+            <div class="form-group">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Contas a Receber</h2>
+                <p class="text-sm text-gray-500">
+                    Informe ate 5 bancos, com o codigo do banco e o diretorio base dos boletos.
+                    O sistema busca em subpastas de ano/mes automaticamente.
+                </p>
+                <div class="mt-4 space-y-4">
+                    {% for entry in boleto_repositories %}
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div>
+                            <label class="form-label text-sm font-medium" for="ar_boleto_bank_{{ loop.index }}">Codigo do banco</label>
+                            <input
+                                type="text"
+                                id="ar_boleto_bank_{{ loop.index }}"
+                                name="ar_boleto_bank_{{ loop.index }}"
+                                class="form-input mt-2"
+                                placeholder="Ex.: 341"
+                                value="{{ entry.bank_code or '' }}"
+                            >
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="form-label text-sm font-medium" for="ar_boleto_directory_{{ loop.index }}">Diretorio do repositorio</label>
+                            <input
+                                type="text"
+                                id="ar_boleto_directory_{{ loop.index }}"
+                                name="ar_boleto_directory_{{ loop.index }}"
+                                class="form-input mt-2"
+                                placeholder="Ex.: /mnt/boletos/banco341"
+                                value="{{ entry.directory or '' }}"
+                            >
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                        type="button"
+                        id="openBoletoReindexModal"
+                        class="btn-secondary px-4 py-2 rounded-lg"
+                    >
+                        Reindexar boletos
+                    </button>
+                    <span class="text-xs text-gray-500">Essa acao pode demorar dependendo do volume de PDFs.</span>
+                </div>
+            </div>
+        </div>
+
         <div class="flex justify-end mt-6">
             <button type="submit" class="btn btn-primary">Salvar Parâmetros</button>
         </div>
     </form>
+</div>
+
+<div id="boletoReindexModal" class="fixed z-40 inset-0 hidden">
+    <div class="flex items-center justify-center min-h-screen px-4 py-8">
+        <div class="absolute inset-0 bg-gray-800/70" id="boletoReindexBackdrop"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <form method="post" action="{{ url_for('accounts_receivable_reindex_boletos') }}" class="p-6 space-y-4">
+                <input type="hidden" name="report" value="{{ selected_report }}">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-800">Reindexar boletos</h3>
+                        <p class="text-sm text-gray-500">Informe o periodo para reindexar. Em branco reindexa tudo.</p>
+                    </div>
+                    <button type="button" id="closeBoletoReindexModal" class="text-slate-500 hover:text-slate-700">
+                        <i class="fas fa-times fa-lg"></i>
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="boleto_reindex_start" class="block text-sm font-medium text-gray-700">Data inicial</label>
+                        <input type="text" id="boleto_reindex_start" name="start_date" placeholder="dd/mm/aaaa" class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label for="boleto_reindex_end" class="block text-sm font-medium text-gray-700">Data final</label>
+                        <input type="text" id="boleto_reindex_end" name="end_date" placeholder="dd/mm/aaaa" class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                </div>
+                <div class="flex flex-wrap justify-end gap-3 pt-2">
+                    <button type="button" id="cancelBoletoReindexModal" class="btn-secondary px-4 py-2 rounded-lg">Cancelar</button>
+                    <button type="submit" class="btn-primary px-4 py-2 rounded-lg">Reindexar</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
     <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -274,6 +357,19 @@
         };
 
         document.querySelectorAll('[data-multiselect]').forEach((container) => setupMultiSelect(container));
+
+        const reindexModal = document.getElementById('boletoReindexModal');
+        const openReindexBtn = document.getElementById('openBoletoReindexModal');
+        const closeReindexBtn = document.getElementById('closeBoletoReindexModal');
+        const cancelReindexBtn = document.getElementById('cancelBoletoReindexModal');
+        const reindexBackdrop = document.getElementById('boletoReindexBackdrop');
+        const showReindexModal = () => reindexModal?.classList.remove('hidden');
+        const hideReindexModal = () => reindexModal?.classList.add('hidden');
+
+        openReindexBtn?.addEventListener('click', showReindexModal);
+        closeReindexBtn?.addEventListener('click', hideReindexModal);
+        cancelReindexBtn?.addEventListener('click', hideReindexModal);
+        reindexBackdrop?.addEventListener('click', hideReindexModal);
     });
     </script>
 {% endblock %}

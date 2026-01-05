@@ -458,6 +458,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = chartCanvas.getContext('2d');
         const labels = {{ chart_labels | tojson }};
         const values = {{ chart_values | tojson }};
+        const totalValue = values.reduce((sum, value) => sum + (Number(value) || 0), 0);
+        const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+        const percentFormatter = new Intl.NumberFormat('pt-BR', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         new Chart(ctx, {
             type: 'bar',
@@ -473,6 +476,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 responsive: true,
                 plugins: {
                     legend: { display: true },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const rawValue = (context.parsed && typeof context.parsed === 'object')
+                                    ? context.parsed.y
+                                    : context.parsed;
+                                const value = Number(rawValue ?? context.raw ?? 0);
+                                const percent = totalValue > 0 ? (value / totalValue) : 0;
+                                return [
+                                    `${context.dataset.label}: ${currencyFormatter.format(value)}`,
+                                    `Percentual: ${percentFormatter.format(percent)}`
+                                ];
+                            }
+                        }
+                    }
                 },
                 scales: {
                     x: { title: { display: true, text: 'Linha' } },

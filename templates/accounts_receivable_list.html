@@ -1,0 +1,580 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block page_title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 space-y-6">
+    <div class="bg-white rounded-xl shadow-md p-6">
+        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
+            <div>
+                <h2 class="text-xl font-semibold text-dark-blue">Titulos a Receber</h2>
+                <p class="text-sm text-gray-500">Lista dos titulos registrados com recebimento pendente ou parcial.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="text-sm text-gray-500">
+                    {{ titles | length }} registros
+                </div>
+                <button id="filterMenuButton" type="button" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+                    <i class="fas fa-filter mr-2"></i> Filtrar
+                </button>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-3 mb-6 text-sm">
+            {% if period_label %}
+            <div class="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-100">
+                <span class="font-semibold">Período:</span>
+                <span>{{ period_label }}</span>
+            </div>
+            {% endif %}
+            {% if selected_customer_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Clientes:</span>
+                {% for label in selected_customer_labels %}
+                <span class="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-200">{{ label }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_representative_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Representantes:</span>
+                {% for label in selected_representative_labels %}
+                <span class="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200">{{ label }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_bank_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Banco:</span>
+                {% for label in selected_bank_labels %}
+                <span class="bg-sky-50 text-sky-700 px-3 py-1 rounded-full border border-sky-200">{{ label }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_charge_mode_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Modalidade:</span>
+                {% for label in selected_charge_mode_labels %}
+                <span class="bg-amber-50 text-amber-700 px-3 py-1 rounded-full border border-amber-200">{{ label }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if selected_situation_labels %}
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="font-semibold text-gray-700">Situacao:</span>
+                {% for label in selected_situation_labels %}
+                <span class="bg-rose-50 text-rose-700 px-3 py-1 rounded-full border border-rose-200">{{ label }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="overflow-x-auto rounded-lg shadow-sm">
+            <table id="accountsReceivableTable" class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                    <tr>
+                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Controle</th>
+                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Titulo</th>
+                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Cliente</th>
+                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Vencimento</th>
+                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Modalidade</th>
+                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Banco</th>
+                        <th scope="col" class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">Valor Total</th>
+                        <th scope="col" class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">Valor Pago</th>
+                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Data Pagamento</th>
+                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Situacao</th>
+                        <th scope="col" class="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Ações</th>
+                    </tr>
+                    <tr class="bg-gray-100 text-gray-700">
+                        <th class="px-4 py-2">
+                            <input type="text" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Buscar" data-filter-column="0">
+                        </th>
+                        <th class="px-4 py-2">
+                            <input type="text" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Buscar" data-filter-column="1">
+                        </th>
+                        <th class="px-4 py-2">
+                            <input type="text" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Buscar" data-filter-column="2">
+                        </th>
+                        <th class="px-4 py-2">
+                            <input type="text" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Buscar" data-filter-column="3">
+                        </th>
+                        <th class="px-4 py-2">
+                            <input type="text" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Buscar" data-filter-column="4">
+                        </th>
+                        <th class="px-4 py-2">
+                            <input type="text" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Buscar" data-filter-column="5">
+                        </th>
+                        <th class="px-4 py-2">
+                            <input type="text" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Buscar" data-filter-column="6">
+                        </th>
+                        <th class="px-4 py-2">
+                            <input type="text" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Buscar" data-filter-column="7">
+                        </th>
+                        <th class="px-4 py-2">
+                            <input type="text" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Buscar" data-filter-column="8">
+                        </th>
+                        <th class="px-4 py-2">
+                            <select id="situationFilter" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-filter-column="9">
+                                <option value="">Todas</option>
+                            </select>
+                        </th>
+                        <th class="px-4 py-2">
+                            <input type="text" class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Buscar" data-filter-column="10">
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm text-gray-700">
+                    {% if titles %}
+                        {% for row in titles %}
+                        <tr class="hover:bg-blue-50">
+                            <td class="px-4 py-3 whitespace-nowrap">{{ row.controle }}</td>
+                            <td class="px-4 py-3 whitespace-nowrap">{{ row.titulo }}</td>
+                            <td class="px-4 py-3">{{ row.cliente }}</td>
+                            <td class="px-4 py-3 whitespace-nowrap">{{ row.vencimento }}</td>
+                            <td class="px-4 py-3">{{ row.modalidade }}</td>
+                            <td class="px-4 py-3 whitespace-nowrap">{{ row.banco }}</td>
+                            <td class="px-4 py-3 whitespace-nowrap text-right">{{ row.valor_total | format_currency_brl }}</td>
+                            <td class="px-4 py-3 whitespace-nowrap text-right">{{ row.valor_pago | format_currency_brl }}</td>
+                            <td class="px-4 py-3 whitespace-nowrap">{{ row.data_pagamento }}</td>
+                            <td class="px-4 py-3 whitespace-nowrap">{{ row.situacao }}</td>
+                            {% set bank_code = row.banco %}
+                            {% set has_repo = bank_code and boleto_repository_map.get(bank_code) %}
+                            <td class="px-4 py-3 whitespace-nowrap text-center">
+                                {% if has_repo and row.titulo %}
+                                <a href="{{ url_for('accounts_receivable_view_boleto', titulo=row.titulo, banco=bank_code, vencimento=row.vencimento) }}" target="_blank" class="icon-button" aria-label="Abrir boleto do titulo {{ row.titulo }}" title="Abrir boleto">
+                                    <i class="fas fa-file-pdf text-blue-600 hover:text-blue-800"></i>
+                                </a>
+                                {% else %}
+                                <span class="text-xs text-gray-400">Sem boleto</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="11" class="px-4 py-6 text-center text-gray-500">
+                                Nenhum titulo encontrado para contas a receber.
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="filterModal" class="fixed z-40 inset-0 hidden">
+  <div class="flex items-center justify-center min-h-screen px-4 py-6">
+    <div class="absolute inset-0 bg-gray-800/70" id="filterModalBackdrop"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl">
+      <form id="filterForm" method="get" action="{{ url_for('accounts_receivable_list') }}" class="p-4 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        <input type="hidden" name="filter_applied" value="1">
+        <div class="flex justify-between items-start">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800">Filtros</h3>
+                <p class="text-sm text-gray-500">Aplique um ou mais filtros para restringir os dados.</p>
+            </div>
+            <button type="button" id="filterModalCloseIcon" class="text-slate-500 hover:text-slate-700">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+        </div>
+        <div class="grid grid-cols-1 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label for="start_date" class="block text-sm font-medium text-gray-700">Data inicial (Vencimento)</label>
+                    <input type="date" name="start_date" id="start_date" value="{{ filters.start_date }}" class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label for="end_date" class="block text-sm font-medium text-gray-700">Data final (Vencimento)</label>
+                    <input type="date" name="end_date" id="end_date" value="{{ filters.end_date }}" class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Clientes</label>
+                <div class="relative w-full overflow-visible">
+                    <button type="button" id="customer-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="customer-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="customer-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="customer-options" data-combobox-panel="customer" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar clientes" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="customer">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for option in customer_options %}
+                            {% set code = option.code %}
+                            {% set name = option.name %}
+                            {% set label_text = name %}
+                            {% if code and name %}
+                                {% set label_text = name ~ ' (' ~ code ~ ')' %}
+                            {% elif code %}
+                                {% set label_text = code %}
+                            {% endif %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }}">
+                                <input type="checkbox" name="customer" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.customer and code in filters.customer %}checked{% endif %}>
+                                <span class="text-gray-700">{{ label_text }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Representantes</label>
+                <div class="relative w-full overflow-visible">
+                    <button type="button" id="representative-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="representative-text" class="truncate">Selecione uma ou mais opções</span>
+                        <svg id="representative-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="representative-options" data-combobox-panel="representative" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar representantes" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="representative">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for option in representative_options %}
+                            {% set code = option.code %}
+                            {% set name = option.name %}
+                            {% set label_text = name %}
+                            {% if code and name %}
+                                {% set label_text = name ~ ' (' ~ code ~ ')' %}
+                            {% elif code %}
+                                {% set label_text = code %}
+                            {% endif %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }}">
+                                <input type="checkbox" name="representative" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.representative and code in filters.representative %}checked{% endif %}>
+                                <span class="text-gray-700">{{ label_text }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Banco</label>
+                    <div class="relative w-full overflow-visible">
+                        <button type="button" id="bank-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                            <span id="bank-text" class="truncate">Selecione uma ou mais opcoes</span>
+                            <svg id="bank-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div id="bank-options" data-combobox-panel="bank" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                            <div class="p-3 border-b border-slate-100 bg-slate-50">
+                                <div class="relative">
+                                    <input type="text" placeholder="Buscar bancos" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="bank">
+                                    <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                                </div>
+                            </div>
+                            <div class="max-h-64 overflow-y-auto">
+                                {% for option in bank_options %}
+                                {% set code = option.code %}
+                                {% set name = option.name %}
+                                {% set label_text = code %}
+                                {% if code and name %}
+                                    {% set label_text = code ~ ' - ' ~ name %}
+                                {% elif name %}
+                                    {% set label_text = name %}
+                                {% endif %}
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }}">
+                                    <input type="checkbox" name="bank" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.bank and code in filters.bank %}checked{% endif %}>
+                                    <span class="text-gray-700">{{ label_text }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Modalidade de Cobranca</label>
+                    <div class="relative w-full overflow-visible">
+                        <button type="button" id="charge_mode-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                            <span id="charge_mode-text" class="truncate">Selecione uma ou mais opcoes</span>
+                            <svg id="charge_mode-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div id="charge_mode-options" data-combobox-panel="charge_mode" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                            <div class="p-3 border-b border-slate-100 bg-slate-50">
+                                <div class="relative">
+                                    <input type="text" placeholder="Buscar modalidades" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="charge_mode">
+                                    <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                                </div>
+                            </div>
+                            <div class="max-h-64 overflow-y-auto">
+                                {% for option in charge_mode_options %}
+                                {% set code = option.code %}
+                                {% set name = option.name %}
+                                {% set label_text = code %}
+                                {% if code and name %}
+                                    {% set label_text = code ~ ' - ' ~ name %}
+                                {% elif name %}
+                                    {% set label_text = name %}
+                                {% endif %}
+                                <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }}">
+                                    <input type="checkbox" name="charge_mode" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.charge_mode and code in filters.charge_mode %}checked{% endif %}>
+                                    <span class="text-gray-700">{{ label_text }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Situacao</label>
+                <div class="relative w-full overflow-visible">
+                    <button type="button" id="situation-button" class="w-full bg-white text-gray-700 px-4 py-2 rounded-md border shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex justify-between items-center">
+                        <span id="situation-text" class="truncate">Selecione uma ou mais opcoes</span>
+                        <svg id="situation-arrow" class="w-5 h-5 ml-2 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="situation-options" data-combobox-panel="situation" class="hidden absolute z-20 mt-2 w-full bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50">
+                            <div class="relative">
+                                <input type="text" placeholder="Buscar situacoes" class="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" data-combobox-search="situation">
+                                <span class="absolute left-3 top-2.5 text-slate-400"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% for option in situation_options %}
+                            {% set code = option.code %}
+                            {% set label_text = code %}
+                            <label data-combobox-item class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-indigo-50 cursor-pointer" data-label="{{ label_text }}">
+                                <input type="checkbox" name="situation" value="{{ code }}" class="form-checkbox text-indigo-600 rounded-sm" {% if filters.situation and code in filters.situation %}checked{% endif %}>
+                                <span class="text-gray-700">{{ label_text }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="flex flex-wrap justify-end gap-3">
+            <a href="{{ url_for('accounts_receivable_list', ignore_saved='1') }}" class="btn-secondary px-4 py-2 rounded-lg">Limpar</a>
+            <button type="button" id="saveFiltersBtn" class="btn-secondary px-4 py-2 rounded-lg">Salvar filtros</button>
+            <button type="button" id="closeFilterModalBtn" class="btn-secondary px-4 py-2 rounded-lg">Cancelar</button>
+            <button type="submit" class="btn-primary px-4 py-2 rounded-lg">Aplicar</button>
+        </div>
+        <p id="saveFiltersFeedback" class="text-sm text-right text-slate-500 mt-1"></p>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const filterModal = document.getElementById('filterModal');
+    const filterMenuButton = document.getElementById('filterMenuButton');
+    const closeFilterModalBtn = document.getElementById('closeFilterModalBtn');
+    const closeIcon = document.getElementById('filterModalCloseIcon');
+    const modalBackdrop = document.getElementById('filterModalBackdrop');
+    const filterForm = document.getElementById('filterForm');
+    const saveFiltersBtn = document.getElementById('saveFiltersBtn');
+    const saveFiltersFeedback = document.getElementById('saveFiltersFeedback');
+    const saveFiltersUrl = "{{ url_for('save_accounts_receivable_filters') }}";
+    const showModal = () => filterModal.classList.remove('hidden');
+    const hideModal = () => filterModal.classList.add('hidden');
+
+    filterMenuButton?.addEventListener('click', showModal);
+
+    closeFilterModalBtn?.addEventListener('click', hideModal);
+    closeIcon?.addEventListener('click', hideModal);
+    modalBackdrop?.addEventListener('click', hideModal);
+    filterModal?.addEventListener('click', (event) => {
+        if (event.target === filterModal || event.target === modalBackdrop) {
+            hideModal();
+        }
+    });
+
+    const closeAllComboboxPanels = () => {
+        document.querySelectorAll('[data-combobox-panel]').forEach(panel => {
+            panel.classList.add('hidden');
+            const name = panel.getAttribute('data-combobox-panel');
+            const arrow = document.getElementById(`${name}-arrow`);
+            if (arrow) {
+                arrow.classList.remove('rotate-180');
+            }
+        });
+    };
+
+    const setupCombobox = (name, placeholderText) => {
+        const button = document.getElementById(`${name}-button`);
+        const panel = document.getElementById(`${name}-options`);
+        const text = document.getElementById(`${name}-text`);
+        const arrow = document.getElementById(`${name}-arrow`);
+
+        if (!button || !panel || !text) {
+            return;
+        }
+
+        const checkboxes = panel.querySelectorAll('input[type="checkbox"]');
+        const searchInput = panel.querySelector(`[data-combobox-search="${name}"]`);
+        const items = panel.querySelectorAll('[data-combobox-item]');
+
+        const updateSelectedText = () => {
+            const selected = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => {
+                    const labelEl = cb.parentElement.querySelector('span');
+                    return labelEl ? labelEl.textContent.trim() : cb.value;
+                });
+            text.textContent = selected.length ? selected.join(', ') : placeholderText;
+        };
+
+        const filterItems = () => {
+            const term = (searchInput?.value || '').toLowerCase();
+            items.forEach(item => {
+                const label = (item.getAttribute('data-label') || '').toLowerCase();
+                const isMatch = label.includes(term);
+                item.classList.toggle('hidden', !isMatch);
+            });
+        };
+
+        button.addEventListener('click', () => {
+            const isHidden = panel.classList.contains('hidden');
+            closeAllComboboxPanels();
+            if (isHidden) {
+                panel.classList.remove('hidden');
+                arrow?.classList.add('rotate-180');
+                setTimeout(() => searchInput?.focus(), 50);
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!panel.contains(event.target) && !button.contains(event.target)) {
+                panel.classList.add('hidden');
+                arrow?.classList.remove('rotate-180');
+            }
+        });
+
+        checkboxes.forEach(cb => cb.addEventListener('change', updateSelectedText));
+        searchInput?.addEventListener('input', filterItems);
+        filterItems();
+        updateSelectedText();
+    };
+
+    ['customer', 'representative', 'bank', 'charge_mode', 'situation'].forEach(field => {
+        setupCombobox(field, 'Selecione uma ou mais opcoes');
+    });
+
+    const table = document.getElementById('accountsReceivableTable');
+    const filterInputs = table?.querySelectorAll('thead [data-filter-column]') || [];
+    const tbodyRows = table?.querySelectorAll('tbody tr') || [];
+
+    const populateSituationOptions = () => {
+        const situationSelect = document.getElementById('situationFilter');
+        if (!situationSelect) {
+            return;
+        }
+        const values = new Set();
+        tbodyRows.forEach(row => {
+            const cellText = (row.querySelectorAll('td')[9]?.textContent || '').trim();
+            if (cellText) {
+                values.add(cellText);
+            }
+        });
+        Array.from(values).sort().forEach(value => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = value;
+            situationSelect.appendChild(option);
+        });
+    };
+
+    const applyTableFilters = () => {
+        const activeFilters = Array.from(filterInputs).map(input => ({
+            index: Number(input.getAttribute('data-filter-column')),
+            value: (input.value || '').trim().toLowerCase()
+        }));
+
+        tbodyRows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            const isMatch = activeFilters.every(filter => {
+                if (!filter.value) {
+                    return true;
+                }
+                const cellText = (cells[filter.index]?.textContent || '').trim().toLowerCase();
+                return cellText.includes(filter.value);
+            });
+            row.classList.toggle('hidden', !isMatch);
+        });
+    };
+
+    filterInputs.forEach(input => {
+        input.addEventListener('input', applyTableFilters);
+        input.addEventListener('change', applyTableFilters);
+    });
+    populateSituationOptions();
+
+    const showSaveFeedback = (message, type = 'info') => {
+        if (!saveFiltersFeedback) return;
+        const classes = ['text-sm', 'text-right', 'mt-1'];
+        let colorClass = 'text-slate-500';
+        if (type === 'success') {
+            colorClass = 'text-emerald-600';
+        } else if (type === 'error') {
+            colorClass = 'text-rose-600';
+        }
+        saveFiltersFeedback.className = [...classes, colorClass].join(' ');
+        saveFiltersFeedback.textContent = message;
+    };
+
+    if (saveFiltersBtn && filterForm) {
+        saveFiltersBtn.addEventListener('click', async () => {
+            const formData = new FormData(filterForm);
+            const payload = {};
+            formData.forEach((value, key) => {
+                if (key === 'filter_applied') {
+                    return;
+                }
+                if (payload[key]) {
+                    if (!Array.isArray(payload[key])) {
+                        payload[key] = [payload[key]];
+                    }
+                    payload[key].push(value);
+                } else {
+                    payload[key] = value;
+                }
+            });
+
+            const multiValueFields = ['customer', 'representative', 'bank', 'charge_mode', 'situation'];
+            multiValueFields.forEach(field => {
+                if (!(field in payload)) {
+                    payload[field] = [];
+                } else if (!Array.isArray(payload[field])) {
+                    payload[field] = [payload[field]];
+                }
+            });
+
+            try {
+                const response = await fetch(saveFiltersUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json().catch(() => ({}));
+                if (response.ok && result?.success) {
+                    showSaveFeedback(result.message || 'Filtros salvos com sucesso.', 'success');
+                } else if (response.status === 401) {
+                    showSaveFeedback('Sessão expirada. Faça login novamente para salvar os filtros.', 'error');
+                } else {
+                    const message = (result && result.message) || 'Não foi possível salvar os filtros.';
+                    showSaveFeedback(message, 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao salvar filtros de Contas a Receber:', error);
+                showSaveFeedback('Erro de comunicação ao salvar os filtros.', 'error');
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

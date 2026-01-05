@@ -426,8 +426,18 @@ let currentMapId = defaultMapId;
 let mapInstance = null;
 let geojsonLayer = null;
 const geojsonCache = {};
-const cityLookup = cityMetrics.reduce((acc, entry) => {
-    acc[entry.cidibge] = entry;
+const cityLookupById = cityMetrics.reduce((acc, entry) => {
+    const key = sanitizeNumericId(entry.cidibge);
+    if (key) {
+        acc[key] = entry;
+    }
+    return acc;
+}, {});
+const cityLookupByName = cityMetrics.reduce((acc, entry) => {
+    const key = buildCityKey(entry.cidnome, entry.estado);
+    if (key && !acc[key]) {
+        acc[key] = entry;
+    }
     return acc;
 }, {});
 const mapStatusMessage = document.getElementById('mapStatusMessage');
@@ -544,8 +554,28 @@ function normalizeKey(value) {
     if (!value) {
         return '';
     }
-    const normalized = value.toString().toLowerCase();
+    const normalized = value
+        .toString()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
     return normalized.replace(/[^a-z0-9]/g, '');
+}
+
+function sanitizeNumericId(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    return value.toString().trim().replace(/\D/g, '');
+}
+
+function buildCityKey(name, state) {
+    const cityPart = normalizeKey(name);
+    if (!cityPart) {
+        return '';
+    }
+    const statePart = normalizeKey(state || '');
+    return statePart ? `${cityPart}_${statePart}` : cityPart;
 }
 
 function normalizePropertyMap(properties) {
@@ -601,6 +631,29 @@ function getFeatureId(feature) {
     return candidate ? candidate.toString() : '';
 }
 
+function getFeatureStateCode(feature) {
+    const candidate = findFeatureProperty(feature, [
+        'sigla',
+        'uf',
+        'estado',
+        'state',
+        'abbr',
+        'cd_uf',
+        'cd_geouf',
+    ]);
+    if (candidate === null || candidate === undefined) {
+        return '';
+    }
+    if (typeof candidate === 'number') {
+        return candidate.toString().padStart(2, '0');
+    }
+    if (typeof candidate === 'string') {
+        const text = candidate.trim().toUpperCase();
+        return text.length > 2 ? text.slice(0, 2) : text;
+    }
+    return '';
+}
+
 function getFeatureCityName(feature) {
     const rawValue = findFeatureProperty(feature, [
         'nm_munic',
@@ -649,12 +702,16 @@ function resetHighlight(e) {
 }
 
 function bindTooltip(layer, feature) {
-    const id = getFeatureId(feature);
-    const cityData = cityLookup[id] || {};
-    const cityName = cityData.cidnome || getFeatureCityName(feature) || 'Cidade';
-    const pedidos = currencyFormatter.format(cityData.pedidos_total || 0);
-    const representatividade = percentFormatter.format(cityData.representatividade_cidade || 0);
-    const population = cityData.population ? numberFormatter.format(cityData.population) : 'Sem dados';
+    const id = sanitizeNumericId(getFeatureId(feature));
+    let cityData = (id && cityLookupById[id]) || null;
+    if (!cityData) {
+        const fallbackKey = buildCityKey(getFeatureCityName(feature), getFeatureStateCode(feature));
+        cityData = fallbackKey ? cityLookupByName[fallbackKey] : null;
+    }
+    const cityName = (cityData && cityData.cidnome) || getFeatureCityName(feature) || 'Cidade';
+    const pedidos = currencyFormatter.format((cityData && cityData.pedidos_total) || 0);
+    const representatividade = percentFormatter.format((cityData && cityData.representatividade_cidade) || 0);
+    const population = cityData && cityData.population ? numberFormatter.format(cityData.population) : 'Sem dados';
 
     const content = `Cidade: <strong>${cityName}</strong><br />Pedidos Total: <strong>${pedidos}</strong><br />Representatividade Cidade %: <strong>${representatividade}</strong><br />População: <strong>${population}</strong>`;
     layer.bindTooltip(content, { sticky: true });

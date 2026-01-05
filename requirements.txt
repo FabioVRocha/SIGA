@@ -2,3 +2,4 @@ Flask==2.3.2
 psycopg2-binary==2.9.9
 Werkzeug==2.3.7
 openpyxl==3.1.2
+PyPDF2==3.0.1

@@ -567,11 +567,8 @@ def calculate_mrp(filters):
                 # Necessidade: saldo positivo mas abaixo do estoque mínimo
                 quantidade_necessaria = estoque_min - saldo
                 # Ajustar ao lote econômico
-                if lote_eco > 0:
-                    if quantidade_necessaria < lote_eco:
-                        necessidade = lote_eco
-                    else:
-                        necessidade = lote_eco * ((quantidade_necessaria // lote_eco) + (1 if quantidade_necessaria % lote_eco > 0 else 0))
+                if lote_eco > 0 and quantidade_necessaria < lote_eco:
+                    necessidade = lote_eco
                 else:
                     # Se lote econômico for 0, usar quantidade necessária
                     necessidade = quantidade_necessaria

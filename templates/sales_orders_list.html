@@ -210,10 +210,11 @@
                 <table class="min-w-full bg-white rounded-xl overflow-hidden">
                     <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
                         <tr class="text-xs font-medium uppercase tracking-wider">
-                            <th scope="col" class="px-4 py-3 text-left rounded-tl-lg"><button type="button" class="sort-button {% if sort_by == 'pedido' %}active{% endif %}" data-sort-column="pedido"><span>Pedido</span><i class="fas {% if sort_by == 'pedido' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
-                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'data' %}active{% endif %}" data-sort-column="data"><span>Data</span><i class="fas {% if sort_by == 'data' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
-                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'codigo' %}active{% endif %}" data-sort-column="codigo"><span>Código</span><i class="fas {% if sort_by == 'codigo' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
-                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'cliente' %}active{% endif %}" data-sort-column="cliente"><span>Cliente</span><i class="fas {% if sort_by == 'cliente' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                             <th scope="col" class="px-4 py-3 text-left rounded-tl-lg"><button type="button" class="sort-button {% if sort_by == 'pedido' %}active{% endif %}" data-sort-column="pedido"><span>Pedido</span><i class="fas {% if sort_by == 'pedido' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                             <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'data' %}active{% endif %}" data-sort-column="data"><span>Data</span><i class="fas {% if sort_by == 'data' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                             <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'codigo' %}active{% endif %}" data-sort-column="codigo"><span>Código</span><i class="fas {% if sort_by == 'codigo' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                            <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'cliente_codigo' %}active{% endif %}" data-sort-column="cliente_codigo"><span>Cód. Cliente</span><i class="fas {% if sort_by == 'cliente_codigo' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
+                             <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'cliente' %}active{% endif %}" data-sort-column="cliente"><span>Cliente</span><i class="fas {% if sort_by == 'cliente' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
                             <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'quantidade_total' %}active{% endif %}" data-sort-column="quantidade_total"><span>Quantidade</span><i class="fas {% if sort_by == 'quantidade_total' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
                             <th scope="col" class="px-4 py-3 text-right"><button type="button" class="sort-button justify-end {% if sort_by == 'valor_total' %}active{% endif %}" data-sort-column="valor_total"><span>Valor</span><i class="fas {% if sort_by == 'valor_total' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
                             <th scope="col" class="px-4 py-3 text-left"><button type="button" class="sort-button {% if sort_by == 'linha' %}active{% endif %}" data-sort-column="linha"><span>Linha</span><i class="fas {% if sort_by == 'linha' %}{% if sort_order == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}{% else %}fa-sort{% endif %} sort-icon"></i></button></th>
@@ -226,9 +227,10 @@
                         </tr>
                         <tr class="bg-slate-100 text-xs text-dark-blue">
                             <th scope="col" class="px-4 py-2"><input type="text" name="filter_pedido" value="{{ filters.filter_pedido or '' }}" class="filter-input column-filter-input" placeholder="Pedido"></th>
-                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_data" value="{{ filters.filter_data or '' }}" class="filter-input column-filter-input" placeholder="Data"></th>
-                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_codigo" value="{{ filters.filter_codigo or '' }}" class="filter-input column-filter-input" placeholder="Código"></th>
-                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_cliente" value="{{ filters.filter_cliente or '' }}" class="filter-input column-filter-input" placeholder="Cliente"></th>
+                             <th scope="col" class="px-4 py-2"><input type="text" name="filter_data" value="{{ filters.filter_data or '' }}" class="filter-input column-filter-input" placeholder="Data"></th>
+                             <th scope="col" class="px-4 py-2"><input type="text" name="filter_codigo" value="{{ filters.filter_codigo or '' }}" class="filter-input column-filter-input" placeholder="Código"></th>
+                            <th scope="col" class="px-4 py-2"><input type="text" name="filter_cliente_codigo" value="{{ filters.filter_cliente_codigo or '' }}" class="filter-input column-filter-input" placeholder="Cód. Cliente"></th>
+                             <th scope="col" class="px-4 py-2"><input type="text" name="filter_cliente" value="{{ filters.filter_cliente or '' }}" class="filter-input column-filter-input" placeholder="Cliente"></th>
                             <th scope="col" class="px-4 py-2"><input type="text" name="filter_quantidade_total" value="{{ filters.filter_quantidade_total or '' }}" class="filter-input column-filter-input text-right" placeholder="Qtd."></th>
                             <th scope="col" class="px-4 py-2"><input type="text" name="filter_valor_total" value="{{ filters.filter_valor_total or '' }}" class="filter-input column-filter-input text-right" placeholder="Valor"></th>
                             <th scope="col" class="px-4 py-2"><input type="text" name="filter_linha" value="{{ filters.filter_linha or '' }}" class="filter-input column-filter-input" placeholder="Linha"></th>
@@ -254,6 +256,7 @@
                             <td class="py-2 px-4 whitespace-nowrap font-semibold">{{ order.pedido }}</td>
                             <td class="py-2 px-4 whitespace-nowrap">{{ order.data or '-' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap">{{ order.codigo or '-' }}</td>
+                            <td class="py-2 px-4 whitespace-nowrap">{{ order.cliente_codigo or '-' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap">
                                 <div class="font-medium">{{ order.cliente or '-' }}</div>
                                 {% if order.cidade or order.estado %}
@@ -277,7 +280,7 @@
                         {% endfor %}
                         {% else %}
                         <tr>
-                            <td colspan="13" class="py-6 px-4 text-center text-sm text-slate-muted">
+                            <td colspan="14" class="py-6 px-4 text-center text-sm text-slate-muted">
                                 Nenhum pedido encontrado. Ajuste os filtros ou utilize os campos de busca acima.
                             </td>
                         </tr>
@@ -928,15 +931,16 @@ document.addEventListener('DOMContentLoaded', () => {
         filter_pedido: 0,
         filter_data: 1,
         filter_codigo: 2,
-        filter_cliente: 3,
-        filter_quantidade_total: 4,
-        filter_valor_total: 5,
-        filter_linha: 6,
-        filter_approval_status: 7,
-        filter_situation: 8,
-        filter_occurrence: 9,
-        filter_production_lots_display: 10,
-        filter_load_lot: 11,
+        filter_cliente_codigo: 3,
+        filter_cliente: 4,
+        filter_quantidade_total: 5,
+        filter_valor_total: 6,
+        filter_linha: 7,
+        filter_approval_status: 8,
+        filter_situation: 9,
+        filter_occurrence: 10,
+        filter_production_lots_display: 11,
+        filter_load_lot: 12,
     };
 
     const dataRowCache = columnFilterTableBody
