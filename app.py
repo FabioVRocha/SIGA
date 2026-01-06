@@ -14828,6 +14828,131 @@ def fetch_accounts_payable_titles(filters):
     return titles, error_message
 
 
+def fetch_accounts_payable_report(filters, starts_with=None):
+    rows = []
+    error_message = None
+    total_value = Decimal('0')
+    conn = get_erp_db_connection()
+    if not conn:
+        return rows, "Nao foi possivel conectar ao banco de dados do ERP."
+
+    start_date = _safe_parse_date(filters.get('start_date'))
+    end_date = _safe_parse_date(filters.get('end_date'))
+
+    customers = [str(value).strip() for value in (filters.get('customer') or []) if str(value).strip()]
+    banks = [str(value).strip() for value in (filters.get('bank') or []) if str(value).strip()]
+    charge_modes = [str(value).strip() for value in (filters.get('charge_mode') or []) if str(value).strip()]
+    situations = [str(value).strip() for value in (filters.get('situation') or []) if str(value).strip()]
+
+    params = []
+    query = """
+        SELECT
+            t.titvencto,
+            t.titulo,
+            COALESCE(e.empnome, '') AS fornecedor,
+            COALESCE(m.modnome, '') AS modalidade,
+            COALESCE(cc.centro_custo, '') AS centro_custo,
+            t.titvltotal,
+            COALESCE(ce.cmebanco::text, '') AS cmebanco,
+            COALESCE(ce.cmebanome::text, '') AS cmebanome,
+            COALESCE(ce.cmeagencia::text, '') AS cmeagencia,
+            COALESCE(ce.cmeconta::text, '') AS cmeconta,
+            COALESCE(ce.cmetipo::text, '') AS cmetipo,
+            COALESCE(ce.cmetitular::text, '') AS cmetitular,
+            COALESCE(ce.cmecpfcgc::text, '') AS cmecpfcgc,
+            COALESCE(ce.cmechapix::text, '') AS cmechapix
+        FROM titulos t
+        LEFT JOIN empresa e ON t.titcfco = e.empresa
+        LEFT JOIN modcobra m ON t.titmodcobr = m.modcobra
+        LEFT JOIN (
+            SELECT
+                tctbcontro,
+                string_agg(DISTINCT tctbccusto::text, ', ' ORDER BY tctbccusto::text) AS centro_custo
+            FROM titctbde
+            GROUP BY tctbcontro
+        ) cc ON cc.tctbcontro = t.controle
+        LEFT JOIN cmempres ce ON ce.cmempresa = e.empresa
+        WHERE t.titrecpag IN ('P', 'M')
+    """
+
+    if start_date:
+        query += " AND t.titvencto >= %s"
+        params.append(start_date)
+    if end_date:
+        query += " AND t.titvencto <= %s"
+        params.append(end_date)
+
+    if customers:
+        placeholders = ', '.join(['%s'] * len(customers))
+        query += f" AND COALESCE(t.titcfco::text, '') IN ({placeholders})"
+        params.extend(customers)
+
+    if banks:
+        placeholders = ', '.join(['%s'] * len(banks))
+        query += f" AND COALESCE(t.titbanco::text, '') IN ({placeholders})"
+        params.extend(banks)
+
+    if charge_modes:
+        placeholders = ', '.join(['%s'] * len(charge_modes))
+        query += f" AND COALESCE(t.titmodcobr::text, '') IN ({placeholders})"
+        params.extend(charge_modes)
+
+    if situations:
+        placeholders = ', '.join(['%s'] * len(situations))
+        query += f" AND COALESCE(t.titlitsit::text, '') IN ({placeholders})"
+        params.extend(situations)
+
+    if starts_with:
+        query += " AND COALESCE(t.titulo::text, '') ILIKE %s"
+        params.append(f"{starts_with}%")
+
+    query += " ORDER BY t.titvencto NULLS LAST, t.titulo"
+
+    try:
+        cur = conn.cursor()
+        cur.execute(query, params)
+        for row in cur.fetchall():
+            try:
+                total_value += Decimal(str(row[5] or 0))
+            except (InvalidOperation, TypeError):
+                total_value += Decimal('0')
+            bank_details = []
+            if row[6]:
+                bank_details.append(f"Banco: {row[6]}")
+            if row[7]:
+                bank_details.append(f"Nome: {row[7]}")
+            if row[8]:
+                bank_details.append(f"Agencia: {row[8]}")
+            if row[9]:
+                bank_details.append(f"Conta: {row[9]}")
+            if row[10]:
+                bank_details.append(f"Tipo: {row[10]}")
+            if row[11]:
+                bank_details.append(f"Titular: {row[11]}")
+            if row[12]:
+                bank_details.append(f"CPF/CNPJ: {row[12]}")
+            if row[13]:
+                bank_details.append(f"Chave Pix: {row[13]}")
+
+            rows.append({
+                'vencimento': _format_date_br(row[0]),
+                'titulo': row[1],
+                'fornecedor': row[2],
+                'modalidade': row[3],
+                'centro_custo': row[4],
+                'valor_total': row[5],
+                'bank_details': ' | '.join(bank_details) if bank_details else 'Dados bancarios nao informados.',
+            })
+        cur.close()
+    except Error as e:
+        print(f"Erro ao buscar relatorio de contas a pagar: {e}")
+        error_message = "Erro ao carregar o relatorio de contas a pagar."
+    finally:
+        conn.close()
+
+    return rows, total_value, error_message
+
+
 def fetch_accounts_receivable_title_set(bank_code, start_date=None, end_date=None, allow_bank_fallback=False):
     title_set = set()
     if not bank_code:
@@ -15461,6 +15586,62 @@ def accounts_payable_list():
         selected_bank_labels=selected_bank_labels,
         selected_charge_mode_labels=selected_charge_mode_labels,
         selected_situation_labels=selected_situation_labels,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/accounts_payable_report')
+@login_required
+def accounts_payable_report():
+    today = datetime.date.today()
+    first_day = today.replace(day=1)
+    last_day = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+
+    def normalize_multi(values):
+        source = values if isinstance(values, list) else [values]
+        cleaned = []
+        for value in source:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                cleaned.append(text)
+        return cleaned
+
+    filters = {
+        'start_date': (request.args.get('start_date') or '').strip(),
+        'end_date': (request.args.get('end_date') or '').strip(),
+        'customer': normalize_multi(request.args.getlist('customer')),
+        'bank': normalize_multi(request.args.getlist('bank')),
+        'charge_mode': normalize_multi(request.args.getlist('charge_mode')),
+        'situation': normalize_multi(request.args.getlist('situation')),
+    }
+
+    starts_with = (request.args.get('starts_with') or '').strip()
+
+    start_date = _safe_parse_date(filters.get('start_date'))
+    end_date = _safe_parse_date(filters.get('end_date'))
+
+    if not filters.get('start_date') and not filters.get('end_date'):
+        filters['start_date'] = first_day.strftime('%Y-%m-%d')
+        filters['end_date'] = last_day.strftime('%Y-%m-%d')
+        start_date = first_day
+        end_date = last_day
+
+    rows, total_value, error_message = fetch_accounts_payable_report(filters, starts_with=starts_with)
+    if error_message:
+        flash(error_message, 'danger')
+
+    period_label = _format_period_label(start_date, end_date)
+
+    return render_template(
+        'accounts_payable_report.html',
+        page_title="Relatório de Contas a Pagar",
+        rows=rows,
+        total_value=total_value,
+        period_label=period_label,
+        starts_with=starts_with,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )

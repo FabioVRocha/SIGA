@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    @media print {
+        body, html {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+        }
+        .sidebar,
+        .main-header,
+        .flash-message,
+        .no-print {
+            display: none !important;
+        }
+        .main-content {
+            margin: 0 !important;
+            padding: 0.2in !important;
+            background: #fff !important;
+        }
+        #accountsPayableReportWrapper {
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+        }
+        table {
+            width: 100% !important;
+        }
+        th, td {
+            padding: 4px 6px !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block title %}Relatório de Contas a Pagar{% endblock %}
+
+{% block page_title %}Relatório de Contas a Pagar{% endblock %}
+
+{% block header_action %}
+<a href="{{ url_for('accounts_payable_list') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+    <i class="fas fa-arrow-left mr-2"></i> Voltar
+</a>
+{% endblock %}
+
+{% block content %}
+<div id="accountsPayableReportWrapper" class="container mx-auto px-2 py-4 bg-white rounded-lg shadow-md text-[10px] md:text-[11px] leading-tight">
+    <div class="flex justify-between items-center flex-wrap gap-3 mb-4">
+        <div>
+            <h2 class="text-xl font-semibold text-gray-800">Contas a Pagar</h2>
+            <p class="text-sm text-gray-500">Relatório para impressão.</p>
+        </div>
+        <div class="flex items-center gap-2 no-print">
+            <button type="button" id="printReportBtn" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+                <i class="fas fa-print mr-2"></i> Imprimir
+            </button>
+        </div>
+    </div>
+
+    {% if period_label or starts_with %}
+    <div class="text-sm text-gray-600 mb-4">
+        {% if period_label %}
+        <span class="mr-3"><strong>Período:</strong> {{ period_label }}</span>
+        {% endif %}
+        {% if starts_with %}
+        <span><strong>Inicia com:</strong> {{ starts_with }}</span>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="overflow-x-auto">
+        <table class="min-w-full">
+            <thead>
+                <tr>
+                    <th class="px-4 py-2 text-left">Vencimento</th>
+                    <th class="px-4 py-2 text-left">Titulo</th>
+                    <th class="px-4 py-2 text-left">Fornecedor</th>
+                    <th class="px-4 py-2 text-left">Centro de Custo</th>
+                    <th class="px-4 py-2 text-left">Modalidade</th>
+                    <th class="px-4 py-2 text-right">Valor Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if rows %}
+                    {% for row in rows %}
+                    <tr class="odd:bg-white even:bg-gray-100">
+                        <td class="px-4 py-2 whitespace-nowrap">{{ row.vencimento }}</td>
+                        <td class="px-4 py-2">{{ row.titulo }}</td>
+                        <td class="px-4 py-2">{{ row.fornecedor }}</td>
+                        <td class="px-4 py-2">{{ row.centro_custo }}</td>
+                        <td class="px-4 py-2">{{ row.modalidade }}</td>
+                        <td class="px-4 py-2 text-right whitespace-nowrap">{{ row.valor_total | format_currency_brl }}</td>
+                    </tr>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <td colspan="6" class="px-4 py-2 text-[10px] text-gray-600">
+                            <span class="font-semibold">Dados bancários:</span>
+                            {{ row.bank_details }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="px-4 py-6 text-center text-gray-500">
+                            Nenhum titulo encontrado para o relatório.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+            <tfoot>
+                <tr class="font-semibold">
+                    <td colspan="5" class="px-4 py-2 text-right">Total</td>
+                    <td class="px-4 py-2 text-right whitespace-nowrap">{{ total_value | format_currency_brl }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const printReportBtn = document.getElementById('printReportBtn');
+    printReportBtn?.addEventListener('click', () => {
+        window.print();
+    });
+});
+</script>
+{% endblock %}
