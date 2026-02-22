@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2000" viewBox="0 0 1600 2000" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1220"/>
+      <stop offset="45%" stop-color="#102a58"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientTransform="translate(260 260) rotate(45) scale(880 880)">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientTransform="translate(1400 1600) rotate(45) scale(820 820)">
+      <stop offset="0%" stop-color="#1d4ed8" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8fafc" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#e2e8f0" stop-opacity="0.88"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="2000" fill="url(#bg)"/>
+  <circle cx="340" cy="300" r="880" fill="url(#glowA)"/>
+  <circle cx="1400" cy="1600" r="780" fill="url(#glowB)"/>
+
+  <g opacity="0.22" stroke="#e2e8f0" stroke-width="2">
+    <path d="M120 1550 C420 1320, 780 1360, 1080 1140"/>
+    <path d="M180 1680 C520 1460, 900 1480, 1240 1250"/>
+    <path d="M240 1820 C600 1600, 980 1640, 1300 1400"/>
+  </g>
+
+  <!-- Card de acesso e resumo do SIGA -->
+  <g transform="translate(140 700)">
+    <rect x="0" y="0" width="520" height="640" rx="36" fill="url(#card)" opacity="0.95"/>
+    <rect x="36" y="44" width="220" height="40" rx="20" fill="#0b1220" opacity="0.14"/>
+    <rect x="36" y="120" width="320" height="16" rx="8" fill="#0b1220" opacity="0.12"/>
+    <rect x="36" y="160" width="280" height="16" rx="8" fill="#0b1220" opacity="0.12"/>
+    <rect x="36" y="200" width="300" height="16" rx="8" fill="#0b1220" opacity="0.12"/>
+
+    <rect x="36" y="270" width="440" height="18" rx="9" fill="#0b1220" opacity="0.14"/>
+    <rect x="36" y="310" width="420" height="18" rx="9" fill="#0b1220" opacity="0.12"/>
+    <rect x="36" y="350" width="400" height="18" rx="9" fill="#0b1220" opacity="0.12"/>
+
+    <rect x="36" y="420" width="360" height="44" rx="22" fill="url(#accent)" opacity="0.9"/>
+
+    <g transform="translate(350 90)" opacity="0.9">
+      <circle cx="64" cy="64" r="64" fill="#0ea5e9" opacity="0.25"/>
+      <path d="M40 86 L66 60 L90 84 L120 46" stroke="#0f172a" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="40" cy="86" r="6" fill="#0f172a"/>
+      <circle cx="66" cy="60" r="6" fill="#0f172a"/>
+      <circle cx="90" cy="84" r="6" fill="#0f172a"/>
+      <circle cx="120" cy="46" r="6" fill="#0f172a"/>
+    </g>
+
+    <g font-family="'Inter', 'Segoe UI', Arial, sans-serif" fill="#0f172a" opacity="0.75">
+      <text x="36" y="74" font-size="20" font-weight="700">SIGA</text>
+      <text x="36" y="146" font-size="16" font-weight="600">Gestao Analitica Integrada</text>
+      <text x="36" y="186" font-size="14">Dashboards e indicadores</text>
+      <text x="36" y="226" font-size="14">Relatorios em tempo real</text>
+    </g>
+  </g>
+
+  <!-- Ilustracao de analise com pessoas e metricas -->
+  <g transform="translate(820 560)">
+    <circle cx="140" cy="130" r="100" fill="#e2e8f0" opacity="0.92"/>
+    <circle cx="320" cy="160" r="80" fill="#e2e8f0" opacity="0.82"/>
+    <path d="M0 520 C12 370, 140 300, 260 300 C380 300, 520 370, 540 520" fill="#e2e8f0" opacity="0.9"/>
+    <path d="M180 520 C190 430, 260 390, 340 390 C420 390, 500 430, 520 520" fill="#e2e8f0" opacity="0.75"/>
+    <rect x="-30" y="520" width="600" height="130" rx="64" fill="url(#accent)" opacity="0.55"/>
+
+    <g transform="translate(50 10)" opacity="0.8">
+      <rect x="0" y="0" width="240" height="140" rx="18" fill="#0b1220" opacity="0.35"/>
+      <path d="M24 98 L78 68 L124 88 L198 42" stroke="#38bdf8" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="24" cy="98" r="8" fill="#38bdf8"/>
+      <circle cx="78" cy="68" r="8" fill="#38bdf8"/>
+      <circle cx="124" cy="88" r="8" fill="#38bdf8"/>
+      <circle cx="198" cy="42" r="8" fill="#38bdf8"/>
+    </g>
+
+    <g transform="translate(330 40)" opacity="0.8">
+      <rect x="0" y="0" width="200" height="110" rx="16" fill="#0b1220" opacity="0.35"/>
+      <rect x="20" y="66" width="24" height="28" rx="6" fill="#0ea5e9"/>
+      <rect x="60" y="48" width="24" height="46" rx="6" fill="#38bdf8"/>
+      <rect x="100" y="34" width="24" height="60" rx="6" fill="#2563eb"/>
+      <rect x="140" y="24" width="24" height="70" rx="6" fill="#1d4ed8"/>
+    </g>
+  </g>
+
+  <!-- Painel de KPIs -->
+  <g transform="translate(480 1360)">
+    <rect x="0" y="0" width="700" height="220" rx="40" fill="#e2e8f0" opacity="0.85"/>
+    <rect x="40" y="50" width="260" height="26" rx="13" fill="#0f172a" opacity="0.18"/>
+    <rect x="40" y="94" width="200" height="18" rx="9" fill="#0f172a" opacity="0.12"/>
+    <rect x="40" y="124" width="240" height="18" rx="9" fill="#0f172a" opacity="0.12"/>
+    <g transform="translate(420 60)">
+      <circle cx="48" cy="48" r="48" fill="#0ea5e9" opacity="0.45"/>
+      <circle cx="140" cy="48" r="48" fill="#2563eb" opacity="0.45"/>
+      <circle cx="232" cy="48" r="48" fill="#1d4ed8" opacity="0.45"/>
+    </g>
+
+    <g font-family="'Inter', 'Segoe UI', Arial, sans-serif" fill="#0f172a" opacity="0.7">
+      <text x="40" y="70" font-size="16" font-weight="600">Indicadores-Chave</text>
+      <text x="40" y="112" font-size="12">Eficiencia</text>
+      <text x="40" y="142" font-size="12">Qualidade</text>
+    </g>
+  </g>
+
+  <!-- Mini painel de tendencias -->
+  <g transform="translate(1050 200)" opacity="0.7">
+    <rect x="0" y="0" width="360" height="220" rx="32" fill="#0b1220" opacity="0.35"/>
+    <path d="M40 160 L120 90 L200 130 L300 60" stroke="#38bdf8" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="120" cy="90" r="10" fill="#38bdf8"/>
+    <circle cx="200" cy="130" r="10" fill="#38bdf8"/>
+    <circle cx="300" cy="60" r="10" fill="#38bdf8"/>
+    <g font-family="'Inter', 'Segoe UI', Arial, sans-serif" fill="#e2e8f0" opacity="0.9">
+      <text x="40" y="56" font-size="14" font-weight="600">Tendencia</text>
+      <text x="40" y="82" font-size="12">Performance</text>
+    </g>
+  </g>
+</svg>

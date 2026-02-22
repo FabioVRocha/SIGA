@@ -1,0 +1,629 @@
+{% extends "base.html" %}
+
+{% block title %}Relatório de Saída para Montagem{% endblock %}
+
+{% block page_title %}Relatório de Saída para Montagem{% endblock %}
+
+{% block header_action %}{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+    @media print {
+        body * {
+            visibility: hidden;
+        }
+        #report-preview, #report-preview * {
+            visibility: visible;
+        }
+        #report-preview {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+        }
+        .no-print {
+            display: none !important;
+        }
+        .sidebar, .main-header {
+            display: none !important;
+        }
+        .main-content {
+            margin-left: 0 !important;
+            padding: 0 !important;
+        }
+    }
+
+    #report-preview {
+        width: 100%;
+        max-width: 210mm;
+        margin: 0 auto;
+        background: white;
+    }
+
+    .report-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 9px;
+        table-layout: fixed;
+    }
+
+    .report-table th,
+    .report-table td {
+        border: 1px solid #333;
+        padding: 4px 3px;
+        vertical-align: middle;
+    }
+
+    .report-table th {
+        background-color: #f3f4f6;
+        font-weight: 600;
+        text-align: center;
+        font-size: 8px;
+    }
+
+    .report-table td {
+        text-align: center;
+    }
+
+    .report-table td.text-left {
+        text-align: left;
+    }
+
+    .qr-cell {
+        width: 50px;
+        min-width: 50px;
+        max-width: 50px;
+        padding: 2px;
+    }
+
+    .qr-code-container {
+        width: 45px;
+        height: 45px;
+        margin: 0 auto;
+    }
+
+    .qr-code-container img {
+        width: 45px !important;
+        height: 45px !important;
+    }
+
+    .qr-code-container canvas {
+        width: 45px !important;
+        height: 45px !important;
+    }
+
+    .photo-cell {
+        width: 50px;
+        min-width: 50px;
+        max-width: 50px;
+    }
+
+    .photo-cell img {
+        width: 45px;
+        height: 45px;
+        object-fit: contain;
+    }
+
+    .subgrupo-cell {
+        width: 70px;
+        min-width: 70px;
+        max-width: 70px;
+        font-weight: 500;
+        font-size: 8px;
+        word-wrap: break-word;
+    }
+
+    .concat-cell {
+        width: auto;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        text-align: left;
+        font-size: 8px;
+        line-height: 1.2;
+        padding: 3px 4px;
+    }
+
+    .localizacao-cell {
+        width: 65px;
+        min-width: 65px;
+        max-width: 65px;
+        font-weight: 600;
+        font-size: 8px;
+    }
+
+    .qtd-cell {
+        width: 35px;
+        min-width: 35px;
+        max-width: 35px;
+        font-weight: 700;
+        font-size: 10px;
+    }
+
+    .report-header {
+        margin-bottom: 10px;
+        padding: 10px;
+        background-color: #f8fafc;
+        border-radius: 4px;
+    }
+
+    .report-header h2 {
+        font-size: 14px;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 8px;
+    }
+
+    .report-header-info {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        font-size: 10px;
+        color: #374151;
+    }
+
+    .report-header-info span {
+        display: flex;
+        gap: 4px;
+    }
+
+    .report-header-info strong {
+        font-weight: 600;
+    }
+
+    .report-header img {
+        height: 40px !important;
+    }
+
+    /* Print-specific A4 styles */
+    @page {
+        size: A4 portrait;
+        margin: 8mm;
+    }
+
+    @media print {
+        #report-preview {
+            max-width: 100%;
+        }
+        .report-table {
+            font-size: 8px;
+        }
+        .report-table th,
+        .report-table td {
+            padding: 3px 2px;
+        }
+        .qr-code-container {
+            width: 40px;
+            height: 40px;
+        }
+        .qr-code-container img,
+        .qr-code-container canvas {
+            width: 40px !important;
+            height: 40px !important;
+        }
+        .photo-cell img {
+            width: 40px;
+            height: 40px;
+        }
+        .report-header {
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+        .report-header h2 {
+            font-size: 12px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <!-- Filtros -->
+    <div class="dashboard-card mb-6 no-print">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Filtros do Relatório</h3>
+        <form id="filter-form">
+            <!-- Linha 1: OP e Matéria Prima -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label for="lote_codigo" class="form-label">OP (Ordem de Produção)</label>
+                    <select id="lote_codigo" name="lote_codigo" class="form-select" required>
+                        <option value="">Selecione uma OP...</option>
+                        {% for lote in lotes_producao %}
+                        <option value="{{ lote.codigo }}">{{ lote.descricao }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="material_filter" class="form-label">Matéria Prima</label>
+                    <select id="material_filter" name="material_filter" class="form-select">
+                        <option value="all">Todos os Materiais</option>
+                        <option value="madeira">Madeira</option>
+                        <option value="mdf">MDF</option>
+                        <option value="compensado">Compensado</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Linha 2: Localização com checkboxes -->
+            <div class="mb-4">
+                <label class="form-label mb-2 block">Localização <span class="text-gray-400 font-normal text-xs">(deixe vazio para todas)</span></label>
+                <div class="flex flex-wrap gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <label class="inline-flex items-center cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                        <input type="checkbox" name="location_filter" value="sem_localizacao" class="form-checkbox h-4 w-4 text-blue-600 rounded border-gray-300">
+                        <span class="ml-2 text-sm text-gray-700">Sem Localização</span>
+                    </label>
+                    {% for loc in localizacoes_agrupadas %}
+                    <label class="inline-flex items-center cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                        <input type="checkbox" name="location_filter" value="{{ loc.prefixo }}" class="form-checkbox h-4 w-4 text-blue-600 rounded border-gray-300">
+                        <span class="ml-2 text-sm text-gray-700">{{ loc.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Linha 3: Botão -->
+            <div class="flex justify-end">
+                <button type="submit" class="btn btn-primary px-6 py-2">
+                    <i class="fas fa-search mr-2"></i>Gerar Relatório
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden text-center py-10 no-print">
+        <i class="fas fa-spinner fa-spin fa-3x text-blue-500 mb-4"></i>
+        <p class="text-gray-600">Gerando relatório...</p>
+    </div>
+
+    <!-- Botões de Ação -->
+    <div id="action-buttons" class="hidden mb-4 flex flex-wrap gap-3 no-print">
+        <button type="button" id="btn-export-pdf" class="btn btn-primary">
+            <i class="fas fa-file-pdf mr-2"></i>Exportar PDF
+        </button>
+        <button type="button" id="btn-print" class="btn btn-secondary">
+            <i class="fas fa-print mr-2"></i>Imprimir
+        </button>
+        <button type="button" id="btn-new-report" class="btn btn-secondary">
+            <i class="fas fa-redo mr-2"></i>Novo Relatório
+        </button>
+    </div>
+
+    <!-- Loading de exportação -->
+    <div id="export-loading" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
+        <div class="bg-white rounded-lg p-6 flex flex-col items-center">
+            <i class="fas fa-spinner fa-spin fa-3x text-blue-500 mb-4"></i>
+            <p class="text-gray-700 font-medium">Gerando PDF...</p>
+        </div>
+    </div>
+
+    <!-- Pré-visualização do Relatório -->
+    <div id="report-preview" class="hidden">
+        <div class="report-header">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h2 id="report-title">Produção - Acompanhamento Montagem</h2>
+                    <div class="report-header-info">
+                        <span><strong>Op:</strong> <span id="header-op"></span></span>
+                        <span><strong>Data Abertura:</strong> <span id="header-data-abertura"></span></span>
+                        <span><strong>Material:</strong> <span id="header-material"></span></span>
+                        <span><strong>Localização:</strong> <span id="header-localizacao"></span></span>
+                        <span><strong>Impresso em:</strong> <span id="header-impressao"></span></span>
+                    </div>
+                </div>
+                <img src="{{ url_for('static', filename='Logo2.png') }}" alt="Logo" style="height: 50px;">
+            </div>
+        </div>
+
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th class="subgrupo-cell">Sub Grupo</th>
+                    <th class="photo-cell">Foto</th>
+                    <th class="qr-cell">QR CODE</th>
+                    <th>CONCAT RESERV</th>
+                    <th class="localizacao-cell">Localizações</th>
+                    <th class="qtd-cell">Qtd</th>
+                    <th class="qr-cell">QR CODE</th>
+                </tr>
+            </thead>
+            <tbody id="report-body">
+                <!-- Dados serão inseridos via JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Mensagem de erro -->
+    <div id="error-message" class="hidden dashboard-card bg-red-50 border border-red-200 no-print">
+        <div class="flex items-center gap-3 text-red-700">
+            <i class="fas fa-exclamation-triangle text-xl"></i>
+            <span id="error-text"></span>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const filterForm = document.getElementById('filter-form');
+    const loading = document.getElementById('loading');
+    const actionButtons = document.getElementById('action-buttons');
+    const reportPreview = document.getElementById('report-preview');
+    const reportBody = document.getElementById('report-body');
+    const errorMessage = document.getElementById('error-message');
+    const errorText = document.getElementById('error-text');
+
+    const headerOp = document.getElementById('header-op');
+    const headerDataAbertura = document.getElementById('header-data-abertura');
+    const headerMaterial = document.getElementById('header-material');
+    const headerLocalizacao = document.getElementById('header-localizacao');
+    const headerImpressao = document.getElementById('header-impressao');
+    const reportTitle = document.getElementById('report-title');
+
+    // Armazenar dados do relatório atual para exportação PDF
+    let currentReportData = null;
+
+    const materialLabels = {
+        'all': 'Todos',
+        'madeira': 'MADEIRA',
+        'mdf': 'MDF',
+        'compensado': 'COMPENSADO'
+    };
+
+    // Mapeamento de prefixos de localização para labels
+    const locationLabels = {
+        'sem_localizacao': 'Sem Localização',
+        {% for loc in localizacoes_agrupadas %}
+        '{{ loc.prefixo }}': '{{ loc.label }}',
+        {% endfor %}
+    };
+
+    function showLoading() {
+        loading.classList.remove('hidden');
+        reportPreview.classList.add('hidden');
+        actionButtons.classList.add('hidden');
+        errorMessage.classList.add('hidden');
+    }
+
+    function hideLoading() {
+        loading.classList.add('hidden');
+    }
+
+    function showError(message) {
+        hideLoading();
+        errorText.textContent = message;
+        errorMessage.classList.remove('hidden');
+        reportPreview.classList.add('hidden');
+        actionButtons.classList.add('hidden');
+    }
+
+    function showReport() {
+        hideLoading();
+        reportPreview.classList.remove('hidden');
+        actionButtons.classList.remove('hidden');
+        errorMessage.classList.add('hidden');
+    }
+
+    function generateQRCode(containerId, text) {
+        const container = document.getElementById(containerId);
+        if (container) {
+            container.innerHTML = '';
+            new QRCode(container, {
+                text: String(text),
+                width: 45,
+                height: 45,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.L
+            });
+        }
+    }
+
+    function renderReport(data) {
+        // Armazenar dados para exportação PDF
+        currentReportData = data;
+
+        // Preencher cabeçalho
+        headerOp.textContent = data.lote.descricao;
+        headerDataAbertura.textContent = data.lote.data_abertura;
+        headerMaterial.textContent = materialLabels[data.material_filter] || data.material_filter;
+
+        // Preencher localização
+        if (data.location_filter && data.location_filter.length > 0) {
+            const locLabels = data.location_filter.map(loc => locationLabels[loc] || loc);
+            headerLocalizacao.textContent = locLabels.join(', ');
+        } else {
+            headerLocalizacao.textContent = 'Todas';
+        }
+
+        headerImpressao.textContent = data.generated_at;
+
+        // Atualizar título
+        const materialLabel = materialLabels[data.material_filter] || '';
+        if (materialLabel && materialLabel !== 'Todos') {
+            reportTitle.textContent = `Produção - Acompanhamento Montagem - ${materialLabel}`;
+        } else {
+            reportTitle.textContent = 'Produção - Acompanhamento Montagem';
+        }
+
+        // Limpar tabela
+        reportBody.innerHTML = '';
+
+        // Agrupar por subgrupo
+        const groupedReservas = {};
+        data.reservas.forEach(reserva => {
+            const subgrupo = reserva.subgrupo_nome || 'Sem Subgrupo';
+            if (!groupedReservas[subgrupo]) {
+                groupedReservas[subgrupo] = [];
+            }
+            groupedReservas[subgrupo].push(reserva);
+        });
+
+        let rowIndex = 0;
+        Object.keys(groupedReservas).sort().forEach(subgrupo => {
+            const reservasSubgrupo = groupedReservas[subgrupo];
+
+            reservasSubgrupo.forEach((reserva, idx) => {
+                const tr = document.createElement('tr');
+                const isEven = rowIndex % 2 === 0;
+
+                // Concatenar informações - Ordem - Reserva - Produto - Descrição
+                const concat = `${reserva.ordem} - ${reserva.reserva} - ${reserva.produto} - ${reserva.descricao}`;
+
+                // Criar células
+                let cellsHtml = '';
+
+                // Coluna 1: Sub Grupo (repetido em todas as linhas)
+                cellsHtml += `<td class="subgrupo-cell">${subgrupo}</td>`;
+
+                // Coluna 2: Foto
+                const photoUrl = `{{ url_for('mrp_report_component_photo', produto_codigo='__PRODUTO__') }}`.replace('__PRODUTO__', reserva.produto);
+                cellsHtml += `<td class="photo-cell"><img src="${photoUrl}" alt="${reserva.produto}" onerror="this.style.display='none'"></td>`;
+
+                // Coluna 3: QR Code (esquerda) - aparece em linhas pares (índice 1, 3, 5... = posição 2, 4, 6...)
+                const qrLeftId = `qr-left-${rowIndex}`;
+                if (!isEven) {
+                    // Linhas ímpares (1, 3, 5...) - QR na esquerda
+                    cellsHtml += `<td class="qr-cell"><div id="${qrLeftId}" class="qr-code-container"></div></td>`;
+                } else {
+                    cellsHtml += `<td class="qr-cell"></td>`;
+                }
+
+                // Coluna 4: Concatenado (Ordem - Reserva - Produto - Descrição)
+                cellsHtml += `<td class="concat-cell text-left">${concat}</td>`;
+
+                // Coluna 5: Localização
+                cellsHtml += `<td class="localizacao-cell">${reserva.localizacao || ''}</td>`;
+
+                // Coluna 6: Quantidade
+                cellsHtml += `<td class="qtd-cell">${Math.floor(reserva.quantidade)}</td>`;
+
+                // Coluna 7: QR Code (direita) - aparece em linhas ímpares (índice 0, 2, 4... = posição 1, 3, 5...)
+                const qrRightId = `qr-right-${rowIndex}`;
+                if (isEven) {
+                    // Linhas pares (0, 2, 4...) - QR na direita (linha 1, 3, 5 no relatório)
+                    cellsHtml += `<td class="qr-cell"><div id="${qrRightId}" class="qr-code-container"></div></td>`;
+                } else {
+                    cellsHtml += `<td class="qr-cell"></td>`;
+                }
+
+                tr.innerHTML = cellsHtml;
+                reportBody.appendChild(tr);
+
+                // Gerar QR Codes após adicionar ao DOM
+                setTimeout(() => {
+                    if (isEven) {
+                        generateQRCode(qrRightId, String(reserva.reserva));
+                    } else {
+                        generateQRCode(qrLeftId, String(reserva.reserva));
+                    }
+                }, 50);
+
+                rowIndex++;
+            });
+        });
+
+        showReport();
+    }
+
+    filterForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const loteCodigo = document.getElementById('lote_codigo').value;
+        const materialFilter = document.getElementById('material_filter').value;
+
+        // Obter localizações selecionadas (checkboxes)
+        const locationCheckboxes = document.querySelectorAll('input[name="location_filter"]:checked');
+        const locationFilter = Array.from(locationCheckboxes).map(cb => cb.value);
+
+        if (!loteCodigo) {
+            showError('Selecione uma OP');
+            return;
+        }
+
+        showLoading();
+
+        try {
+            const response = await fetch('{{ url_for("mrp_report_assembly_output_generate") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    lote_codigo: loteCodigo,
+                    material_filter: materialFilter,
+                    location_filter: locationFilter
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Erro ao gerar relatório');
+            }
+
+            if (data.reservas.length === 0) {
+                showError('Nenhum componente encontrado para os filtros selecionados');
+                return;
+            }
+
+            renderReport(data);
+
+        } catch (error) {
+            console.error('Erro:', error);
+            showError(error.message || 'Erro ao gerar relatório');
+        }
+    });
+
+    document.getElementById('btn-print').addEventListener('click', function() {
+        window.print();
+    });
+
+    document.getElementById('btn-export-pdf').addEventListener('click', async function() {
+        const exportLoading = document.getElementById('export-loading');
+        exportLoading.classList.remove('hidden');
+
+        try {
+            // Enviar dados para o servidor gerar o PDF
+            const response = await fetch('{{ url_for("mrp_report_assembly_output_export_pdf") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(currentReportData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Erro ao gerar PDF');
+            }
+
+            // Baixar o arquivo PDF
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Relatorio_Saida_Montagem_${new Date().toISOString().slice(0,10)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+
+        } catch (error) {
+            console.error('Erro ao exportar PDF:', error);
+            alert('Erro ao exportar PDF: ' + error.message);
+        } finally {
+            exportLoading.classList.add('hidden');
+        }
+    });
+
+    document.getElementById('btn-new-report').addEventListener('click', function() {
+        reportPreview.classList.add('hidden');
+        actionButtons.classList.add('hidden');
+        filterForm.reset();
+    });
+});
+</script>
+{% endblock %}

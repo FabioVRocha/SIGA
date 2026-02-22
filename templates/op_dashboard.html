@@ -1,0 +1,525 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard OP{% endblock %}
+{% block page_title %}Dashboard OP{% endblock %}
+
+{% block header_action %}
+<div class="flex items-center gap-4">
+    <button onclick="openFilterModal()" class="btn btn-secondary">
+        <i class="fas fa-filter mr-2"></i>Filtro
+    </button>
+    <button onclick="location.reload()" class="btn btn-primary">
+        <i class="fas fa-sync-alt mr-2"></i>Atualizar
+    </button>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .op-container {
+        background: linear-gradient(135deg, #3B5998 0%, #1F3A5F 100%);
+        min-height: calc(100vh - 200px);
+        padding: 5rem 2rem 2rem 2rem;
+        border-radius: 1rem;
+        position: relative;
+    }
+
+    .op-logo {
+        position: absolute;
+        top: 1rem;
+        right: 1.5rem;
+        text-align: right;
+        color: white;
+        font-weight: bold;
+        font-size: 0.9rem;
+        line-height: 1.2;
+    }
+
+    .op-card {
+        background: white;
+        border-radius: 1rem;
+        margin-bottom: 1rem;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        cursor: pointer;
+    }
+
+    .op-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    }
+
+    .op-card-header {
+        background: #F8F9FA;
+        padding: 0.5rem 1.5rem;
+        text-align: center;
+        border-bottom: 2px solid #E9ECEF;
+    }
+
+    .op-card-header h2 {
+        color: #1F3A5F;
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0;
+        letter-spacing: 0.05em;
+    }
+
+    .op-card-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        padding: 0.5rem 1rem;
+        gap: 0.25rem;
+    }
+
+    .op-metric-dual {
+        display: flex;
+        justify-content: center;
+        gap: 6.5rem;
+    }
+
+    .op-metric-dual-item {
+        text-align: center;
+    }
+
+    .op-metric {
+        text-align: center;
+        padding: 0.4rem;
+        border-right: 1px solid #E9ECEF;
+    }
+
+    .op-metric:last-child {
+        border-right: none;
+    }
+
+    .op-metric-label {
+        color: #1F3A5F;
+        font-size: 1.35rem;
+        font-weight: 600;
+        margin-bottom: 0.1rem;
+    }
+
+    .op-metric-value {
+        color: #1F3A5F;
+        font-size: 2.75rem;
+        font-weight: 700;
+    }
+
+    .op-metric-sub {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        font-size: 0.9rem;
+        color: #666;
+        margin-top: 0.25rem;
+    }
+
+    .op-updated {
+        position: absolute;
+        bottom: 1rem;
+        right: 1.5rem;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.85rem;
+    }
+
+    .op-info-icon {
+        position: absolute;
+        bottom: 1rem;
+        left: 1.5rem;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 1.25rem;
+        cursor: help;
+    }
+
+    @media (max-width: 768px) {
+        .op-card-body {
+            grid-template-columns: 1fr;
+        }
+
+        .op-metric {
+            border-right: none;
+            border-bottom: 1px solid #E9ECEF;
+        }
+
+        .op-metric:last-child {
+            border-bottom: none;
+        }
+    }
+
+    /* Modal de Filtro */
+    .filter-modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .filter-modal-overlay.active {
+        display: flex;
+    }
+
+    .filter-modal {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        width: 90%;
+        max-width: 500px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .filter-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #E9ECEF;
+    }
+
+    .filter-modal-header h3 {
+        color: #1F3A5F;
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .filter-modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #666;
+        cursor: pointer;
+    }
+
+    .filter-modal-close:hover {
+        color: #333;
+    }
+
+    .filter-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .filter-section-title {
+        font-weight: 600;
+        color: #1F3A5F;
+        margin-bottom: 0.75rem;
+        font-size: 1rem;
+    }
+
+    .filter-options {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .filter-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        background: #F8F9FA;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .filter-option:hover {
+        background: #E9ECEF;
+    }
+
+    .filter-option input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+
+    .filter-option label {
+        cursor: pointer;
+        flex: 1;
+        font-size: 0.9rem;
+    }
+
+    .filter-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 2px solid #E9ECEF;
+    }
+
+    .filter-modal-footer .btn {
+        padding: 0.5rem 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="op-container">
+    <!-- Logo -->
+    <div class="op-logo">
+        GRUPO<br>MADRE<br>SILVA
+    </div>
+
+    <!-- Card GARLAND -->
+    {% if garland_data %}
+    <a href="{{ url_for('op_detail', tipo='garland') }}" class="block">
+        <div class="op-card">
+            <div class="op-card-header">
+                <h2>GARLAND</h2>
+            </div>
+            <div class="op-card-body">
+                <div class="op-metric">
+                    <div class="op-metric-label">Dia(s):</div>
+                    <div class="op-metric-value">{{ garland_data.dias }}</div>
+                </div>
+                <div class="op-metric">
+                    <div class="op-metric-label">Pecas:</div>
+                    <div class="op-metric-value">{{ garland_data.pecas }}</div>
+                </div>
+                <div class="op-metric">
+                    <div class="op-metric-dual">
+                        <div class="op-metric-dual-item">
+                            <div class="op-metric-label">Ped:</div>
+                            <div class="op-metric-value">{{ garland_data.pedidos }}</div>
+                        </div>
+                        <div class="op-metric-dual-item">
+                            <div class="op-metric-label">Ass:</div>
+                            <div class="op-metric-value">{{ garland_data.assistencias }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </a>
+    {% else %}
+    <div class="op-card" style="opacity: 0.6;">
+        <div class="op-card-header">
+            <h2>GARLAND</h2>
+        </div>
+        <div class="op-card-body">
+            <div class="op-metric" style="grid-column: span 3; text-align: center;">
+                <div class="op-metric-label">Sem dados disponiveis</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Card MOVEIS -->
+    {% if moveis_data %}
+    <a href="{{ url_for('op_detail', tipo='moveis') }}" class="block">
+        <div class="op-card">
+            <div class="op-card-header">
+                <h2>MOVEIS</h2>
+            </div>
+            <div class="op-card-body">
+                <div class="op-metric">
+                    <div class="op-metric-label">Dia(s):</div>
+                    <div class="op-metric-value">{{ moveis_data.dias }}</div>
+                </div>
+                <div class="op-metric">
+                    <div class="op-metric-label">Pecas:</div>
+                    <div class="op-metric-value">{{ moveis_data.pecas }}</div>
+                </div>
+                <div class="op-metric">
+                    <div class="op-metric-dual">
+                        <div class="op-metric-dual-item">
+                            <div class="op-metric-label">Ped:</div>
+                            <div class="op-metric-value">{{ moveis_data.pedidos }}</div>
+                        </div>
+                        <div class="op-metric-dual-item">
+                            <div class="op-metric-label">Ass:</div>
+                            <div class="op-metric-value">{{ moveis_data.assistencias }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </a>
+    {% else %}
+    <div class="op-card" style="opacity: 0.6;">
+        <div class="op-card-header">
+            <h2>MOVEIS</h2>
+        </div>
+        <div class="op-card-body">
+            <div class="op-metric" style="grid-column: span 3; text-align: center;">
+                <div class="op-metric-label">Sem dados disponiveis</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Card SOLARE -->
+    {% if solare_data %}
+    <a href="{{ url_for('op_detail', tipo='solare') }}" class="block">
+        <div class="op-card">
+            <div class="op-card-header">
+                <h2>SOLARE</h2>
+            </div>
+            <div class="op-card-body">
+                <div class="op-metric">
+                    <div class="op-metric-label">Dia(s):</div>
+                    <div class="op-metric-value">{{ solare_data.dias }}</div>
+                </div>
+                <div class="op-metric">
+                    <div class="op-metric-label">Pecas:</div>
+                    <div class="op-metric-value">{{ solare_data.pecas }}</div>
+                </div>
+                <div class="op-metric">
+                    <div class="op-metric-dual">
+                        <div class="op-metric-dual-item">
+                            <div class="op-metric-label">Ped:</div>
+                            <div class="op-metric-value">{{ solare_data.pedidos }}</div>
+                        </div>
+                        <div class="op-metric-dual-item">
+                            <div class="op-metric-label">Ass:</div>
+                            <div class="op-metric-value">{{ solare_data.assistencias }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </a>
+    {% else %}
+    <div class="op-card" style="opacity: 0.6;">
+        <div class="op-card-header">
+            <h2>SOLARE</h2>
+        </div>
+        <div class="op-card-body">
+            <div class="op-metric" style="grid-column: span 3; text-align: center;">
+                <div class="op-metric-label">Sem dados disponiveis</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Info Icon -->
+    <div class="op-info-icon" title="Clique em um card para ver detalhes">
+        <i class="fas fa-info-circle"></i>
+    </div>
+
+    <!-- Updated timestamp -->
+    <div class="op-updated">
+        Atualizado em: <span id="update-time"></span>
+    </div>
+</div>
+
+<!-- Modal de Filtro -->
+<div id="filterModal" class="filter-modal-overlay">
+    <div class="filter-modal">
+        <div class="filter-modal-header">
+            <h3><i class="fas fa-filter mr-2"></i>Filtro de Liberação</h3>
+            <button class="filter-modal-close" onclick="closeFilterModal()">&times;</button>
+        </div>
+
+        <form id="filterForm" method="GET" action="{{ url_for('op_dashboard') }}">
+            <!-- Filtro GARLAND -->
+            <div class="filter-section">
+                <div class="filter-section-title">GARLAND</div>
+                <div class="filter-options">
+                    <div class="filter-option">
+                        <input type="checkbox" id="garland_garland" name="garland_garland" value="1" {{ 'checked' if not filtros or filtros.get('garland_garland', True) else '' }}>
+                        <label for="garland_garland">LIBERADO P/ OP GARLAND</label>
+                    </div>
+                    <div class="filter-option">
+                        <input type="checkbox" id="garland_moveis" name="garland_moveis" value="1" {{ 'checked' if not filtros or filtros.get('garland_moveis', True) else '' }}>
+                        <label for="garland_moveis">LIBERADO P/ OP MOVEIS</label>
+                    </div>
+                    <div class="filter-option">
+                        <input type="checkbox" id="garland_solare" name="garland_solare" value="1" {{ 'checked' if not filtros or filtros.get('garland_solare', True) else '' }}>
+                        <label for="garland_solare">LIBERADO P/ OP SOLARE</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filtro MOVEIS -->
+            <div class="filter-section">
+                <div class="filter-section-title">MOVEIS</div>
+                <div class="filter-options">
+                    <div class="filter-option">
+                        <input type="checkbox" id="moveis_garland" name="moveis_garland" value="1" {{ 'checked' if not filtros or filtros.get('moveis_garland', True) else '' }}>
+                        <label for="moveis_garland">LIBERADO P/ OP GARLAND</label>
+                    </div>
+                    <div class="filter-option">
+                        <input type="checkbox" id="moveis_moveis" name="moveis_moveis" value="1" {{ 'checked' if not filtros or filtros.get('moveis_moveis', True) else '' }}>
+                        <label for="moveis_moveis">LIBERADO P/ OP MOVEIS</label>
+                    </div>
+                    <div class="filter-option">
+                        <input type="checkbox" id="moveis_solare" name="moveis_solare" value="1" {{ 'checked' if not filtros or filtros.get('moveis_solare', True) else '' }}>
+                        <label for="moveis_solare">LIBERADO P/ OP SOLARE</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filtro SOLARE -->
+            <div class="filter-section">
+                <div class="filter-section-title">SOLARE</div>
+                <div class="filter-options">
+                    <div class="filter-option">
+                        <input type="checkbox" id="solare_garland" name="solare_garland" value="1" {{ 'checked' if not filtros or filtros.get('solare_garland', True) else '' }}>
+                        <label for="solare_garland">LIBERADO P/ OP GARLAND</label>
+                    </div>
+                    <div class="filter-option">
+                        <input type="checkbox" id="solare_moveis" name="solare_moveis" value="1" {{ 'checked' if not filtros or filtros.get('solare_moveis', True) else '' }}>
+                        <label for="solare_moveis">LIBERADO P/ OP MOVEIS</label>
+                    </div>
+                    <div class="filter-option">
+                        <input type="checkbox" id="solare_solare" name="solare_solare" value="1" {{ 'checked' if not filtros or filtros.get('solare_solare', True) else '' }}>
+                        <label for="solare_solare">LIBERADO P/ OP SOLARE</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="filter-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeFilterModal()">Cancelar</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-check mr-2"></i>Confirmar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Atualiza o timestamp
+    function updateTimestamp() {
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = now.getFullYear();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        document.getElementById('update-time').textContent = `${day}/${month}/${year} ${hours}:${minutes}`;
+    }
+    updateTimestamp();
+
+    // Funções do Modal de Filtro
+    function openFilterModal() {
+        document.getElementById('filterModal').classList.add('active');
+    }
+
+    function closeFilterModal() {
+        document.getElementById('filterModal').classList.remove('active');
+    }
+
+    // Fechar modal ao clicar fora
+    document.getElementById('filterModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeFilterModal();
+        }
+    });
+
+    // Fechar modal com ESC
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeFilterModal();
+        }
+    });
+</script>
+{% endblock %}

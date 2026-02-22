@@ -1,0 +1,559 @@
+{% extends "base.html" %}
+
+{% block title %}Resumo Diário de Boletos{% endblock %}
+
+{% block page_title %}Resumo Diário de Boletos{% endblock %}
+
+{% block header_action %}
+<button onclick="window.print()" class="print-button">
+    <i class="fas fa-print"></i> Imprimir Relatório
+</button>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .boleto-section {
+        background-color: white;
+        border-radius: 0.75rem;
+        padding: 2rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1.5rem;
+    }
+
+    .boleto-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1F3A5F;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid #1F3A5F;
+        padding-bottom: 0.5rem;
+    }
+
+    .boleto-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 0;
+        border-bottom: 1px solid #E0E0E0;
+    }
+
+    .boleto-row:last-child {
+        border-bottom: none;
+    }
+
+    .boleto-label {
+        font-size: 1rem;
+        color: #333;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .boleto-date {
+        background-color: #F4F6F8;
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.25rem;
+        font-weight: 500;
+        font-size: 0.9rem;
+        color: #666;
+    }
+
+    .boleto-value {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1F3A5F;
+    }
+
+    .cheques-section {
+        background-color: white;
+        border-radius: 0.75rem;
+        padding: 2rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1.5rem;
+    }
+
+    .cheque-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 1rem 0;
+        border-bottom: 1px solid #E0E0E0;
+    }
+
+    .cheque-item:last-child {
+        border-bottom: none;
+    }
+
+    .cheque-label {
+        font-size: 1rem;
+        color: #333;
+    }
+
+    .cheque-value {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #1F3A5F;
+    }
+
+    .total-section {
+        background-color: white;
+        border-radius: 0.75rem;
+        padding: 2.5rem;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        text-align: center;
+        margin-top: 2rem;
+    }
+
+    .total-label {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1F3A5F;
+        margin-bottom: 1rem;
+    }
+
+    .total-value {
+        font-size: 3rem;
+        font-weight: 800;
+        color: #27AE60;
+    }
+
+    .report-date {
+        text-align: right;
+        color: #666;
+        font-size: 0.9rem;
+        margin-top: 1rem;
+    }
+
+    .filter-section {
+        background-color: white;
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1.5rem;
+    }
+
+    .filter-form {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        align-items: end;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .filter-label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 0.25rem;
+    }
+
+    .filter-input {
+        padding: 0.5rem;
+        border: 1px solid #E0E0E0;
+        border-radius: 0.375rem;
+        font-size: 0.9rem;
+    }
+
+    .filter-button {
+        background-color: #4F83CC;
+        color: white;
+        padding: 0.5rem 1.5rem;
+        border: none;
+        border-radius: 0.375rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .filter-button:hover {
+        background-color: #1F3A5F;
+    }
+
+    .print-button {
+        background-color: #27AE60;
+        color: white;
+        padding: 0.75rem 2rem;
+        border: none;
+        border-radius: 0.375rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 1rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: background-color 0.2s;
+    }
+
+    .print-button:hover {
+        background-color: #229954;
+    }
+
+    .print-header {
+        display: none;
+    }
+
+    /* Estilos de Impressão */
+    @media print {
+        @page {
+            size: A4 landscape;
+            margin: 1cm;
+        }
+
+        body {
+            background-color: white !important;
+            font-size: 9pt;
+        }
+
+        /* Ocultar elementos não necessários na impressão */
+        .filter-section,
+        .print-button,
+        .sidebar,
+        .main-header,
+        .flash-message {
+            display: none !important;
+        }
+
+        .main-content {
+            margin-left: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* Exibir cabeçalho de impressão */
+        .print-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.8rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #000;
+        }
+
+        .print-logo {
+            max-width: 100px;
+            height: auto;
+        }
+
+        .print-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #000;
+            margin: 0;
+            text-align: center;
+            flex-grow: 1;
+        }
+
+        .print-subtitle {
+            font-size: 0.85rem;
+            color: #333;
+            text-align: right;
+        }
+
+        /* Layout em Grid para otimizar espaço */
+        .grid {
+            display: grid !important;
+            grid-template-columns: 2fr 1fr;
+            gap: 1rem;
+        }
+
+        .lg\:col-span-2 {
+            grid-column: 1;
+        }
+
+        /* Ajustar seções de boletos */
+        .boleto-section,
+        .cheques-section {
+            box-shadow: none !important;
+            border: 1px solid #333;
+            border-radius: 0.3rem;
+            page-break-inside: avoid;
+            margin-bottom: 0.6rem;
+            padding: 0.8rem;
+        }
+
+        .boleto-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #000;
+            border-bottom: 2px solid #000;
+            margin-bottom: 0.6rem;
+            padding-bottom: 0.3rem;
+        }
+
+        .boleto-row {
+            padding: 0.4rem 0;
+            border-bottom: 1px solid #DDD;
+        }
+
+        .boleto-row:last-child {
+            border-bottom: none;
+        }
+
+        .boleto-label {
+            font-size: 0.8rem;
+            color: #000;
+            display: flex;
+            gap: 0.3rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .boleto-date {
+            background-color: transparent;
+            border: 1px solid #999;
+            padding: 0.15rem 0.4rem;
+            border-radius: 0.2rem;
+            font-size: 0.75rem;
+        }
+
+        .boleto-value {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #000;
+        }
+
+        /* Seção de cheques mais compacta */
+        .cheque-item {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #DDD;
+        }
+
+        .cheque-item:last-child {
+            border-bottom: none;
+        }
+
+        .cheque-label {
+            font-size: 0.8rem;
+            color: #000;
+        }
+
+        .cheque-value {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #000;
+        }
+
+        /* Total section mais compacta */
+        .total-section {
+            box-shadow: none !important;
+            border: 2px solid #000;
+            border-radius: 0.3rem;
+            padding: 1rem;
+            margin-top: 0;
+            page-break-inside: avoid;
+            text-align: center;
+        }
+
+        .total-label {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #000;
+            margin-bottom: 0.5rem;
+        }
+
+        .total-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #000;
+        }
+
+        .report-date {
+            font-size: 0.75rem;
+            color: #333;
+            margin-top: 0.5rem;
+        }
+
+        /* Rodapé de impressão */
+        .print-footer {
+            display: block;
+            text-align: center;
+            margin-top: 0.5rem;
+            padding-top: 0.3rem;
+            border-top: 1px solid #999;
+            font-size: 0.7rem;
+            color: #666;
+        }
+
+        .print-footer p {
+            margin: 0.2rem 0;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho de Impressão (visível apenas ao imprimir) -->
+<div class="print-header">
+    <img src="{{ url_for('static', filename='Logo2.png') }}" alt="Logo" class="print-logo">
+    <div style="flex-grow: 1; text-align: center;">
+        <h1 class="print-title">Resumo Diário de Boletos</h1>
+    </div>
+    <div class="print-subtitle">
+        <p style="margin: 0;">{{ data2.strftime('%d/%m/%Y') }}</p>
+        <p style="margin: 0; font-size: 0.75rem;">Relatório Financeiro</p>
+    </div>
+</div>
+
+<!-- Filtros de Data -->
+<div class="filter-section">
+    <form method="GET" action="{{ url_for('report_daily_boleto_summary') }}" class="filter-form">
+        <div class="filter-group">
+            <label class="filter-label">Data 1:</label>
+            <input type="date" name="data1" value="{{ data1.strftime('%Y-%m-%d') }}" class="filter-input">
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Data 2:</label>
+            <input type="date" name="data2" value="{{ data2.strftime('%Y-%m-%d') }}" class="filter-input">
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Data 3:</label>
+            <input type="date" name="data3" value="{{ data3.strftime('%Y-%m-%d') }}" class="filter-input">
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Data 4:</label>
+            <input type="date" name="data4" value="{{ data4.strftime('%Y-%m-%d') }}" class="filter-input">
+        </div>
+        <div class="filter-group">
+            <button type="submit" class="filter-button">
+                <i class="fas fa-search"></i> Filtrar
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Coluna Esquerda - Boletos -->
+    <div class="lg:col-span-2">
+        <!-- Boletos Banco do Brasil -->
+        <div class="boleto-section">
+            <h2 class="boleto-title">Boletos Banco do Brasil</h2>
+
+            <div class="boleto-row">
+                <div class="boleto-label">
+                    Com Vencimento entre =
+                    <span class="boleto-date">{{ data1.strftime('%d/%m/%Y') }}</span>
+                    <span class="boleto-date">{{ data2.strftime('%d/%m/%Y') }}</span>
+                </div>
+                <div class="boleto-value">
+                    R$ {{ "{:,.2f}".format(bb_entre).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </div>
+            </div>
+
+            <div class="boleto-row">
+                <div class="boleto-label">
+                    Com Vencimento a partir de =
+                    <span class="boleto-date">{{ data3.strftime('%d/%m/%Y') }}</span>
+                    <span class="boleto-date">{{ data4.strftime('%d/%m/%Y') }}</span>
+                </div>
+                <div class="boleto-value">
+                    R$ {{ "{:,.2f}".format(bb_partir).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Boletos Banco Bradesco -->
+        <div class="boleto-section">
+            <h2 class="boleto-title">Boletos Banco Bradesco</h2>
+
+            <div class="boleto-row">
+                <div class="boleto-label">
+                    Com Vencimento entre =
+                    <span class="boleto-date">{{ data1.strftime('%d/%m/%Y') }}</span>
+                    <span class="boleto-date">{{ data2.strftime('%d/%m/%Y') }}</span>
+                </div>
+                <div class="boleto-value">
+                    R$ {{ "{:,.2f}".format(bradesco_entre).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </div>
+            </div>
+
+            <div class="boleto-row">
+                <div class="boleto-label">
+                    Com Vencimento a partir de =
+                    <span class="boleto-date">{{ data3.strftime('%d/%m/%Y') }}</span>
+                    <span class="boleto-date">{{ data4.strftime('%d/%m/%Y') }}</span>
+                </div>
+                <div class="boleto-value">
+                    R$ {{ "{:,.2f}".format(bradesco_partir).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Boletos Banco Santander -->
+        <div class="boleto-section">
+            <h2 class="boleto-title">Boletos Banco Santander</h2>
+
+            <div class="boleto-row">
+                <div class="boleto-label">
+                    Com Vencimento entre =
+                    <span class="boleto-date">{{ data1.strftime('%d/%m/%Y') }}</span>
+                    <span class="boleto-date">{{ data2.strftime('%d/%m/%Y') }}</span>
+                </div>
+                <div class="boleto-value">
+                    R$ {{ "{:,.2f}".format(santander_entre).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </div>
+            </div>
+
+            <div class="boleto-row">
+                <div class="boleto-label">
+                    Com Vencimento a partir de =
+                    <span class="boleto-date">{{ data3.strftime('%d/%m/%Y') }}</span>
+                    <span class="boleto-date">{{ data4.strftime('%d/%m/%Y') }}</span>
+                </div>
+                <div class="boleto-value">
+                    R$ {{ "{:,.2f}".format(santander_partir).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coluna Direita - Cheques Acumulados -->
+    <div>
+        <div class="cheques-section">
+            <h2 class="boleto-title">Cheques Acumulados</h2>
+
+            <div class="cheque-item">
+                <span class="cheque-label">Total de Cheques:</span>
+                <span class="cheque-value">R$ {{ "{:,.2f}".format(total_cheques).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+            </div>
+
+            <div class="cheque-item">
+                <span class="cheque-label">Cheques em Caixa:</span>
+                <span class="cheque-value">R$ {{ "{:,.2f}".format(cheques_em_caixa).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+            </div>
+
+            <div class="cheque-item">
+                <span class="cheque-label">Cheques em Rota:</span>
+                <span class="cheque-value">R$ {{ "{:,.2f}".format(cheques_em_rota).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+            </div>
+
+            <div class="cheque-item">
+                <span class="cheque-label">Pedidos Sem Cheque:</span>
+                <span class="cheque-value">
+                    R$ {{ "{:,.2f}".format(pedido_sem_cheque).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </span>
+            </div>
+        </div>
+
+        <!-- Valor Total -->
+        <div class="total-section">
+            <div class="total-label">Valor Total</div>
+            <div class="total-value">R$ {{ "{:,.2f}".format(valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}</div>
+            <div class="report-date">
+                {% set dias_semana = ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo'] %}
+                {% set meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'] %}
+                {{ dias_semana[data2.weekday()] }}, {{ data2.day }} de {{ meses[data2.month - 1] }} de {{ data2.year }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rodapé de Impressão (visível apenas ao imprimir) -->
+<div class="print-footer" style="display: none;">
+    <p>Documento gerado em: {{ data2.strftime('%d/%m/%Y %H:%M') }}</p>
+    <p>Sistema SIGA - Gestão Empresarial</p>
+</div>
+
+{% endblock %}

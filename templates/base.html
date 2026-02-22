@@ -32,6 +32,8 @@
             --clr-text-main: #333333; /* Cor principal do texto */
             --clr-text-secondary: #666666; /* Cor secundária do texto */
             --clr-border: #E0E0E0; /* Cor da borda para elementos */
+            --header-gap: 1.5rem; /* Espaço entre header e cards */
+            --top-gap: 1.5rem; /* Espaço entre menu do topo e header */
         }
 
         body {
@@ -51,71 +53,174 @@
         .flash-message.info { background-color: var(--clr-light-blue); color: var(--clr-white); border: 1px solid var(--clr-light-blue); }
 
 
-        /* Estilos da Sidebar */
-        .sidebar {
-            background-color: var(--clr-sidebar-bg);
+        /* Topbar e Menu Suspenso */
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            height: 72px;
+            padding: 0 1.5rem;
+            background: linear-gradient(135deg, var(--clr-sidebar-bg), #1a2f4b);
             color: var(--clr-white);
-            width: 280px; /* Largura da sidebar */
-            padding: 0.75rem 1.5rem 1.5rem; /* reduz o espaço superior para aproximar a logo do topo */
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
-            position: fixed; /* Fixa a sidebar na tela */
-            height: 100vh; /* Altura total da viewport */
-            overflow: visible;
             display: flex;
-            flex-direction: column;
-            transition: width 0.3s ease-in-out;
-        }
-
-        .sidebar-header {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 0,5rem; /* aproxima os botões em relação ao título */
-            display: flex;
-            flex-direction: column;
             align-items: center;
-            text-align: center;
-            gap: 0.15rem; /* diminui ainda mais o espaçamento entre a logo e o título */
-            padding-bottom: 0.5rem;
+            justify-content: space-between;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.15);
         }
 
-        .collapse-button {
-            background: var(--clr-sidebar-bg);
-            border: none;
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .menu-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.25);
             color: var(--clr-white);
             border-radius: 0.75rem;
-            width: 2.5rem;
-            height: 2.5rem;
+            width: 2.75rem;
+            height: 2.75rem;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, transform 0.2s ease-in-out;
-            position: absolute;
-            top: 50%;
-            right: -1.25rem;
-            transform: translateY(-50%);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.25);
-            border: 2px solid rgba(255,255,255,0.25);
-            z-index: 20;
+            transition: transform 0.2s ease, background-color 0.2s ease;
         }
 
-        .collapse-button:hover {
-            background: color-mix(in srgb, var(--clr-sidebar-bg) 80%, white);
-            transform: translateY(-50%) scale(1.05);
+        .menu-toggle:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
         }
 
-        .sidebar-title-text {
-            font-size: 2rem;
-            letter-spacing: 0.05em;
+        .topbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
         }
+
+        .topbar-brand img {
+            width: 48px;
+            height: 48px;
+            object-fit: contain;
+            border-radius: 0.6rem;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.35rem;
+        }
+
+        .topbar-user {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 9999px;
+            padding: 0.35rem 0.6rem 0.35rem 0.35rem;
+        }
+
+        .menu-panel {
+            background-color: var(--clr-sidebar-bg);
+            color: var(--clr-white);
+            width: 340px;
+            max-height: calc(100vh - 96px);
+            padding: 0.5rem 1.5rem 1rem;
+            box-shadow: 0 24px 40px rgba(15, 23, 42, 0.35);
+            position: fixed;
+            top: 76px;
+            left: 1.5rem;
+            z-index: 60;
+            border-radius: 1rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transform: translateY(-8px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        body.menu-open .menu-panel {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .menu-panel-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .menu-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+            margin-bottom: 0.35rem;
+        }
+
+        .menu-panel-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .submenu-panel {
+            position: fixed;
+            top: 76px;
+            left: calc(1.5rem + 340px + 1rem);
+            width: 300px;
+            max-height: calc(100vh - 96px);
+            background: var(--clr-sidebar-bg);
+            border-radius: 0.75rem;
+            padding: 0.75rem;
+            display: none;
+            flex-direction: column;
+            gap: 0.5rem;
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.35);
+            overflow-y: auto;
+            z-index: 60;
+        }
+
+        .submenu-panel.is-active {
+            display: flex;
+        }
+
+        .subsubmenu-panel {
+            left: calc(1.5rem + 340px + 1rem + 300px + 1rem);
+            width: 280px;
+        }
+
+        .submenu-panel-header {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .submenu-panel-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .submenu-empty {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.65);
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        
 
         .sidebar-nav-item {
             display: flex;
             align-items: center;
-            padding: 0.75rem 1rem;
-            margin-bottom: 0.5rem;
+            padding: 0.6rem 0.9rem;
+            margin-bottom: 0.35rem;
             border-radius: 0.5rem;
             color: var(--clr-white);
+            font-size: 0.85rem;
             transition: background-color 0.2s, color 0.2s;
             gap: 0.75rem;
         }
@@ -130,79 +235,14 @@
             font-size: 1.25rem;
         }
 
-        .sidebar-logo {
-            width: 100%;
-            max-width: 190px;
-            height: 90px;
-            border-radius: 0.75rem;
-            background-color: transparent;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.75rem;
-        }
-
-        .sidebar-logo img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-
         /* Estilos do Conteúdo Principal */
         .main-content {
-            margin-left: 280px; /* Margem para acomodar a sidebar */
+            margin-left: 0;
             padding: 2rem;
+            padding-top: var(--top-gap);
             flex-grow: 1;
             background-color: var(--clr-dashboard-bg);
-            transition: margin-left 0.3s ease-in-out;
-        }
-
-        body.sidebar-collapsed .sidebar {
-            width: 80px;
-            padding-left: 0.75rem;
-            padding-right: 0.75rem;
-        }
-
-        body.sidebar-collapsed .main-content {
-            margin-left: 80px;
-        }
-
-        body.sidebar-collapsed .sidebar-header {
-            flex-direction: column;
-            align-items: center;
-        }
-
-        body.sidebar-collapsed .sidebar-title-text,
-        body.sidebar-collapsed .sidebar-nav-item .menu-text,
-        body.sidebar-collapsed .sidebar-btn .menu-text,
-        body.sidebar-collapsed .sidebar-user-info {
-            display: none;
-        }
-
-        body.sidebar-collapsed .sidebar-logo {
-            display: none;
-        }
-
-        body.sidebar-collapsed .sidebar-nav-item,
-        body.sidebar-collapsed .sidebar-btn {
-            justify-content: center;
-            padding: 0.75rem;
-        }
-
-        body.sidebar-collapsed .sidebar-nav-item i {
-            margin-right: 0;
-        }
-
-        body.sidebar-collapsed .arrow-icon {
-            display: none;
-        }
-
-        body.sidebar-collapsed nav ul ul {
-            display: none !important;
-        }
-
-        body.sidebar-collapsed .collapse-button {
-            background: rgba(255, 255, 255, 0.2);
+            transition: padding-top 0.2s ease;
         }
         .sidebar-nav {
             flex: 1;
@@ -210,11 +250,6 @@
             margin-right: -0.75rem;
             padding-right: 0.75rem;
             padding-bottom: 1rem;
-        }
-        .sidebar-footer {
-            margin-top: auto;
-            padding-top: 0.75rem; /* reduz espaço superior do bloco do usuário */
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
         }
         .sidebar-user {
             display: flex;
@@ -268,15 +303,23 @@
             background: rgba(255, 255, 255, 0.2);
             transform: translateY(-1px);
         }
-        body.sidebar-collapsed .sidebar-footer {
-            padding-top: 0.5rem;
-        }
-        body.sidebar-collapsed .sidebar-user {
+        .mobile-sidebar-toggle {
+            background: var(--clr-light-blue);
+            color: var(--clr-white);
+            border: none;
+            width: 2.75rem;
+            height: 2.75rem;
+            border-radius: 0.75rem;
+            display: none;
+            align-items: center;
             justify-content: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            transition: transform 0.2s ease, background-color 0.2s ease;
         }
-        body.sidebar-collapsed .sidebar-logout-btn {
-            width: 2.5rem;
-            height: 2.5rem;
+
+        .mobile-sidebar-toggle:hover {
+            background-color: var(--clr-dark-blue);
+            transform: translateY(-1px);
         }
 
         .main-header {
@@ -284,7 +327,7 @@
             padding: 1.5rem 2rem;
             border-radius: 0.75rem;
             box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
-            margin-bottom: 2rem;
+            margin-bottom: var(--header-gap);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -323,25 +366,6 @@
         .main-header .search-bar i {
             color: var(--clr-medium-gray);
             margin-right: 0.5rem;
-        }
-
-        .mobile-sidebar-toggle {
-            background: var(--clr-light-blue);
-            color: var(--clr-white);
-            border: none;
-            width: 2.75rem;
-            height: 2.75rem;
-            border-radius: 0.75rem;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-            transition: transform 0.2s ease, background-color 0.2s ease;
-        }
-
-        .mobile-sidebar-toggle:hover {
-            background-color: var(--clr-dark-blue);
-            transform: translateY(-1px);
         }
 
         .sidebar-backdrop {
@@ -576,47 +600,21 @@
         }
 
         @media (max-width: 1024px) {
-            .sidebar {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: min(85vw, 320px);
-                height: 100vh;
-                transform: translateX(-100%);
-                z-index: 40;
-                transition: transform 0.3s ease-in-out;
-            }
-
-            body.sidebar-collapsed .sidebar {
-                width: min(85vw, 320px);
-            }
-
-            body.sidebar-mobile-open .sidebar {
-                transform: translateX(0);
-            }
-
             .sidebar-backdrop {
                 position: fixed;
                 inset: 0;
                 background: rgba(15, 23, 42, 0.45);
-                z-index: 30;
+                z-index: 40;
             }
 
-            body.sidebar-mobile-open .sidebar-backdrop {
+            body.menu-open .sidebar-backdrop {
                 display: block;
-            }
-
-            .collapse-button {
-                display: none;
             }
 
             .main-content {
                 margin-left: 0;
                 padding: 1.25rem;
-            }
-
-            body.sidebar-collapsed .main-content {
-                margin-left: 0;
+                padding-top: var(--top-gap);
             }
 
             .main-header {
@@ -628,24 +626,58 @@
                 width: 100%;
             }
 
-            .mobile-sidebar-toggle {
-                display: inline-flex;
+            .submenu-panel {
+                position: fixed;
+                left: 1rem;
+                right: 1rem;
+                width: auto;
+                top: calc(76px + 12px);
+            }
+
+            .menu-panel {
+                width: min(92vw, 700px);
+                left: 1rem;
+                right: 1rem;
+                flex-direction: column;
             }
         }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="flex flex-col md:flex-row min-h-screen">
-    <!-- Sidebar -->
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <div class="sidebar-logo">
-                <img src="{{ url_for('static', filename='Logo2.png') }}" alt="Logo SIGA">
-            </div>
-            <span class="sidebar-title-text menu-text font-semibold">SIGA</span>
-            <button id="sidebar-toggle" class="collapse-button" type="button" aria-label="Alternar menu lateral">
-                <i class="fas fa-angles-left"></i>
+<body class="flex flex-col min-h-screen">
+    <!-- Topbar -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu-panel">
+                <i class="fas fa-bars"></i>
             </button>
+            <div class="topbar-brand">
+                <img src="{{ url_for('static', filename='Logo2.png') }}" alt="Logo SIGA">
+                <span class="menu-text">SIGA</span>
+            </div>
+        </div>
+        <div class="topbar-user">
+            <div class="sidebar-user-avatar">
+                {% if sidebar_user_photo %}
+                    <img src="{{ url_for('static', filename=sidebar_user_photo) }}" alt="Foto de {{ usuario_logado }}">
+                {% else %}
+                    <span>{{ (usuario_logado or 'Convidado')[:1]|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="sidebar-user-info menu-text">
+                <span class="sidebar-user-name">{{ usuario_logado or 'Convidado' }}</span>
+                <span class="sidebar-user-version">Versão {{ system_version }}</span>
+            </div>
+            <a href="{{ url_for('logout') }}" class="sidebar-logout-btn" title="Sair" aria-label="Sair">
+                <i class="fas fa-sign-out-alt"></i>
+            </a>
+        </div>
+    </header>
+
+    <!-- Menu suspenso -->
+    <div class="menu-panel" id="menu-panel" role="menu" aria-hidden="true">
+        <div class="menu-panel-header">
+            <span class="menu-panel-title">Menu</span>
         </div>
         <nav class="sidebar-nav">
             <ul>
@@ -703,19 +735,24 @@
                         <li><a href="{{ url_for('production_assistance_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-headset"></i><span class="menu-text">Consultar Assistências</span></a></li>
                         <li><a href="{{ url_for('load_lot_route_planner') }}" class="sidebar-nav-item text-sm"><i class="fas fa-route"></i><span class="menu-text">Mapa Interativo</span></a></li>
                         <li><a href="{{ url_for('load_lot_route_planner_v2') }}" class="sidebar-nav-item text-sm"><i class="fas fa-route"></i><span class="menu-text">Mapa Interativo 2</span></a></li>
+                        <li><a href="{{ url_for('oee_dashboard') }}" class="sidebar-nav-item text-sm"><i class="fas fa-gauge-high"></i><span class="menu-text">OEE</span></a></li>
+                        <li>
+                            <div class="sidebar-nav-item text-sm flex justify-between items-center cursor-pointer submenu-nested-toggle" data-submenu-source="mrp-submenu">
+                                <span class="flex items-center gap-3">
+                                    <i class="fas fa-calculator"></i>
+                                    <span class="menu-text">MRP</span>
+                                </span>
+                                <i class="fas fa-chevron-right arrow-icon"></i>
+                            </div>
+                        </li>
                     </ul>
                 </li>
+                
                 <li>
-                    <div class="sidebar-nav-item flex justify-between items-center cursor-pointer" id="mrp-toggle">
-                        <span class="flex items-center gap-3">
-                            <i class="fas fa-calculator"></i>
-                            <span class="menu-text">MRP</span>
-                        </span>
-                        <i class="fas fa-chevron-right arrow-icon"></i>
-                    </div>
-                    <ul id="mrp-submenu" class="ml-6 mt-1 hidden">
-                        <li><a href="{{ url_for('mrp_calculation') }}" class="sidebar-nav-item text-sm"><i class="fas fa-calculator"></i><span class="menu-text">Cálculo MRP</span></a></li>
-                    </ul>
+                    <a href="{{ url_for('op_dashboard') }}" class="sidebar-nav-item">
+                        <i class="fas fa-clipboard-check"></i>
+                        <span class="menu-text">OP</span>
+                    </a>
                 </li>
                 <li>
                     <div class="sidebar-nav-item flex justify-between items-center cursor-pointer" id="financeiro-toggle">
@@ -754,12 +791,9 @@
                         <i class="fas fa-chevron-right arrow-icon"></i>
                     </div>
                     <ul id="relatorios-submenu" class="ml-6 mt-1 hidden">
-                        <li><a href="{{ url_for('report_sales_by_product') }}" class="sidebar-nav-item text-sm"><i class="fas fa-chart-pie"></i><span class="menu-text">Vendas por Produto</span></a></li>
-                        <li><a href="{{ url_for('report_customer_sales') }}" class="sidebar-nav-item text-sm"><i class="fas fa-users"></i><span class="menu-text">Vendas por Cliente</span></a></li>
-                        <li><a href="{{ url_for('report_sales_by_client_year') }}" class="sidebar-nav-item text-sm"><i class="fas fa-table"></i><span class="menu-text">Análise Cliente x Ano</span></a></li>
-                        <li><a href="{{ url_for('report_revenue_comparison') }}" class="sidebar-nav-item text-sm"><i class="fas fa-dollar-sign"></i><span class="menu-text">Resumo Financeiro</span></a></li>
                         <li><a href="{{ url_for('revenue_reports') }}" class="sidebar-nav-item text-sm"><i class="fas fa-chart-column"></i><span class="menu-text">Faturamento</span></a></li>
                         <li><a href="{{ url_for('commercial_reports') }}" class="sidebar-nav-item text-sm"><i class="fas fa-briefcase"></i><span class="menu-text">Comercial</span></a></li>
+                        <li><a href="{{ url_for('financial_reports') }}" class="sidebar-nav-item text-sm"><i class="fas fa-money-bill-wave"></i><span class="menu-text">Financeiro</span></a></li>
                     </ul>
                 </li>
                 <li>
@@ -778,24 +812,25 @@
                 </li>
             </ul>
         </nav>
-        <div class="sidebar-footer">
-            <div class="sidebar-user">
-                <div class="sidebar-user-avatar">
-                    {% if sidebar_user_photo %}
-                        <img src="{{ url_for('static', filename=sidebar_user_photo) }}" alt="Foto de {{ usuario_logado }}">
-                    {% else %}
-                        <span>{{ (usuario_logado or 'Convidado')[:1]|upper }}</span>
-                    {% endif %}
-                </div>
-                <div class="sidebar-user-info menu-text">
-                    <span class="sidebar-user-name">{{ usuario_logado or 'Convidado' }}</span>
-                    <span class="sidebar-user-version">Versão {{ system_version }}</span>
-                </div>
-                <a href="{{ url_for('logout') }}" class="sidebar-logout-btn" title="Sair" aria-label="Sair">
-                    <i class="fas fa-sign-out-alt"></i>
-                </a>
-            </div>
+    </div>
+    <aside class="submenu-panel" id="submenu-panel" aria-live="polite">
+        <div class="submenu-panel-header" id="submenu-title">Selecione uma categoria</div>
+        <div class="submenu-panel-content" id="submenu-content">
+            <div class="submenu-empty">Os itens do submenu aparecem aqui.</div>
         </div>
+    </aside>
+    <aside class="submenu-panel subsubmenu-panel" id="subsubmenu-panel" aria-live="polite">
+        <div class="submenu-panel-header" id="subsubmenu-title">Submenu</div>
+        <div class="submenu-panel-content" id="subsubmenu-content">
+            <div class="submenu-empty">Os itens do submenu aparecem aqui.</div>
+        </div>
+    </aside>
+    <div id="submenu-sources" class="hidden">
+        <ul id="mrp-submenu">
+            <li><a href="{{ url_for('mrp_sessoes') }}" class="sidebar-nav-item text-sm"><i class="fas fa-folder-open"></i><span class="menu-text">Sessões de Cálculo</span></a></li>
+            <li><a href="{{ url_for('mrp_calculation') }}" class="sidebar-nav-item text-sm"><i class="fas fa-calculator"></i><span class="menu-text">Cálculo Rápido</span></a></li>
+            <li><a href="{{ url_for('mrp_reports') }}" class="sidebar-nav-item text-sm"><i class="fas fa-file-alt"></i><span class="menu-text">Relatórios MRP</span></a></li>
+        </ul>
     </div>
     <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
 
@@ -804,9 +839,6 @@
         <!-- Main Header -->
         <div class="main-header">
             <div class="main-header-title">
-                <button id="mobile-sidebar-toggle" class="mobile-sidebar-toggle" type="button" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false">
-                    <i class="fas fa-bars"></i>
-                </button>
                 <h1>{% block page_title %}{% endblock %}</h1>
             </div>
             {% block header_action %}
@@ -841,56 +873,115 @@
                 { id: 'cadastros-toggle', submenuId: 'cadastros-submenu' },
                 { id: 'comercial-toggle', submenuId: 'comercial-submenu' },
                 { id: 'producao-toggle', submenuId: 'producao-submenu' },
-                { id: 'mrp-toggle', submenuId: 'mrp-submenu' },
                 { id: 'financeiro-toggle', submenuId: 'financeiro-submenu' },
                 { id: 'estoque-toggle', submenuId: 'estoque-submenu' },
                 { id: 'relatorios-toggle', submenuId: 'relatorios-submenu' },
                 { id: 'gerencial-toggle', submenuId: 'gerencial-submenu' }
             ];
-            const collapseButton = document.getElementById('sidebar-toggle');
-            const collapseButtonIcon = collapseButton ? collapseButton.querySelector('i') : null;
-            const SIDEBAR_COLLAPSED_KEY = 'sigaSidebarCollapsed';
-            const mobileToggle = document.getElementById('mobile-sidebar-toggle');
+            const menuToggle = document.getElementById('menu-toggle');
+            const menuPanel = document.getElementById('menu-panel');
+            const submenuTitle = document.getElementById('submenu-title');
+            const submenuContent = document.getElementById('submenu-content');
+            const subsubmenuTitle = document.getElementById('subsubmenu-title');
+            const subsubmenuContent = document.getElementById('subsubmenu-content');
+            const subsubmenuPanel = document.getElementById('subsubmenu-panel');
             const sidebarBackdrop = document.getElementById('sidebar-backdrop');
-            const isMobileViewport = () => window.matchMedia('(max-width: 1024px)').matches;
+            const submenuPanel = document.getElementById('submenu-panel');
+            let lastSubmenu = null;
 
-            const setCollapseButtonIcon = (collapsed) => {
-                if (!collapseButtonIcon) return;
-                collapseButtonIcon.classList.toggle('fa-angles-left', !collapsed);
-                collapseButtonIcon.classList.toggle('fa-angles-right', collapsed);
+            const setSubmenuPanel = (title, submenuEl) => {
+                if (!submenuContent || !submenuTitle) return;
+                submenuTitle.textContent = title || 'Submenu';
+                submenuContent.innerHTML = '';
+
+                if (!submenuEl) {
+                    const empty = document.createElement('div');
+                    empty.className = 'submenu-empty';
+                    empty.textContent = 'Os itens do submenu aparecem aqui.';
+                    submenuContent.appendChild(empty);
+                    return;
+                }
+
+                const clonedList = submenuEl.cloneNode(true);
+                clonedList.classList.remove('hidden', 'ml-6', 'mt-1');
+                clonedList.querySelectorAll('.sidebar-nav-item').forEach((item) => {
+                    item.classList.add('w-full');
+                });
+                submenuContent.appendChild(clonedList);
             };
 
-            const applySidebarCollapsedState = (collapsed, { persist = true } = {}) => {
-                document.body.classList.toggle('sidebar-collapsed', collapsed);
-                setCollapseButtonIcon(collapsed);
+            const setSubmenuVisible = (visible) => {
+                if (!submenuPanel) return;
+                submenuPanel.classList.toggle('is-active', visible);
+            };
 
-                if (collapsed) {
-                    toggleConfigs.forEach(({ id, submenuId }) => {
-                        const toggleEl = document.getElementById(id);
-                        const submenu = document.getElementById(submenuId);
-                        const arrowIcon = toggleEl ? toggleEl.querySelector('.arrow-icon') : null;
+            const setSubsubmenuPanel = (title, submenuEl) => {
+                if (!subsubmenuContent || !subsubmenuTitle) return;
+                subsubmenuTitle.textContent = title || 'Submenu';
+                subsubmenuContent.innerHTML = '';
 
-                        if (submenu) submenu.classList.add('hidden');
-                        if (arrowIcon) arrowIcon.classList.remove('rotate-90');
-                    });
+                if (!submenuEl) {
+                    const empty = document.createElement('div');
+                    empty.className = 'submenu-empty';
+                    empty.textContent = 'Os itens do submenu aparecem aqui.';
+                    subsubmenuContent.appendChild(empty);
+                    return;
                 }
 
-                if (persist) {
-                    try {
-                        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? 'true' : 'false');
-                    } catch (error) {
-                        // Ignora erros de armazenamento, como navegação privada
-                    }
+                const clonedList = submenuEl.cloneNode(true);
+                clonedList.querySelectorAll('.sidebar-nav-item').forEach((item) => {
+                    item.classList.add('w-full');
+                });
+                subsubmenuContent.appendChild(clonedList);
+            };
+
+            const setSubsubmenuVisible = (visible) => {
+                if (!subsubmenuPanel) return;
+                subsubmenuPanel.classList.toggle('is-active', visible);
+            };
+
+            const updateLastSubmenu = (title, submenuEl) => {
+                if (submenuEl) {
+                    lastSubmenu = { title, submenuEl };
+                } else {
+                    lastSubmenu = null;
                 }
             };
 
-            const setMobileSidebarOpen = (open) => {
-                document.body.classList.toggle('sidebar-mobile-open', open);
-                if (mobileToggle) {
-                    mobileToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            const clearActiveToggles = () => {
+                toggleConfigs.forEach(({ id }) => {
+                    const toggleEl = document.getElementById(id);
+                    if (!toggleEl) return;
+                    toggleEl.classList.remove('active');
+                    const arrowIcon = toggleEl.querySelector('.arrow-icon');
+                    if (arrowIcon) arrowIcon.classList.remove('rotate-90');
+                });
+            };
+
+            const setMenuOpen = (open) => {
+                document.body.classList.toggle('menu-open', open);
+                if (menuToggle) {
+                    menuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
                 }
-                if (open) {
-                    applySidebarCollapsedState(false, { persist: false });
+                if (menuPanel) {
+                    menuPanel.setAttribute('aria-hidden', open ? 'false' : 'true');
+                }
+
+                if (!open) {
+                    clearActiveToggles();
+                    updateLastSubmenu(null, null);
+                    setSubmenuPanel(null, null);
+                    setSubmenuVisible(false);
+                    setSubsubmenuPanel(null, null);
+                    setSubsubmenuVisible(false);
+                } else if (lastSubmenu) {
+                    setSubmenuPanel(lastSubmenu.title, lastSubmenu.submenuEl);
+                    setSubmenuVisible(true);
+                } else {
+                    setSubmenuPanel(null, null);
+                    setSubmenuVisible(false);
+                    setSubsubmenuPanel(null, null);
+                    setSubsubmenuVisible(false);
                 }
             };
 
@@ -899,14 +990,33 @@
                 if (!toggleEl) return;
 
                 toggleEl.addEventListener('click', () => {
-                    if (document.body.classList.contains('sidebar-collapsed')) {
-                        applySidebarCollapsedState(false);
-                    }
-
                     const submenu = document.getElementById(submenuId);
                     const arrowIcon = toggleEl.querySelector('.arrow-icon');
-                    if (submenu) submenu.classList.toggle('hidden');
-                    if (arrowIcon) arrowIcon.classList.toggle('rotate-90');
+                    const titleText = toggleEl.querySelector('.menu-text')?.textContent?.trim() || 'Submenu';
+                    const isActive = toggleEl.classList.contains('active');
+
+                    if (!document.body.classList.contains('menu-open')) {
+                        setMenuOpen(true);
+                    }
+
+                    if (isActive) {
+                        toggleEl.classList.remove('active');
+                        if (arrowIcon) arrowIcon.classList.remove('rotate-90');
+                        updateLastSubmenu(null, null);
+                        setSubmenuPanel(null, null);
+                        setSubmenuVisible(false);
+                        setSubsubmenuPanel(null, null);
+                        setSubsubmenuVisible(false);
+                    } else {
+                        clearActiveToggles();
+                        toggleEl.classList.add('active');
+                        if (arrowIcon) arrowIcon.classList.add('rotate-90');
+                        setSubmenuPanel(titleText, submenu);
+                        updateLastSubmenu(titleText, submenu);
+                        setSubmenuVisible(true);
+                        setSubsubmenuPanel(null, null);
+                        setSubsubmenuVisible(false);
+                    }
                 });
             };
 
@@ -939,19 +1049,17 @@
                         }
                     });
 
-                    const isCollapsed = document.body.classList.contains('sidebar-collapsed');
-
                     if (isSubmenuActive) {
                         if (toggleEl) toggleEl.classList.add('active');
-                        if (!isCollapsed) {
-                            if (submenu) submenu.classList.remove('hidden');
-                            if (arrowIcon) arrowIcon.classList.add('rotate-90');
+                        if (arrowIcon) arrowIcon.classList.add('rotate-90');
+                        const titleText = toggleEl.querySelector('.menu-text')?.textContent?.trim() || 'Submenu';
+                        updateLastSubmenu(titleText, submenu);
+                        if (document.body.classList.contains('menu-open')) {
+                            setSubmenuVisible(true);
                         } else {
-                            if (submenu) submenu.classList.add('hidden');
-                            if (arrowIcon) arrowIcon.classList.remove('rotate-90');
+                            setSubmenuVisible(false);
                         }
                     } else {
-                        if (submenu) submenu.classList.add('hidden');
                         if (arrowIcon) arrowIcon.classList.remove('rotate-90');
                         if (toggleEl) toggleEl.classList.remove('active');
                     }
@@ -966,53 +1074,65 @@
             };
 
             toggleConfigs.forEach(({ id, submenuId }) => setupToggle(id, submenuId));
-
-            let initialCollapsed = false;
-            try {
-                initialCollapsed = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
-            } catch (error) {
-                initialCollapsed = false;
-            }
-
-            applySidebarCollapsedState(initialCollapsed, { persist: false });
+            setMenuOpen(false);
             activateSidebarItem(currentPath);
 
-            if (collapseButton) {
-                collapseButton.addEventListener('click', () => {
-                    const collapsed = document.body.classList.contains('sidebar-collapsed');
-                    applySidebarCollapsedState(!collapsed);
-                    activateSidebarItem(currentPath);
-                });
-            }
-
-            if (mobileToggle) {
-                mobileToggle.addEventListener('click', () => {
-                    const isOpen = document.body.classList.contains('sidebar-mobile-open');
-                    setMobileSidebarOpen(!isOpen);
+            if (menuToggle) {
+                menuToggle.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    const isOpen = document.body.classList.contains('menu-open');
+                    setMenuOpen(!isOpen);
                 });
             }
 
             if (sidebarBackdrop) {
                 sidebarBackdrop.addEventListener('click', () => {
-                    setMobileSidebarOpen(false);
+                    setMenuOpen(false);
                 });
             }
+
+            document.addEventListener('click', (event) => {
+                if (!menuPanel || !menuToggle) return;
+                if (menuPanel.contains(event.target) || menuToggle.contains(event.target)) return;
+                if (submenuPanel && submenuPanel.contains(event.target)) return;
+                if (subsubmenuPanel && subsubmenuPanel.contains(event.target)) return;
+                setMenuOpen(false);
+            });
 
             sidebarItems.forEach((item) => {
                 if (item.tagName === 'A') {
                     item.addEventListener('click', () => {
-                        if (isMobileViewport()) {
-                            setMobileSidebarOpen(false);
-                        }
+                        setMenuOpen(false);
                     });
                 }
             });
 
-            window.addEventListener('resize', () => {
-                if (!isMobileViewport()) {
-                    setMobileSidebarOpen(false);
-                }
-            });
+            if (submenuPanel) {
+                submenuPanel.addEventListener('click', (event) => {
+                    const linkEl = event.target.closest('a.sidebar-nav-item');
+                    if (linkEl) {
+                        setMenuOpen(false);
+                        return;
+                    }
+                    const toggleEl = event.target.closest('.submenu-nested-toggle');
+                    if (!toggleEl) return;
+                    const sourceId = toggleEl.getAttribute('data-submenu-source');
+                    const source = sourceId ? document.getElementById(sourceId) : null;
+                    const titleText = toggleEl.querySelector('.menu-text')?.textContent?.trim() || 'Submenu';
+                    if (!source) return;
+                    setSubsubmenuPanel(titleText, source);
+                    setSubsubmenuVisible(true);
+                });
+            }
+
+            if (subsubmenuPanel) {
+                subsubmenuPanel.addEventListener('click', (event) => {
+                    const linkEl = event.target.closest('a.sidebar-nav-item');
+                    if (linkEl) {
+                        setMenuOpen(false);
+                    }
+                });
+            }
 
             const tables = document.querySelectorAll('table');
             tables.forEach((table) => {

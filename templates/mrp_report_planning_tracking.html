@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    .report-card {
+        background: #fff;
+        border-radius: 0.75rem;
+        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+        padding: 1.25rem;
+    }
+    .report-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 12px;
+    }
+    .report-table th,
+    .report-table td {
+        border: 1px solid #e2e8f0;
+        padding: 8px;
+        vertical-align: middle;
+    }
+    .report-table th {
+        background: #f8fafc;
+        font-weight: 600;
+        text-align: left;
+    }
+    .col-grupo { width: 10%; }
+    .col-foto { width: 8%; text-align: center; }
+    .col-ordem { width: 8%; }
+    .col-barcode { width: 14%; text-align: center; }
+    .col-produto { width: 32%; }
+    .col-qtde { width: 6%; text-align: center; }
+
+    .barcode-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+    }
+    .barcode-cell svg {
+        max-width: 100%;
+        height: 35px;
+    }
+
+    .photo-cell {
+        width: 50px;
+        height: 50px;
+        margin: 0 auto;
+        border-radius: 4px;
+        overflow: hidden;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .photo-cell img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    .photo-placeholder {
+        font-size: 10px;
+        color: #94a3b8;
+    }
+
+    .header-info {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d4a6f 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .header-info h2 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.1rem;
+    }
+    .header-info .op-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    .operacao-box {
+        background: #fff;
+        color: #1e3a5f;
+        padding: 0.5rem 1rem;
+        border-radius: 0.25rem;
+        display: inline-block;
+        font-weight: 600;
+        margin-top: 0.5rem;
+    }
+
+    @media print {
+        body, html {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+        }
+        .sidebar,
+        .main-header,
+        .flash-message,
+        .no-print {
+            display: none !important;
+        }
+        .main-content {
+            margin: 0 !important;
+            padding: 0.2in !important;
+            background: #fff !important;
+        }
+        .report-card {
+            box-shadow: none;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block title %}Acompanhamento de Planilhamento{% endblock %}
+{% block page_title %}Acompanhamento de Planilhamento{% endblock %}
+
+{% block header_action %}
+<a href="{{ url_for('mrp_reports') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+    <i class="fas fa-arrow-left mr-2"></i> Voltar
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="report-card mb-6 no-print">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">Filtros</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+            <label for="lote" class="form-label text-sm font-medium">OP (Lote de Produção)</label>
+            <select id="lote" name="lote" class="form-input w-full rounded-lg border-gray-300">
+                <option value="">Selecione a OP</option>
+                {% for lote in lotes_producao %}
+                <option value="{{ lote.codigo }}" data-descricao="{{ lote.descricao }}" data-data="{{ lote.data.strftime('%d/%m/%Y') if lote.data else '' }}">
+                    {{ lote.descricao or lote.codigo }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="operacao" class="form-label text-sm font-medium">Operação</label>
+            <select id="operacao" name="operacao" class="form-input w-full rounded-lg border-gray-300">
+                <option value="">Selecione a Operação</option>
+                {% for op in operacoes %}
+                <option value="{{ op.codigo }}" data-descricao="{{ op.descricao }}">
+                    {{ op.descricao }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="flex items-end gap-2">
+            <button type="button" onclick="generateReport()" class="btn-primary px-4 py-2 rounded-lg">
+                <i class="fas fa-search mr-2"></i> Pré-visualizar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Área de Informações do Relatório (aparece após gerar) -->
+<div id="reportInfo" class="report-card mb-6" style="display: none;">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="header-info flex-grow">
+            <h2>Produção - Acompanhamento de Saídas</h2>
+            <div class="op-label" id="opLabel"></div>
+            <div class="operacao-box">
+                <span>Operação: </span><span id="operacaoLabel"></span>
+                <span class="ml-4">Início: __________</span>
+                <span class="ml-4">Fim: __________</span>
+            </div>
+        </div>
+        <div class="no-print flex gap-2">
+            <button type="button" onclick="exportPDF()" class="btn-secondary px-4 py-2 rounded-lg">
+                <i class="fas fa-file-pdf mr-2"></i> Exportar PDF
+            </button>
+            <button type="button" onclick="window.print()" class="btn-secondary px-4 py-2 rounded-lg">
+                <i class="fas fa-print mr-2"></i> Imprimir
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="report-card">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3 no-print">Pré-visualização</h2>
+    <div id="loadingIndicator" style="display: none;" class="text-center py-8">
+        <i class="fas fa-spinner fa-spin text-3xl text-blue-600"></i>
+        <p class="mt-2 text-gray-600">Carregando dados...</p>
+    </div>
+    <div id="reportContent">
+        <p class="text-sm text-gray-500">Nenhum dado para exibir. Selecione os filtros e clique em pré-visualizar.</p>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style="display: none;">
+    <div class="bg-white rounded-lg p-6 text-center">
+        <i class="fas fa-spinner fa-spin text-3xl text-blue-600 mb-3"></i>
+        <p class="text-gray-700">Gerando PDF...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script>
+let reportData = null;
+
+async function generateReport() {
+    const loteSelect = document.getElementById('lote');
+    const operacaoSelect = document.getElementById('operacao');
+
+    const loteCodigo = loteSelect.value;
+    const operacaoCodigo = operacaoSelect.value;
+
+    if (!loteCodigo) {
+        alert('Por favor, selecione uma OP');
+        return;
+    }
+
+    if (!operacaoCodigo) {
+        alert('Por favor, selecione uma Operação');
+        return;
+    }
+
+    // Mostrar loading
+    document.getElementById('loadingIndicator').style.display = 'block';
+    document.getElementById('reportContent').innerHTML = '';
+    document.getElementById('reportInfo').style.display = 'none';
+
+    try {
+        const response = await fetch('{{ url_for("mrp_report_planning_tracking_generate") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                lote_codigo: loteCodigo,
+                operacao_codigo: operacaoCodigo
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Erro ao gerar relatório');
+        }
+
+        reportData = data;
+        renderReport(data);
+
+    } catch (error) {
+        console.error('Erro:', error);
+        document.getElementById('reportContent').innerHTML = `
+            <div class="text-center py-8 text-red-600">
+                <i class="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                <p>${error.message}</p>
+            </div>
+        `;
+    } finally {
+        document.getElementById('loadingIndicator').style.display = 'none';
+    }
+}
+
+function renderReport(data) {
+    // Atualizar informações do cabeçalho
+    document.getElementById('opLabel').textContent = `${data.lote.codigo} - ${data.lote.descricao}`;
+    document.getElementById('operacaoLabel').textContent = data.operacao.descricao;
+    document.getElementById('reportInfo').style.display = 'block';
+
+    if (!data.items || data.items.length === 0) {
+        document.getElementById('reportContent').innerHTML = `
+            <p class="text-sm text-gray-500">Nenhum item encontrado para os filtros selecionados.</p>
+        `;
+        return;
+    }
+
+    // Montar tabela
+    let html = `
+        <div class="overflow-x-auto">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th class="col-grupo">Grupo</th>
+                        <th class="col-foto">Foto</th>
+                        <th class="col-ordem">Ordem</th>
+                        <th class="col-barcode">Cod Barras</th>
+                        <th class="col-produto">Produto</th>
+                        <th class="col-qtde">Qtd</th>
+                        <th class="col-barcode">Cod Barras</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    data.items.forEach((item, index) => {
+        const barcodeId = `barcode_${index}`;
+        const barcodeValue = item.codigo_barras;
+
+        // Alternar posição do código de barras
+        const barcodeLeft = index % 2 === 0;
+
+        // Montar célula da foto
+        let fotoHtml = '<div class="photo-cell"><span class="photo-placeholder">-</span></div>';
+        if (item.foto_url) {
+            fotoHtml = `<div class="photo-cell"><img src="${item.foto_url}" alt="Foto" onerror="this.parentElement.innerHTML='<span class=\\'photo-placeholder\\'>-</span>'"></div>`;
+        }
+
+        html += `
+            <tr>
+                <td>${item.grupo || ''}</td>
+                <td>${fotoHtml}</td>
+                <td>${item.ordem || ''}</td>
+                <td class="barcode-cell">
+                    ${barcodeLeft ? `<svg id="${barcodeId}_left"></svg>` : ''}
+                </td>
+                <td>${item.produto || ''}</td>
+                <td class="col-qtde">${item.quantidade || 0}</td>
+                <td class="barcode-cell">
+                    ${!barcodeLeft ? `<svg id="${barcodeId}_right"></svg>` : ''}
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    document.getElementById('reportContent').innerHTML = html;
+
+    // Gerar códigos de barras
+    data.items.forEach((item, index) => {
+        const barcodeId = index % 2 === 0 ? `barcode_${index}_left` : `barcode_${index}_right`;
+        const barcodeElement = document.getElementById(barcodeId);
+
+        if (barcodeElement && item.codigo_barras) {
+            try {
+                JsBarcode(`#${barcodeId}`, item.codigo_barras, {
+                    format: "CODE128",
+                    width: 1.5,
+                    height: 35,
+                    displayValue: true,
+                    fontSize: 10,
+                    margin: 2
+                });
+            } catch (e) {
+                console.error('Erro ao gerar código de barras:', e);
+            }
+        }
+    });
+}
+
+async function exportPDF() {
+    if (!reportData) {
+        alert('Por favor, gere o relatório primeiro');
+        return;
+    }
+
+    document.getElementById('loadingOverlay').style.display = 'flex';
+
+    try {
+        const response = await fetch('{{ url_for("mrp_report_planning_tracking_export_pdf") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(reportData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erro ao exportar PDF');
+        }
+
+        // Download do arquivo
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Planilhamento_${reportData.lote.codigo}_${new Date().toISOString().split('T')[0]}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao exportar PDF: ' + error.message);
+    } finally {
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

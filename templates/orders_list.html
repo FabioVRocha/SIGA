@@ -143,6 +143,25 @@
     .status-legend-color.blue {
         background-color: #2563eb;
     }
+    .status-legend-filter .status-legend-item {
+        border: 1px solid transparent;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+        transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .status-legend-filter .status-legend-item:hover {
+        background-color: rgba(79, 131, 204, 0.12);
+    }
+    .status-legend-filter .status-legend-item.is-active {
+        border-color: var(--clr-light-blue);
+        box-shadow: 0 0 0 2px rgba(79, 131, 204, 0.2);
+        background-color: var(--clr-white);
+    }
+    .status-legend-filter .status-legend-item:focus-visible {
+        outline: 2px solid var(--clr-light-blue);
+        outline-offset: 2px;
+    }
     .loading-overlay {
         position: fixed;
         inset: 0;
@@ -373,7 +392,7 @@
                         {% set row_bg = 'var(--clr-white)' if loop.index is odd else 'var(--clr-light-gray)' %}
                         {% set kpi_status = order.kpi_status %}
                         {% set pedido_status_class = 'status-kpi-blue' if kpi_status == 3 else ('status-kpi-green' if kpi_status == 2 else ('status-kpi-yellow' if kpi_status == 1 else 'status-kpi-red')) %}
-                        <tr class="hover-row text-sm text-dark-blue" data-order-row="true" style="background-color: {{ row_bg }};">
+                        <tr class="hover-row text-sm text-dark-blue" data-order-row="true" data-kpi-status="{{ kpi_status }}" style="background-color: {{ row_bg }};">
                             <td class="py-2 px-4 whitespace-nowrap font-semibold {{ pedido_status_class }}" data-column="filter_pedido">{{ order.pedido or 'N/A' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap" data-column="filter_seq_lote">{{ order.lcaseque or 'N/A' }}</td>
                             <td class="py-2 px-4 whitespace-nowrap" data-column="filter_cliente_codigo">{{ order.cliente_codigo or 'N/A' }}</td>
@@ -433,23 +452,23 @@
                 Carregado: <span>{{ total_carregado | format_decimal_br }}</span> <span>({{ percentual_carregado | format_decimal_br(2) }}%)</span>
             </div>
         </div>
-        <div class="status-legend">
-            <div class="status-legend-item">
+        <div class="status-legend status-legend-filter" aria-label="Legenda de status do pedido">
+            <button type="button" class="status-legend-item" data-kpi-status="0" aria-pressed="false" title="Filtrar por nada separado">
                 <span class="status-legend-color red"></span>
                 <span>Vermelho = Nada Separado</span>
-            </div>
-            <div class="status-legend-item">
+            </button>
+            <button type="button" class="status-legend-item" data-kpi-status="1" aria-pressed="false" title="Filtrar por parcialmente separado">
                 <span class="status-legend-color yellow"></span>
                 <span>Amarelo = Parcialmente Separado</span>
-            </div>
-            <div class="status-legend-item">
+            </button>
+            <button type="button" class="status-legend-item" data-kpi-status="2" aria-pressed="false" title="Filtrar por totalmente separado">
                 <span class="status-legend-color green"></span>
                 <span>Verde = Totalmente Separado</span>
-            </div>
-            <div class="status-legend-item">
+            </button>
+            <button type="button" class="status-legend-item" data-kpi-status="3" aria-pressed="false" title="Filtrar por totalmente carregado">
                 <span class="status-legend-color blue"></span>
                 <span>Azul = Totalmente Carregado</span>
-            </div>
+            </button>
         </div>
         {% else %}
         <div class="text-center py-12 px-4 text-sm text-slate-muted">
@@ -479,16 +498,19 @@
         </div>
         <div id="orderDetailError" class="py-6 text-center text-sm text-red-600 hidden"></div>
         <div id="orderDetailContent" class="space-y-4 hidden">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-dark-blue">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-dark-blue">
                 <div><span class="font-semibold">Pedido:</span> <span id="orderDetailPedido">--</span></div>
+                <div><span class="font-semibold">Data do Pedido:</span> <span id="orderDetailDataPedido">--</span></div>
+                <div class="hidden md:block"></div>
                 <div><span class="font-semibold">Cliente:</span> <span id="orderDetailCliente">--</span></div>
                 <div><span class="font-semibold">Cidade:</span> <span id="orderDetailCidade">--</span></div>
-                <div><span class="font-semibold">UF:</span> <span id="orderDetailUF">--</span></div>
-                <div><span class="font-semibold">Data do Pedido:</span> <span id="orderDetailDataPedido">--</span></div>
+                <div><span class="font-semibold">Estado:</span> <span id="orderDetailUF">--</span></div>
                 <div><span class="font-semibold">Status:</span> <span id="orderDetailStatus">--</span></div>
                 <div><span class="font-semibold">Situação:</span> <span id="orderDetailSituacao">--</span></div>
-                <div class="md:col-span-2"><span class="font-semibold">Lote de Produção:</span> <span id="orderDetailLoteProducao">--</span></div>
-                <div class="md:col-span-2"><span class="font-semibold">Lote de Carga:</span> <span id="orderDetailLoteCarga">--</span></div>
+                <div class="hidden md:block"></div>
+                <div><span class="font-semibold">Lote de Produção:</span> <span id="orderDetailLoteProducao">--</span></div>
+                <div><span class="font-semibold">Lote de Carga:</span> <span id="orderDetailLoteCarga">--</span></div>
+                <div class="hidden md:block"></div>
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full bg-white rounded-xl overflow-hidden">
@@ -777,6 +799,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const tableBody = columnFilterForm ? columnFilterForm.querySelector('tbody') : null;
     const orderRows = tableBody ? Array.from(tableBody.querySelectorAll('tr[data-order-row="true"]')) : [];
     const noLocalResultsRow = document.getElementById('noLocalResultsRow');
+    const statusLegend = document.querySelector('.status-legend-filter');
+    const statusLegendItems = statusLegend ? Array.from(statusLegend.querySelectorAll('[data-kpi-status]')) : [];
+    let activeStatusFilter = null;
     const loadingOverlay = document.getElementById('loadingOverlay');
     const loadingProgressBar = document.getElementById('loadingProgressBar');
     const numericFilterNames = new Set([
@@ -1182,8 +1207,19 @@ document.addEventListener('DOMContentLoaded', () => {
         return normalized;
     };
 
+    const updateStatusLegendState = () => {
+        if (statusLegendItems.length === 0) {
+            return;
+        }
+        statusLegendItems.forEach((legendItem) => {
+            const isActive = legendItem.dataset.kpiStatus === activeStatusFilter;
+            legendItem.classList.toggle('is-active', isActive);
+            legendItem.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    };
+
     const applyLocalTableFilters = () => {
-        if (orderRows.length === 0 || columnFilterInputs.length === 0) {
+        if (orderRows.length === 0) {
             return;
         }
 
@@ -1197,7 +1233,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        if (Object.keys(activeFilters).length === 0) {
+        const hasColumnFilters = Object.keys(activeFilters).length > 0;
+        const hasStatusFilter = activeStatusFilter !== null;
+
+        if (!hasColumnFilters && !hasStatusFilter) {
             orderRows.forEach((row) => row.classList.remove('hidden'));
             if (noLocalResultsRow) {
                 noLocalResultsRow.classList.add('hidden');
@@ -1208,7 +1247,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let matchCount = 0;
 
         orderRows.forEach((row) => {
-            const rowMatches = Object.entries(activeFilters).every(([filterName, filterValue]) => {
+            const columnMatches = !hasColumnFilters || Object.entries(activeFilters).every(([filterName, filterValue]) => {
                 const cell = row.querySelector(`[data-column="${filterName}"]`);
                 const cellValue = normalizeFilterValue(
                     cell ? cell.textContent : '',
@@ -1216,8 +1255,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
                 return cellValue.includes(filterValue);
             });
+            const statusMatches = !hasStatusFilter || row.dataset.kpiStatus === activeStatusFilter;
 
-            if (rowMatches) {
+            if (columnMatches && statusMatches) {
                 row.classList.remove('hidden');
                 matchCount += 1;
             } else {
@@ -1239,6 +1279,17 @@ document.addEventListener('DOMContentLoaded', () => {
             input.addEventListener('input', applyLocalTableFilters);
         });
         applyLocalTableFilters();
+    }
+
+    if (statusLegendItems.length > 0) {
+        statusLegendItems.forEach((item) => {
+            item.addEventListener('click', () => {
+                const nextStatus = item.dataset.kpiStatus || null;
+                activeStatusFilter = activeStatusFilter === nextStatus ? null : nextStatus;
+                updateStatusLegendState();
+                applyLocalTableFilters();
+            });
+        });
     }
 
     if (filterForm && columnFilterInputs.length > 0 && modalColumnFilterInputs.length > 0) {
@@ -1264,6 +1315,8 @@ document.addEventListener('DOMContentLoaded', () => {
             modalColumnFilterInputs.forEach((hidden) => {
                 hidden.value = '';
             });
+            activeStatusFilter = null;
+            updateStatusLegendState();
             applyLocalTableFilters();
             if (columnFilterForm) {
                 showLoadingOverlay();

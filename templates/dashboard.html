@@ -18,11 +18,33 @@
 
     <div class="dashboard-card">
         <div class="dashboard-card-header">
-            <i class="fas fa-file-invoice-dollar text-icon-green"></i>
-            <span>Notas Fiscais Emitidas</span>
+            <i class="fas fa-industry text-icon-green"></i>
+            <a href="{{ url_for('op_dashboard') }}" class="hover:underline">Ordem de Produção</a>
         </div>
-        <p class="text-3xl font-bold text-gray-900">520</p>
-        <p class="text-sm text-gray-600 mt-2">Total de notas fiscais faturadas neste mês.</p>
+        {% if op_summary %}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="text-center">
+                <p class="text-sm font-semibold text-gray-700">GARLAND</p>
+                <p class="text-2xl font-bold text-gray-900">{{ op_summary.garland_data.dias }}</p>
+                <p class="text-xs text-gray-500">{{ op_summary.garland_data.pecas }} peças</p>
+                <p class="text-xs text-gray-500">Ped: {{ op_summary.garland_data.pedidos }} | Ass: {{ op_summary.garland_data.assistencias }}</p>
+            </div>
+            <div class="text-center">
+                <p class="text-sm font-semibold text-gray-700">MÓVEIS</p>
+                <p class="text-2xl font-bold text-gray-900">{{ op_summary.moveis_data.dias }}</p>
+                <p class="text-xs text-gray-500">{{ op_summary.moveis_data.pecas }} peças</p>
+                <p class="text-xs text-gray-500">Ped: {{ op_summary.moveis_data.pedidos }} | Ass: {{ op_summary.moveis_data.assistencias }}</p>
+            </div>
+            <div class="text-center">
+                <p class="text-sm font-semibold text-gray-700">SOLARE</p>
+                <p class="text-2xl font-bold text-gray-900">{{ op_summary.solare_data.dias }}</p>
+                <p class="text-xs text-gray-500">{{ op_summary.solare_data.pecas }} peças</p>
+                <p class="text-xs text-gray-500">Ped: {{ op_summary.solare_data.pedidos }} | Ass: {{ op_summary.solare_data.assistencias }}</p>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-600">Dados do Dashboard OP indisponíveis no momento.</p>
+        {% endif %}
     </div>
 
     <div class="dashboard-card">

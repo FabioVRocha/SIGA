@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Controle de Acesso{% endblock %}
+
+{% block page_title %}Controle de Acesso{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex items-center gap-4 mb-6">
+            <div class="w-16 h-16 rounded-full overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-500">
+                {% if user.photo_filename %}
+                <img src="{{ url_for('static', filename=user.photo_filename) }}" alt="Foto de {{ user.username }}" class="w-full h-full object-cover">
+                {% else %}
+                <span class="text-xl font-semibold uppercase">{{ user.username[:1] }}</span>
+                {% endif %}
+            </div>
+            <div>
+                <p class="text-lg font-semibold text-gray-900">{{ user.username }}</p>
+                <p class="text-sm text-gray-500">ID {{ user.id }}</p>
+            </div>
+        </div>
+
+        <form class="space-y-6" method="POST" action="{{ url_for('user_access_control', user_id=user.id) }}">
+            {% for section in access_pages %}
+            <div class="border border-gray-200 rounded-lg">
+                <div class="px-4 py-3 bg-gray-100 rounded-t-lg border-b border-gray-200">
+                    <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">{{ section.category }}</h3>
+                </div>
+                <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for item in section["items"] %}
+                    <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 hover:border-gray-300 transition">
+                        <input type="checkbox" name="access_pages" value="{{ item.endpoint }}" class="h-4 w-4 text-blue-600 border-gray-300 rounded" {% if item.endpoint in allowed_endpoints %}checked{% endif %}>
+                        <span class="text-sm text-gray-800">{{ item.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            {% if (user.username or '').strip().upper() == 'FABIO' %}
+            <div class="rounded-md bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">
+                O usuário FABIO sempre terá acesso a todas as telas.
+            </div>
+            {% endif %}
+            <div class="flex justify-end">
+                <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition">
+                    <i class="fas fa-save"></i>
+                    <span>Salvar permissões</span>
+                </button>
+            </div>
+        </form>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+            <a href="{{ url_for('users_list') }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-semibold transition">
+                <i class="fas fa-arrow-left"></i>
+                <span>Voltar para lista</span>
+            </a>
+            <a href="{{ url_for('user_detail', user_id=user.id) }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold transition">
+                <i class="fas fa-user"></i>
+                <span>Detalhes do usuário</span>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

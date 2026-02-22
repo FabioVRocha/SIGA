@@ -26,6 +26,7 @@
             <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="xml">XML</button>
             <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="metas">Metas &amp; Prêmios</button>
             <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="contas-receber">Contas a Receber</button>
+            <button type="button" class="tab-button px-4 py-2 rounded-lg transition focus:outline-none focus:ring" data-tab="mrp">MRP</button>
         </nav>
     </div>
     <form action="{{ url_for('gerencial_parameters') }}" method="POST" class="space-y-6">
@@ -234,6 +235,40 @@
                     </button>
                     <span class="text-xs text-gray-500">Essa acao pode demorar dependendo do volume de PDFs.</span>
                 </div>
+            </div>
+        </div>
+
+        <div class="tab-panel hidden space-y-6" data-tab-panel="mrp">
+            <div class="form-group">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">MRP - Configurações</h2>
+                <label for="mrp_component_photos_path" class="form-label text-lg font-medium">Fotos de Componentes:</label>
+                <input
+                    type="text"
+                    id="mrp_component_photos_path"
+                    name="mrp_component_photos_path"
+                    class="form-input mt-2"
+                    placeholder="Ex.: H:\COMPONENTES\IMAGENS COMPONENTES"
+                    value="{{ mrp_component_photos_path or '' }}"
+                >
+                <p class="text-sm text-gray-500 mt-2">
+                    Informe o caminho completo no servidor para a pasta onde estão as fotos dos componentes.
+                    As fotos devem estar nomeadas pelo código do produto (ex.: 92102100.jpg).
+                </p>
+            </div>
+            <div class="form-group mt-4">
+                <label for="mrp_prep_pintura_photos_path" class="form-label text-lg font-medium">Fotos Preparação e Pintura:</label>
+                <input
+                    type="text"
+                    id="mrp_prep_pintura_photos_path"
+                    name="mrp_prep_pintura_photos_path"
+                    class="form-input mt-2"
+                    placeholder="Ex.: H:\PREPARACAO_PINTURA\FOTOS"
+                    value="{{ mrp_prep_pintura_photos_path or '' }}"
+                >
+                <p class="text-sm text-gray-500 mt-2">
+                    Informe o caminho completo no servidor para a pasta onde estão as fotos de Preparação e Pintura.
+                    O sistema irá verificar se o nome do arquivo contém parte da descrição do produto.
+                </p>
             </div>
         </div>
 

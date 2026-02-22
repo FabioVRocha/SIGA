@@ -1,0 +1,460 @@
+{% extends "base.html" %}
+
+{% block title %}Sessões de Cálculo MRP{% endblock %}
+
+{% block page_title %}Sessões de Cálculo MRP{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow-md">
+    <!-- Botão Incluir Nova Sessão -->
+    <div class="flex justify-between items-center mb-6">
+        <p class="text-gray-600">Gerencie suas sessões de cálculo MRP. Cada sessão salva os resultados para consulta posterior.</p>
+        <button onclick="abrirModalNovaSessao()" class="btn-add flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+            <i class="fas fa-plus mr-2"></i> Incluir Nova Sessão
+        </button>
+    </div>
+
+    <!-- Tabela de Sessões -->
+    {% if sessoes %}
+    <div class="overflow-x-auto rounded-lg shadow-md">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-800 text-white" style="background-color: var(--clr-sidebar-bg);">
+                <tr>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider rounded-tl-lg">ID</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Descrição</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Usuário</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Data Criação</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Última Alteração</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
+                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider rounded-tr-lg">Ações</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for sessao in sessoes %}
+                <tr class="hover:bg-blue-50 transition-colors" id="sessao-row-{{ sessao.id }}">
+                    <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ sessao.id }}</td>
+                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <a href="{{ url_for('mrp_sessao_detalhe', sessao_id=sessao.id) }}" class="text-blue-600 hover:text-blue-800 hover:underline font-medium">
+                            {{ sessao.descricao }}
+                        </a>
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{{ sessao.usuario }}</td>
+                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {{ sessao.data_criacao.strftime('%d/%m/%Y %H:%M') if sessao.data_criacao else '-' }}
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {{ sessao.data_atualizacao.strftime('%d/%m/%Y %H:%M') if sessao.data_atualizacao else (sessao.data_calculo.strftime('%d/%m/%Y %H:%M') if sessao.data_calculo else '-') }}
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap text-sm">
+                        {% if sessao.status == 'pendente' %}
+                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">Pendente</span>
+                        {% elif sessao.status == 'calculado' %}
+                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Calculado</span>
+                        {% elif sessao.status == 'editado' %}
+                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">Editado</span>
+                        {% elif sessao.status == 'exportado' %}
+                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">Exportado</span>
+                        {% else %}
+                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">{{ sessao.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap text-center text-sm">
+                        <div class="flex items-center justify-center gap-3">
+                            <a href="{{ url_for('mrp_sessao_detalhe', sessao_id=sessao.id) }}"
+                               class="text-blue-600 hover:text-blue-800 transition-colors"
+                               title="Editar sessão">
+                                <i class="fas fa-edit text-lg"></i>
+                            </a>
+                            <button onclick="excluirSessao({{ sessao.id }}, '{{ sessao.descricao }}')"
+                                    class="text-red-600 hover:text-red-800 transition-colors"
+                                    title="Excluir sessão">
+                                <i class="fas fa-trash text-lg"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-12">
+        <i class="fas fa-folder-open text-6xl text-gray-300 mb-4"></i>
+        <p class="text-gray-600 text-lg mb-4">Nenhuma sessão de cálculo MRP encontrada.</p>
+        <button onclick="abrirModalNovaSessao()" class="btn-add inline-flex items-center px-6 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+            <i class="fas fa-plus mr-2"></i> Criar Primeira Sessão
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal Nova Sessão -->
+<div id="modalNovaSessao" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 overflow-y-auto">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 my-8">
+        <div class="flex items-center justify-between px-6 py-4 border-b">
+            <h3 class="text-lg font-semibold text-gray-800">Nova Sessão de Cálculo MRP</h3>
+            <button onclick="fecharModalNovaSessao()" class="text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="px-6 py-4">
+            <form id="formNovaSessao" onsubmit="criarSessao(event)">
+                <!-- Descrição da Sessão -->
+                <div class="mb-6">
+                    <label for="descricaoSessao" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-tag mr-1"></i> Descrição da OP/Sessão <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text"
+                           id="descricaoSessao"
+                           name="descricao"
+                           required
+                           maxlength="500"
+                           placeholder="Ex: OP 001 - PETRA Janeiro 2026"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                    <p class="text-xs text-gray-500 mt-1">Informe uma descrição para identificar esta sessão de cálculo.</p>
+                </div>
+
+                <!-- Filtros de Cálculo -->
+                <div class="mb-6">
+                    <h4 class="text-sm font-semibold text-gray-800 mb-3 flex items-center">
+                        <i class="fas fa-filter mr-2 text-blue-600"></i> Filtros de Cálculo
+                    </h4>
+                    <p class="text-xs text-gray-500 mb-4">Selecione os filtros que serão utilizados no cálculo MRP. Segure Ctrl para selecionar múltiplos itens.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Pedidos de Venda -->
+                        <div class="border border-gray-200 rounded-lg p-3">
+                            <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-file-contract mr-1 text-blue-500"></i> Pedidos de Venda
+                                <span class="text-gray-400 font-normal ml-1" id="counterPedidosModal">0</span>
+                            </label>
+                            <div class="flex gap-1 mb-2">
+                                <button type="button" onclick="selectAllModal('filterPedidosModal')" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">
+                                    <i class="fas fa-check-double"></i> Todos
+                                </button>
+                                <button type="button" onclick="deselectAllModal('filterPedidosModal')" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">
+                                    <i class="fas fa-times"></i> Limpar
+                                </button>
+                            </div>
+                            <select id="filterPedidosModal" multiple size="5" class="w-full text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500">
+                                <!-- Carregado via JavaScript -->
+                            </select>
+                        </div>
+
+                        <!-- Lotes de Carga -->
+                        <div class="border border-gray-200 rounded-lg p-3">
+                            <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-dolly mr-1 text-green-500"></i> Lotes de Carga
+                                <span class="text-gray-400 font-normal ml-1" id="counterLotesCargaModal">0</span>
+                            </label>
+                            <div class="flex gap-1 mb-2">
+                                <button type="button" onclick="selectAllModal('filterLotesCargaModal')" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">
+                                    <i class="fas fa-check-double"></i> Todos
+                                </button>
+                                <button type="button" onclick="deselectAllModal('filterLotesCargaModal')" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">
+                                    <i class="fas fa-times"></i> Limpar
+                                </button>
+                            </div>
+                            <select id="filterLotesCargaModal" multiple size="5" class="w-full text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500">
+                                <!-- Carregado via JavaScript -->
+                            </select>
+                        </div>
+
+                        <!-- Lotes de Produção -->
+                        <div class="border border-gray-200 rounded-lg p-3">
+                            <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-industry mr-1 text-orange-500"></i> Lotes de Produção
+                                <span class="text-gray-400 font-normal ml-1" id="counterLotesProducaoModal">0</span>
+                            </label>
+                            <div class="flex gap-1 mb-2">
+                                <button type="button" onclick="selectAllModal('filterLotesProducaoModal')" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">
+                                    <i class="fas fa-check-double"></i> Todos
+                                </button>
+                                <button type="button" onclick="deselectAllModal('filterLotesProducaoModal')" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">
+                                    <i class="fas fa-times"></i> Limpar
+                                </button>
+                            </div>
+                            <select id="filterLotesProducaoModal" multiple size="5" class="w-full text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500">
+                                <!-- Carregado via JavaScript -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t">
+                    <button type="button"
+                            onclick="fecharModalNovaSessao()"
+                            class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit"
+                            id="btnCriarSessao"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center">
+                        <i class="fas fa-check mr-2"></i> Confirmar e Iniciar Cálculo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div id="modalConfirmDelete" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div class="flex items-center justify-between px-6 py-4 border-b">
+            <h3 class="text-lg font-semibold text-gray-800">Confirmar Exclusão</h3>
+            <button onclick="fecharModalExclusao()" class="text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="px-6 py-4">
+            <p class="text-gray-600 mb-4">
+                Tem certeza que deseja excluir a sessão <strong id="sessaoDescricaoDelete"></strong>?
+            </p>
+            <p class="text-sm text-red-600 mb-4">
+                <i class="fas fa-exclamation-triangle mr-1"></i>
+                Esta ação não pode ser desfeita. Todos os dados do cálculo serão perdidos.
+            </p>
+            <div class="flex justify-end gap-3">
+                <button type="button"
+                        onclick="fecharModalExclusao()"
+                        class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors">
+                    Cancelar
+                </button>
+                <button type="button"
+                        id="btnConfirmarExclusao"
+                        onclick="confirmarExclusao()"
+                        class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center">
+                    <i class="fas fa-trash mr-2"></i> Excluir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let sessaoParaExcluir = null;
+let filtrosCarregados = false;
+
+function abrirModalNovaSessao() {
+    document.getElementById('modalNovaSessao').classList.remove('hidden');
+    document.getElementById('modalNovaSessao').classList.add('flex');
+    document.getElementById('descricaoSessao').value = '';
+    document.getElementById('descricaoSessao').focus();
+
+    // Carregar filtros se ainda não foram carregados
+    if (!filtrosCarregados) {
+        carregarFiltros();
+    }
+}
+
+function fecharModalNovaSessao() {
+    document.getElementById('modalNovaSessao').classList.add('hidden');
+    document.getElementById('modalNovaSessao').classList.remove('flex');
+}
+
+async function carregarFiltros() {
+    try {
+        const response = await fetch('/mrp/get_filters');
+        const data = await response.json();
+
+        // Preencher Pedidos
+        const selectPedidos = document.getElementById('filterPedidosModal');
+        selectPedidos.innerHTML = '';
+        data.pedidos.forEach(pedido => {
+            const option = document.createElement('option');
+            option.value = pedido.codigo;
+            option.textContent = `${pedido.codigo} - ${pedido.cliente || 'S/N'}`;
+            selectPedidos.appendChild(option);
+        });
+
+        // Preencher Lotes de Carga
+        const selectLotesCarga = document.getElementById('filterLotesCargaModal');
+        selectLotesCarga.innerHTML = '';
+        data.lotes_carga.forEach(lote => {
+            const option = document.createElement('option');
+            option.value = lote.codigo;
+            option.textContent = `${lote.codigo} - ${lote.descricao || 'S/N'}`;
+            selectLotesCarga.appendChild(option);
+        });
+
+        // Preencher Lotes de Produção
+        const selectLotesProducao = document.getElementById('filterLotesProducaoModal');
+        selectLotesProducao.innerHTML = '';
+        data.lotes_producao.forEach(lote => {
+            const option = document.createElement('option');
+            option.value = lote.codigo;
+            option.textContent = `${lote.codigo} - ${lote.descricao || 'S/N'}`;
+            selectLotesProducao.appendChild(option);
+        });
+
+        filtrosCarregados = true;
+
+        // Adicionar listeners para contadores
+        ['filterPedidosModal', 'filterLotesCargaModal', 'filterLotesProducaoModal'].forEach(selectId => {
+            document.getElementById(selectId).addEventListener('change', function() {
+                atualizarContadorModal(selectId);
+            });
+        });
+
+    } catch (error) {
+        console.error('Erro ao carregar filtros:', error);
+        alert('Erro ao carregar filtros. Tente novamente.');
+    }
+}
+
+function selectAllModal(selectId) {
+    const select = document.getElementById(selectId);
+    for (let i = 0; i < select.options.length; i++) {
+        select.options[i].selected = true;
+    }
+    atualizarContadorModal(selectId);
+}
+
+function deselectAllModal(selectId) {
+    const select = document.getElementById(selectId);
+    for (let i = 0; i < select.options.length; i++) {
+        select.options[i].selected = false;
+    }
+    atualizarContadorModal(selectId);
+}
+
+function atualizarContadorModal(selectId) {
+    const select = document.getElementById(selectId);
+    const count = select.selectedOptions.length;
+    const counterId = selectId.replace('filter', 'counter').replace('Modal', 'Modal');
+    const counter = document.getElementById(counterId);
+    if (counter) {
+        counter.textContent = count;
+    }
+}
+
+async function criarSessao(event) {
+    event.preventDefault();
+
+    const descricao = document.getElementById('descricaoSessao').value.trim();
+    if (!descricao) {
+        alert('Por favor, informe uma descrição para a sessão.');
+        return;
+    }
+
+    // Coletar filtros selecionados
+    const pedidos = Array.from(document.getElementById('filterPedidosModal').selectedOptions).map(opt => opt.value);
+    const lotes_carga = Array.from(document.getElementById('filterLotesCargaModal').selectedOptions).map(opt => opt.value);
+    const lotes_producao = Array.from(document.getElementById('filterLotesProducaoModal').selectedOptions).map(opt => opt.value);
+
+    const btnCriar = document.getElementById('btnCriarSessao');
+    btnCriar.disabled = true;
+    btnCriar.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Criando...';
+
+    try {
+        const response = await fetch('/mrp/sessoes/nova', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                descricao: descricao,
+                filtros: {
+                    pedidos: pedidos,
+                    lotes_carga: lotes_carga,
+                    lotes_producao: lotes_producao
+                }
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Redirecionar para a tela de cálculo da nova sessão
+            window.location.href = `/mrp/sessoes/${data.sessao_id}`;
+        } else {
+            alert('Erro ao criar sessão: ' + (data.error || 'Erro desconhecido'));
+            btnCriar.disabled = false;
+            btnCriar.innerHTML = '<i class="fas fa-check mr-2"></i> Confirmar e Iniciar Cálculo';
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao criar sessão. Verifique sua conexão e tente novamente.');
+        btnCriar.disabled = false;
+        btnCriar.innerHTML = '<i class="fas fa-check mr-2"></i> Confirmar e Iniciar Cálculo';
+    }
+}
+
+function excluirSessao(sessaoId, descricao) {
+    sessaoParaExcluir = sessaoId;
+    document.getElementById('sessaoDescricaoDelete').textContent = descricao;
+    document.getElementById('modalConfirmDelete').classList.remove('hidden');
+    document.getElementById('modalConfirmDelete').classList.add('flex');
+}
+
+function fecharModalExclusao() {
+    sessaoParaExcluir = null;
+    document.getElementById('modalConfirmDelete').classList.add('hidden');
+    document.getElementById('modalConfirmDelete').classList.remove('flex');
+}
+
+async function confirmarExclusao() {
+    if (!sessaoParaExcluir) return;
+
+    const btnConfirmar = document.getElementById('btnConfirmarExclusao');
+    btnConfirmar.disabled = true;
+    btnConfirmar.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Excluindo...';
+
+    try {
+        const response = await fetch(`/mrp/sessoes/${sessaoParaExcluir}/excluir`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Remover a linha da tabela
+            const row = document.getElementById(`sessao-row-${sessaoParaExcluir}`);
+            if (row) {
+                row.remove();
+            }
+            fecharModalExclusao();
+
+            // Verificar se ainda há sessões na tabela
+            const tbody = document.querySelector('tbody');
+            if (tbody && tbody.children.length === 0) {
+                window.location.reload();
+            }
+        } else {
+            alert('Erro ao excluir sessão: ' + (data.error || 'Erro desconhecido'));
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao excluir sessão. Verifique sua conexão e tente novamente.');
+    } finally {
+        btnConfirmar.disabled = false;
+        btnConfirmar.innerHTML = '<i class="fas fa-trash mr-2"></i> Excluir';
+    }
+}
+
+// Fechar modais ao clicar fora
+document.getElementById('modalNovaSessao').addEventListener('click', function(e) {
+    if (e.target === this) {
+        fecharModalNovaSessao();
+    }
+});
+
+document.getElementById('modalConfirmDelete').addEventListener('click', function(e) {
+    if (e.target === this) {
+        fecharModalExclusao();
+    }
+});
+
+// Fechar modais com tecla ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        fecharModalNovaSessao();
+        fecharModalExclusao();
+    }
+});
+</script>
+{% endblock %}

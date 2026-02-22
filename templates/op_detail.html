@@ -1,0 +1,451 @@
+{% extends "base.html" %}
+
+{% block title %}Detalhes OP - {{ titulo }}{% endblock %}
+{% block page_title %}Detalhes OP - {{ titulo }}{% endblock %}
+
+{% block header_action %}
+<div class="flex items-center gap-4">
+    <a href="{{ url_for('op_dashboard') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left mr-2"></i>Voltar
+    </a>
+    <a href="{{ url_for('op_detail_export', tipo=tipo) }}" class="btn btn-success">
+        <i class="fas fa-file-excel mr-2"></i>Exportar Excel
+    </a>
+    <button onclick="location.reload()" class="btn btn-primary">
+        <i class="fas fa-sync-alt mr-2"></i>Atualizar
+    </button>
+</div>
+{% endblock %}
+
+{% macro format_hours(decimal_hours) %}
+{%- if decimal_hours -%}
+    {%- set hours = decimal_hours|int -%}
+    {%- set minutes = ((decimal_hours - hours) * 60)|int -%}
+    {{ "%02d:%02d"|format(hours, minutes) }}
+{%- else -%}
+    00:00
+{%- endif -%}
+{% endmacro %}
+
+{% block extra_head %}
+<style>
+    .detail-section {
+        background: white;
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .detail-section h2 {
+        color: var(--clr-dark-blue);
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .detail-section h2 i {
+        color: var(--clr-light-blue);
+    }
+
+    .detail-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .detail-table th {
+        background: var(--clr-dark-blue);
+        color: white;
+        padding: 0.75rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+
+    .detail-table td {
+        padding: 0.75rem;
+        border-bottom: 1px solid #E9ECEF;
+        font-size: 0.875rem;
+    }
+
+    .detail-table tr:hover {
+        background: #F8F9FA;
+    }
+
+    .detail-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .badge-pedido {
+        background: #E3F2FD;
+        color: #1565C0;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .badge-assistencia {
+        background: #FFF3E0;
+        color: #EF6C00;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .badge-nop {
+        background: #FFEBEE;
+        color: #C62828;
+        padding: 0.15rem 0.4rem;
+        border-radius: 0.25rem;
+        font-size: 0.65rem;
+        font-weight: 600;
+        margin-left: 0.5rem;
+    }
+
+    .detail-table tr.nop-row {
+        background: #FFF8E1;
+        opacity: 0.85;
+    }
+
+    .detail-table tr.nop-row:hover {
+        background: #FFF3E0;
+    }
+
+    .nop-value {
+        color: #9E9E9E;
+        font-style: italic;
+    }
+
+    .summary-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .summary-card {
+        background: white;
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+
+    .summary-card-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--clr-dark-blue);
+    }
+
+    .summary-card-label {
+        font-size: 0.875rem;
+        color: var(--clr-text-secondary);
+        margin-top: 0.25rem;
+    }
+
+    .summary-card.pedidos {
+        border-left: 4px solid var(--clr-light-blue);
+    }
+
+    .summary-card.assistencias {
+        border-left: 4px solid var(--clr-orange);
+    }
+
+    .summary-card.total {
+        border-left: 4px solid var(--clr-success);
+    }
+
+    .no-data {
+        text-align: center;
+        padding: 2rem;
+        color: var(--clr-text-secondary);
+    }
+
+    .detail-table tfoot {
+        background: #E3F2FD;
+        font-weight: 700;
+    }
+
+    .detail-table tfoot td {
+        padding: 0.75rem;
+        border-top: 2px solid var(--clr-dark-blue);
+        color: var(--clr-dark-blue);
+    }
+
+    .detail-table tr.zero-hours {
+        background: #F5F5F5;
+    }
+
+    .detail-table tr.zero-hours:hover {
+        background: #EEEEEE;
+    }
+
+    .zero-hours-value {
+        color: #DC3545;
+        font-weight: 600;
+    }
+
+    .tabs {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .tab-btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: #E9ECEF;
+        color: var(--clr-text-main);
+        border-radius: 0.5rem 0.5rem 0 0;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+        background: var(--clr-dark-blue);
+        color: white;
+    }
+
+    .tab-btn:hover:not(.active) {
+        background: #DEE2E6;
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Summary Cards -->
+<div class="summary-cards">
+    <div class="summary-card pedidos">
+        <div class="summary-card-value">{{ pedidos_count }}</div>
+        <div class="summary-card-label">Pedidos</div>
+    </div>
+    <div class="summary-card assistencias">
+        <div class="summary-card-value">{{ assistencias_count }}</div>
+        <div class="summary-card-label">Assistencias</div>
+    </div>
+    <div class="summary-card total">
+        <div class="summary-card-value">{{ pedidos_count + assistencias_count }}</div>
+        <div class="summary-card-label">Total</div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab-btn active" onclick="showTab('pedidos')">
+        <i class="fas fa-file-invoice mr-2"></i>Pedidos ({{ pedidos|length }})
+    </button>
+    <button class="tab-btn" onclick="showTab('assistencias')">
+        <i class="fas fa-tools mr-2"></i>Assistencias ({{ assistencias|length }})
+    </button>
+</div>
+
+<!-- Tab Content: Pedidos -->
+<div id="tab-pedidos" class="tab-content active">
+    <div class="detail-section">
+        <h2><i class="fas fa-file-invoice"></i> Lista de Pedidos - {{ titulo }}</h2>
+        {% if pedidos %}
+        <div class="table-scroll">
+            <table class="detail-table">
+                <thead>
+                    <tr>
+                        <th>Pedido</th>
+                        <th>Data</th>
+                        <th>Produto</th>
+                        <th>Nome</th>
+                        <th>Qtd</th>
+                        {% if tipo == 'solare' %}
+                        <th>Horas</th>
+                        {% elif tipo == 'garland' %}
+                        <th>Peso</th>
+                        <th>Divisao</th>
+                        {% elif tipo == 'moveis' %}
+                        <th>Tipo</th>
+                        <th>Fator</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in pedidos %}
+                    <tr{% if tipo == 'solare' and (not item[5] or item[5]|float == 0) %} class="zero-hours"{% endif %}>
+                        <td><span class="badge-pedido">{{ item[0] }}</span></td>
+                        <td>{{ item[1] }}</td>
+                        <td>{{ item[2] }}</td>
+                        <td>{{ item[3] }}</td>
+                        <td>{{ item[4]|int }}</td>
+                        {% if tipo == 'solare' %}
+                        {% if not item[5] or item[5]|float == 0 %}
+                        <td><span class="zero-hours-value">00:00</span></td>
+                        {% else %}
+                        <td>{{ format_hours(item[5]|float) }}</td>
+                        {% endif %}
+                        {% elif tipo == 'garland' %}
+                        <td>{{ "%.2f"|format(item[5]|float) if item[5] else '0.00' }}</td>
+                        <td>{{ "%.2f"|format(item[6]|float) if item[6] else '0.00' }}</td>
+                        {% elif tipo == 'moveis' %}
+                        <td>{{ item[5] }}</td>
+                        <td>{{ "%.1f"|format(item[7]|float) if item[7] else '0.0' }}</td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% set ns_ped = namespace(qtd=0, col5=0, col6=0, col7=0) %}
+                {% for item in pedidos %}
+                    {% set ns_ped.qtd = ns_ped.qtd + (item[4]|float if item[4] else 0) %}
+                    {% set ns_ped.col5 = ns_ped.col5 + (item[5]|float if item[5] else 0) %}
+                    {% set ns_ped.col6 = ns_ped.col6 + (item[6]|float if item[6] else 0) %}
+                    {% set ns_ped.col7 = ns_ped.col7 + (item[7]|float if item[7] else 0) %}
+                {% endfor %}
+                <tfoot>
+                    <tr>
+                        <td colspan="4" style="text-align: right;">TOTAL:</td>
+                        <td>{{ ns_ped.qtd|int }}</td>
+                        {% if tipo == 'solare' %}
+                        <td>{{ format_hours(ns_ped.col5) }}</td>
+                        {% elif tipo == 'garland' %}
+                        <td>{{ "%.2f"|format(ns_ped.col5) }}</td>
+                        <td>{{ "%.2f"|format(ns_ped.col6) }}</td>
+                        {% elif tipo == 'moveis' %}
+                        <td>-</td>
+                        <td>{{ "%.1f"|format(ns_ped.col7) }}</td>
+                        {% endif %}
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        {% else %}
+        <div class="no-data">
+            <i class="fas fa-inbox text-4xl mb-4 text-gray-400"></i>
+            <p>Nenhum pedido encontrado para {{ titulo }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Tab Content: Assistencias -->
+<div id="tab-assistencias" class="tab-content">
+    <div class="detail-section">
+        <h2><i class="fas fa-tools"></i> Lista de Assistencias - {{ titulo }}</h2>
+        {% if assistencias %}
+        <div class="table-scroll">
+            <table class="detail-table">
+                <thead>
+                    <tr>
+                        <th>Assistencia</th>
+                        <th>Data</th>
+                        <th>Produto</th>
+                        <th>Nome</th>
+                        <th>Qtd</th>
+                        {% if tipo == 'solare' %}
+                        <th>Horas</th>
+                        {% elif tipo == 'garland' %}
+                        <th>Peso</th>
+                        <th>Divisao</th>
+                        {% elif tipo == 'moveis' %}
+                        <th>Tipo</th>
+                        <th>Fator</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in assistencias %}
+                    {# Determinar se é NOP baseado no tipo #}
+                    {% set is_nop = (tipo == 'solare' and item[6] == 'NOP') or (tipo == 'garland' and item[7] == 'NOP') or (tipo == 'moveis' and item[8] == 'NOP') %}
+                    <tr{% if is_nop %} class="nop-row"{% elif tipo == 'solare' and (not item[5] or item[5]|float == 0) %} class="zero-hours"{% endif %}>
+                        <td>
+                            <span class="badge-assistencia">{{ item[0] }}</span>
+                            {% if is_nop %}<span class="badge-nop">NOP</span>{% endif %}
+                        </td>
+                        <td>{{ item[1] }}</td>
+                        <td>{{ item[2] }}</td>
+                        <td>{{ item[3] }}</td>
+                        <td>{{ item[4]|int }}</td>
+                        {% if tipo == 'solare' %}
+                        {% if is_nop %}
+                        <td><span class="nop-value">00:00</span></td>
+                        {% elif not item[5] or item[5]|float == 0 %}
+                        <td><span class="zero-hours-value">00:00</span></td>
+                        {% else %}
+                        <td>{{ format_hours(item[5]|float) }}</td>
+                        {% endif %}
+                        {% elif tipo == 'garland' %}
+                        {% if is_nop %}
+                        <td><span class="nop-value">0.00</span></td>
+                        <td><span class="nop-value">0.00</span></td>
+                        {% else %}
+                        <td>{{ "%.2f"|format(item[5]|float) if item[5] else '0.00' }}</td>
+                        <td>{{ "%.2f"|format(item[6]|float) if item[6] else '0.00' }}</td>
+                        {% endif %}
+                        {% elif tipo == 'moveis' %}
+                        <td>{{ item[5] }}</td>
+                        {% if is_nop %}
+                        <td><span class="nop-value">0.0</span></td>
+                        {% else %}
+                        <td>{{ "%.1f"|format(item[7]|float) if item[7] else '0.0' }}</td>
+                        {% endif %}
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% set ns_ass = namespace(qtd=0, col5=0, col6=0, col7=0) %}
+                {% for item in assistencias %}
+                    {% set ns_ass.qtd = ns_ass.qtd + (item[4]|float if item[4] else 0) %}
+                    {% set ns_ass.col5 = ns_ass.col5 + (item[5]|float if item[5] else 0) %}
+                    {% set ns_ass.col6 = ns_ass.col6 + (item[6]|float if item[6] else 0) %}
+                    {% set ns_ass.col7 = ns_ass.col7 + (item[7]|float if item[7] else 0) %}
+                {% endfor %}
+                <tfoot>
+                    <tr>
+                        <td colspan="4" style="text-align: right;">TOTAL:</td>
+                        <td>{{ ns_ass.qtd|int }}</td>
+                        {% if tipo == 'solare' %}
+                        <td>{{ format_hours(ns_ass.col5) }}</td>
+                        {% elif tipo == 'garland' %}
+                        <td>{{ "%.2f"|format(ns_ass.col5) }}</td>
+                        <td>{{ "%.2f"|format(ns_ass.col6) }}</td>
+                        {% elif tipo == 'moveis' %}
+                        <td>-</td>
+                        <td>{{ "%.1f"|format(ns_ass.col7) }}</td>
+                        {% endif %}
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        {% else %}
+        <div class="no-data">
+            <i class="fas fa-inbox text-4xl mb-4 text-gray-400"></i>
+            <p>Nenhuma assistencia encontrada para {{ titulo }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    function showTab(tabName) {
+        // Hide all tabs
+        document.querySelectorAll('.tab-content').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        // Show selected tab
+        document.getElementById('tab-' + tabName).classList.add('active');
+        event.target.closest('.tab-btn').classList.add('active');
+    }
+</script>
+{% endblock %}

@@ -57,6 +57,9 @@
             <button type="button" id="printReportBtn" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
                 <i class="fas fa-print mr-2"></i> Imprimir
             </button>
+            <button type="button" id="printReceiptsBtn" class="btn-primary flex items-center px-4 py-2 rounded-lg">
+                <i class="fas fa-receipt mr-2"></i> Recibos
+            </button>
         </div>
     </div>
 
@@ -118,6 +121,20 @@
         </table>
     </div>
 </div>
+
+<div id="receiptData" class="hidden">
+    {% for row in rows %}
+    <div class="receipt-item"
+         data-controle="{{ row.controle }}"
+         data-titulo="{{ row.titulo }}"
+         data-fornecedor="{{ row.fornecedor }}"
+         data-vencimento="{{ row.vencimento }}"
+         data-valor="{{ row.valor_total }}"
+         data-valor-format="{{ row.valor_total | format_currency_brl }}"
+         data-valor-extenso="{{ row.valor_total | amount_to_words_brl }}">
+    </div>
+    {% endfor %}
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -127,6 +144,218 @@ document.addEventListener('DOMContentLoaded', () => {
     printReportBtn?.addEventListener('click', () => {
         window.print();
     });
+
+    const printReceiptsBtn = document.getElementById('printReceiptsBtn');
+    const receiptItems = Array.from(document.querySelectorAll('#receiptData .receipt-item'));
+
+    const escapeHtml = (value) => {
+        const text = String(value ?? '');
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
+
+    const renderReceiptPage = (chunks, printedAt) => {
+        return chunks.map(pageItems => {
+            const receipts = pageItems.map(item => {
+                const titulo = item.dataset.titulo || '';
+                const controle = item.dataset.controle || '';
+                const fornecedor = item.dataset.fornecedor || '';
+                const vencimento = item.dataset.vencimento || '';
+                const valorFormat = item.dataset.valorFormat || '';
+                const valorExtenso = item.dataset.valorExtenso || '';
+                return `
+                <section class="receipt">
+                    <header class="receipt-header">
+                        <div>
+                            <div class="receipt-subtitle">Recibo de pagamento</div>
+                            <div class="receipt-title">Titulo ${escapeHtml(titulo)}</div>
+                            <div class="receipt-meta">Controle ${escapeHtml(controle)}</div>
+                        </div>
+                        <div class="receipt-date">
+                            <div>Emitido em</div>
+                            <div class="receipt-date-value">${escapeHtml(printedAt)}</div>
+                        </div>
+                    </header>
+                    <div class="receipt-grid">
+                        <div class="receipt-field">
+                            <div class="receipt-label">Fornecedor</div>
+                            <div class="receipt-value">${escapeHtml(fornecedor)}</div>
+                        </div>
+                        <div class="receipt-field">
+                            <div class="receipt-label">Vencimento</div>
+                            <div class="receipt-value">${escapeHtml(vencimento)}</div>
+                        </div>
+                        <div class="receipt-field">
+                            <div class="receipt-label">Valor</div>
+                            <div class="receipt-value">${escapeHtml(valorFormat)}</div>
+                        </div>
+                        <div class="receipt-field">
+                            <div class="receipt-label">Titulo</div>
+                            <div class="receipt-value">${escapeHtml(titulo)}</div>
+                        </div>
+                    </div>
+                    <div class="receipt-text">
+                        Recebemos de <strong>Madresilva Industria de Moveis LTDA</strong> a importancia de
+                        <strong>${escapeHtml(valorFormat)}</strong> (${escapeHtml(valorExtenso)}) referente ao titulo
+                        <strong>${escapeHtml(titulo)}</strong>, controle <strong>${escapeHtml(controle)}</strong>,
+                        com vencimento em <strong>${escapeHtml(vencimento)}</strong>.
+                    </div>
+                    <div class="receipt-note">Este recibo comprova o pagamento do titulo informado.</div>
+                    <div class="receipt-signatures">
+                        <div class="receipt-signature">Responsavel</div>
+                        <div class="receipt-signature">Fornecedor</div>
+                    </div>
+                </section>
+                `;
+            }).join('');
+            return `<div class="receipt-page">${receipts}</div>`;
+        }).join('');
+    };
+
+    const handlePrintReceipts = () => {
+        if (!receiptItems.length) {
+            return;
+        }
+        const printedAt = new Date().toLocaleString('pt-BR');
+        const pages = [];
+        for (let i = 0; i < receiptItems.length; i += 2) {
+            pages.push(receiptItems.slice(i, i + 2));
+        }
+        const html = `
+        <!doctype html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="utf-8" />
+            <title>Recibos</title>
+            <style>
+                @page {
+                    size: A4 portrait;
+                    margin: 10mm;
+                }
+                * { box-sizing: border-box; }
+                body {
+                    margin: 0;
+                    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                    color: #111827;
+                    background: #fff;
+                }
+                .receipt-page {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8mm;
+                    height: 277mm;
+                    page-break-after: always;
+                }
+                .receipt {
+                    border: 1px solid #111827;
+                    border-radius: 8px;
+                    padding: 12px 14px;
+                    height: 134.5mm;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                }
+                .receipt-header {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 16px;
+                }
+                .receipt-subtitle {
+                    font-size: 11px;
+                    text-transform: uppercase;
+                    color: #6b7280;
+                    letter-spacing: 0.06em;
+                }
+                .receipt-title {
+                    font-size: 16px;
+                    font-weight: 700;
+                }
+                .receipt-meta {
+                    font-size: 12px;
+                    color: #6b7280;
+                }
+                .receipt-date {
+                    text-align: right;
+                    font-size: 12px;
+                    color: #6b7280;
+                }
+                .receipt-date-value {
+                    font-weight: 700;
+                    color: #111827;
+                }
+                .receipt-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 8px;
+                }
+                .receipt-field {
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    padding: 6px 8px;
+                }
+                .receipt-label {
+                    font-size: 10px;
+                    text-transform: uppercase;
+                    color: #6b7280;
+                    letter-spacing: 0.06em;
+                }
+                .receipt-value {
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+                .receipt-text {
+                    font-size: 12px;
+                    line-height: 1.4;
+                    color: #111827;
+                }
+                .receipt-note {
+                    font-size: 10px;
+                    color: #6b7280;
+                }
+                .receipt-signatures {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 12px;
+                    text-align: center;
+                    font-size: 11px;
+                    color: #6b7280;
+                }
+                .receipt-signature {
+                    border-top: 1px solid #d1d5db;
+                    padding-top: 6px;
+                }
+                @media print {
+                    .receipt-page:last-child {
+                        page-break-after: auto;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            ${renderReceiptPage(pages, printedAt)}
+        </body>
+        </html>
+        `;
+        const win = window.open('', '_blank');
+        if (!win) {
+            return;
+        }
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        win.onload = () => {
+            win.print();
+        };
+    };
+
+    printReceiptsBtn?.addEventListener('click', handlePrintReceipts);
 });
 </script>
 {% endblock %}

@@ -34,6 +34,16 @@ import unicodedata
 import openpyxl
 from PyPDF2 import PdfReader
 
+# Importações para geração de PDF com QR Code
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.pdfgen import canvas
+import qrcode
+
 # Importa as configurações do arquivo config.py
 from config import DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT, SECRET_KEY, SYSTEM_VERSION, LOGGED_IN_USER, SIGA_DB_NAME, USER_PARAMETERS_TABLE, INVOICE_XML_STORAGE_DIR, MRP_DB_NAME
 
@@ -43,7 +53,17 @@ from mrp_routes import (
     calculate_mrp,
     save_mrp_to_database,
     generate_mrp_excel,
-    generate_mrp_excel_all
+    generate_mrp_excel_all,
+    # Funções de sessões MRP
+    init_mrp_tables,
+    criar_sessao_mrp,
+    listar_sessoes_mrp,
+    obter_sessao_mrp,
+    salvar_calculo_mrp_sessao,
+    atualizar_op_sessao,
+    obter_itens_sessao_mrp,
+    excluir_sessao_mrp,
+    atualizar_status_sessao
 )
 
 # Inicializa a aplicação Flask
@@ -343,6 +363,8 @@ RECORD_TYPE_LABELS = {
 ASSISTANCE_MEDIA_PATH_PARAM = 'technical_assistance_media_base_path'
 INVOICE_XML_STORAGE_PARAM = 'invoices_xml_storage_dir'
 RANGER_METAS_PATH_PARAM = 'ranger_metas_directory'
+MRP_COMPONENT_PHOTOS_PATH_PARAM = 'mrp_component_photos_path'
+MRP_PREP_PINTURA_PHOTOS_PATH_PARAM = 'mrp_prep_pintura_photos_path'
 ASSISTANCE_MEDIA_IMAGE_EXTENSIONS = {
     '.jpg',
     '.jpeg',
@@ -1256,6 +1278,101 @@ def format_currency_brl(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _number_to_words_pt_br(value):
+    units = [
+        "zero", "um", "dois", "tres", "quatro", "cinco",
+        "seis", "sete", "oito", "nove", "dez", "onze",
+        "doze", "treze", "quatorze", "quinze", "dezesseis",
+        "dezessete", "dezoito", "dezenove"
+    ]
+    tens = [
+        "", "", "vinte", "trinta", "quarenta", "cinquenta",
+        "sessenta", "setenta", "oitenta", "noventa"
+    ]
+    hundreds = [
+        "", "cento", "duzentos", "trezentos", "quatrocentos",
+        "quinhentos", "seiscentos", "setecentos", "oitocentos",
+        "novecentos"
+    ]
+
+    def under_100(n):
+        if n < 20:
+            return units[n]
+        ten = n // 10
+        rest = n % 10
+        if rest:
+            return f"{tens[ten]} e {units[rest]}"
+        return tens[ten]
+
+    def under_1000(n):
+        if n == 0:
+            return ""
+        if n == 100:
+            return "cem"
+        hundred = n // 100
+        rest = n % 100
+        if hundred and rest:
+            return f"{hundreds[hundred]} e {under_100(rest)}"
+        if hundred:
+            return hundreds[hundred]
+        return under_100(rest)
+
+    if value == 0:
+        return units[0]
+
+    groups = [
+        (1_000_000_000, "bilhao", "bilhoes"),
+        (1_000_000, "milhao", "milhoes"),
+        (1_000, "mil", "mil"),
+    ]
+
+    parts = []
+    remaining = value
+    for divider, singular, plural in groups:
+        group_value = remaining // divider
+        if group_value:
+            if divider == 1000 and group_value == 1:
+                text = "mil"
+            else:
+                label = singular if group_value == 1 else plural
+                text = f"{under_1000(group_value)} {label}".strip()
+            parts.append((group_value, text))
+            remaining = remaining % divider
+    if remaining:
+        parts.append((remaining, under_1000(remaining)))
+
+    phrase = ""
+    for idx, (val, text) in enumerate(parts):
+        if not phrase:
+            phrase = text
+            continue
+        is_last = idx == len(parts) - 1
+        if is_last and val < 100:
+            phrase = f"{phrase} e {text}"
+        else:
+            phrase = f"{phrase}, {text}"
+    return phrase
+
+
+def amount_to_words_brl(value):
+    try:
+        amount = Decimal(str(value)).quantize(Decimal("0.01"))
+    except Exception:
+        amount = Decimal("0.00")
+
+    integer_part = int(amount)
+    cents = int((amount * 100) % 100)
+
+    integer_words = _number_to_words_pt_br(integer_part)
+    currency_word = "real" if integer_part == 1 else "reais"
+
+    if cents:
+        cents_words = _number_to_words_pt_br(cents)
+        cents_word = "centavo" if cents == 1 else "centavos"
+        return f"{integer_words} {currency_word} e {cents_words} {cents_word}"
+    return f"{integer_words} {currency_word}"
+
+
 def format_decimal_br(value, decimals=2):
     """Formata valores numéricos no padrão brasileiro com casas decimais configuráveis."""
     try:
@@ -1282,6 +1399,7 @@ def format_percentage(value, decimals=2):
 app.jinja_env.filters["format_currency_brl"] = format_currency_brl
 app.jinja_env.filters["format_decimal_br"] = format_decimal_br
 app.jinja_env.filters["format_percentage"] = format_percentage
+app.jinja_env.filters["amount_to_words_brl"] = amount_to_words_brl
 
 
 def _safe_parse_date(value):
@@ -1953,6 +2071,17 @@ def init_siga_db():
                     UNIQUE(bank_code, year, month)
                 );
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS user_access_permissions (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    endpoint VARCHAR(120) NOT NULL,
+                    allowed BOOLEAN NOT NULL DEFAULT TRUE,
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(user_id, endpoint),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
+            """)
             conn.commit()
             cur.close()
             print("Tabelas 'users' e 'user_parameters' verificadas/criadas com sucesso no siga_db.")
@@ -2307,11 +2436,25 @@ def dashboard():
     Rota para o dashboard principal do sistema.
     """
     sales_summary = get_dashboard_sales_summary()
+    op_summary = get_op_dashboard_data()
     return render_template(
         'dashboard.html',
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado'),
         dashboard_sales_summary=sales_summary,
+        op_summary=None if op_summary.get("error") else op_summary,
+    )
+
+@app.route('/oee')
+@login_required
+def oee_dashboard():
+    """
+    Rota para a página de Eficiência Global do Equipamento (OEE).
+    """
+    return render_template(
+        'oee.html',
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
     )
 
 def get_product_line(group_name):
@@ -8141,13 +8284,21 @@ def _guess_xml_directory_for_date(storage_dir, invoice_date):
     return None
 
 
+def _strip_utf8_bom(data):
+    """Remove BOM UTF-8 caso esteja presente no inicio."""
+    if data and data.startswith(b'\xef\xbb\xbf'):
+        return data[3:]
+    return data
+
+
 def _load_xml_bytes(access_key, storage_dir, invoice_date=None):
     """Carrega o XML correspondente à chave de acesso dentro do diretório informado."""
     xml_path = _find_xml_file_for_access_key(access_key, storage_dir, invoice_date)
     if not xml_path:
         return None
     try:
-        return xml_path.read_bytes()
+        xml_bytes = xml_path.read_bytes()
+        return _strip_utf8_bom(xml_bytes)
     except (OSError, IOError) as exc:
         print(f"Erro ao ler XML {xml_path}: {exc}")
         return None
@@ -14828,7 +14979,65 @@ def fetch_accounts_payable_titles(filters):
     return titles, error_message
 
 
-def fetch_accounts_payable_report(filters, starts_with=None):
+def fetch_accounts_payable_receipt(controle, titulo):
+    receipt = None
+    error_message = None
+    conn = get_erp_db_connection()
+    if not conn:
+        return receipt, "Nao foi possivel conectar ao banco de dados do ERP."
+
+    query = """
+        SELECT
+            t.controle,
+            t.titulo,
+            COALESCE(e.empnome, '') AS fornecedor,
+            t.titvencto,
+            COALESCE(m.modnome, '') AS modalidade,
+            t.titbanco,
+            t.titvltotal,
+            t.titvlpag,
+            t.titdtpag,
+            t.titlitsit
+        FROM titulos t
+        LEFT JOIN empresa e ON t.titcfco = e.empresa
+        LEFT JOIN modcobra m ON t.titmodcobr = m.modcobra
+        WHERE t.titrecpag IN ('P', 'M')
+          AND t.controle = %s
+          AND t.titulo = %s
+        LIMIT 1
+    """
+
+    try:
+        cur = conn.cursor()
+        cur.execute(query, [controle, titulo])
+        row = cur.fetchone()
+        if row:
+            data_pagamento = _format_date_br(row[8])
+            if data_pagamento in ('01/01/0001', '0001-01-01'):
+                data_pagamento = ''
+            receipt = {
+                'controle': row[0],
+                'titulo': row[1],
+                'fornecedor': row[2],
+                'vencimento': _format_date_br(row[3]),
+                'modalidade': row[4],
+                'banco': str(row[5]).strip() if row[5] is not None else '',
+                'valor_total': row[6],
+                'valor_pago': row[7],
+                'data_pagamento': data_pagamento,
+                'situacao': row[9],
+            }
+        cur.close()
+    except Error as e:
+        print(f"Erro ao buscar recibo de contas a pagar: {e}")
+        error_message = "Erro ao carregar o recibo de contas a pagar."
+    finally:
+        conn.close()
+
+    return receipt, error_message
+
+
+def fetch_accounts_payable_report(filters, starts_with=None, selected_pairs=None):
     rows = []
     error_message = None
     total_value = Decimal('0')
@@ -14847,6 +15056,7 @@ def fetch_accounts_payable_report(filters, starts_with=None):
     params = []
     query = """
         SELECT
+            t.controle,
             t.titvencto,
             t.titulo,
             COALESCE(e.empnome, '') AS fornecedor,
@@ -14902,6 +15112,16 @@ def fetch_accounts_payable_report(filters, starts_with=None):
         query += f" AND COALESCE(t.titlitsit::text, '') IN ({placeholders})"
         params.extend(situations)
 
+    if selected_pairs:
+        query += " AND ("
+        conditions = []
+        for _ in selected_pairs:
+            conditions.append("(t.controle::text = %s AND t.titulo::text = %s)")
+        query += " OR ".join(conditions)
+        query += ")"
+        for controle, titulo in selected_pairs:
+            params.extend([controle, titulo])
+
     if starts_with:
         query += " AND COALESCE(t.titulo::text, '') ILIKE %s"
         params.append(f"{starts_with}%")
@@ -14913,34 +15133,35 @@ def fetch_accounts_payable_report(filters, starts_with=None):
         cur.execute(query, params)
         for row in cur.fetchall():
             try:
-                total_value += Decimal(str(row[5] or 0))
+                total_value += Decimal(str(row[6] or 0))
             except (InvalidOperation, TypeError):
                 total_value += Decimal('0')
             bank_details = []
-            if row[6]:
-                bank_details.append(f"Banco: {row[6]}")
             if row[7]:
-                bank_details.append(f"Nome: {row[7]}")
+                bank_details.append(f"Banco: {row[7]}")
             if row[8]:
-                bank_details.append(f"Agencia: {row[8]}")
+                bank_details.append(f"Nome: {row[8]}")
             if row[9]:
-                bank_details.append(f"Conta: {row[9]}")
+                bank_details.append(f"Agencia: {row[9]}")
             if row[10]:
-                bank_details.append(f"Tipo: {row[10]}")
+                bank_details.append(f"Conta: {row[10]}")
             if row[11]:
-                bank_details.append(f"Titular: {row[11]}")
+                bank_details.append(f"Tipo: {row[11]}")
             if row[12]:
-                bank_details.append(f"CPF/CNPJ: {row[12]}")
+                bank_details.append(f"Titular: {row[12]}")
             if row[13]:
-                bank_details.append(f"Chave Pix: {row[13]}")
+                bank_details.append(f"CPF/CNPJ: {row[13]}")
+            if row[14]:
+                bank_details.append(f"Chave Pix: {row[14]}")
 
             rows.append({
-                'vencimento': _format_date_br(row[0]),
-                'titulo': row[1],
-                'fornecedor': row[2],
-                'modalidade': row[3],
-                'centro_custo': row[4],
-                'valor_total': row[5],
+                'controle': row[0],
+                'vencimento': _format_date_br(row[1]),
+                'titulo': row[2],
+                'fornecedor': row[3],
+                'modalidade': row[4],
+                'centro_custo': row[5],
+                'valor_total': row[6],
                 'bank_details': ' | '.join(bank_details) if bank_details else 'Dados bancarios nao informados.',
             })
         cur.close()
@@ -15519,6 +15740,18 @@ def accounts_payable_list():
     if error_message:
         flash(error_message, 'danger')
 
+    total_valor_total = Decimal('0')
+    total_valor_pago = Decimal('0')
+    for row in titles or []:
+        try:
+            total_valor_total += Decimal(str(row.get('valor_total', 0)))
+        except (InvalidOperation, TypeError):
+            pass
+        try:
+            total_valor_pago += Decimal(str(row.get('valor_pago', 0)))
+        except (InvalidOperation, TypeError):
+            pass
+
     period_label = _format_period_label(start_date, end_date)
 
     customer_options = get_accounts_payable_customers()
@@ -15576,6 +15809,8 @@ def accounts_payable_list():
         'accounts_payable_list.html',
         page_title="Contas a Pagar",
         titles=titles,
+        total_valor_total=total_valor_total,
+        total_valor_pago=total_valor_pago,
         filters=filters,
         period_label=period_label,
         customer_options=customer_options,
@@ -15620,6 +15855,17 @@ def accounts_payable_report():
 
     starts_with = (request.args.get('starts_with') or '').strip()
 
+    selected_controles = normalize_multi(request.args.getlist('selected_controle'))
+    selected_titulos = normalize_multi(request.args.getlist('selected_titulo'))
+    selected_pairs = []
+    if selected_controles and selected_titulos:
+        max_len = min(len(selected_controles), len(selected_titulos))
+        for idx in range(max_len):
+            controle = selected_controles[idx]
+            titulo = selected_titulos[idx]
+            if controle and titulo:
+                selected_pairs.append((controle, titulo))
+
     start_date = _safe_parse_date(filters.get('start_date'))
     end_date = _safe_parse_date(filters.get('end_date'))
 
@@ -15629,7 +15875,11 @@ def accounts_payable_report():
         start_date = first_day
         end_date = last_day
 
-    rows, total_value, error_message = fetch_accounts_payable_report(filters, starts_with=starts_with)
+    rows, total_value, error_message = fetch_accounts_payable_report(
+        filters,
+        starts_with=starts_with,
+        selected_pairs=selected_pairs
+    )
     if error_message:
         flash(error_message, 'danger')
 
@@ -15642,6 +15892,33 @@ def accounts_payable_report():
         total_value=total_value,
         period_label=period_label,
         starts_with=starts_with,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/accounts_payable_receipt')
+@login_required
+def accounts_payable_receipt():
+    controle = (request.args.get('controle') or '').strip()
+    titulo = (request.args.get('titulo') or '').strip()
+    if not controle or not titulo:
+        abort(404)
+
+    receipt, error_message = fetch_accounts_payable_receipt(controle, titulo)
+    if error_message:
+        flash(error_message, 'danger')
+        return redirect(url_for('accounts_payable_list'))
+    if not receipt:
+        abort(404)
+
+    printed_at = datetime.datetime.now().strftime('%d/%m/%Y %H:%M')
+
+    return render_template(
+        'accounts_payable_receipt.html',
+        page_title="Recibo de Pagamento",
+        receipt=receipt,
+        printed_at=printed_at,
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
@@ -18700,7 +18977,8 @@ def report_sales_by_client_year():
         except (TypeError, ValueError):
             continue
     if not selected_years:
-        fallback_years = available_years[:5] if available_years else [today.year]
+        # Default to the two most recent years when no filter is provided.
+        fallback_years = available_years[:2] if available_years else [today.year]
         selected_years = sorted(set(fallback_years))
     else:
         selected_years = sorted(set(selected_years))
@@ -20862,6 +21140,198 @@ def revenue_reports():
     return render_template('revenue_reports.html', page_title="Relatórios de Faturamento", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
 
 
+@app.route('/financial_reports')
+@login_required
+def financial_reports():
+    """Página de seleção dos relatórios financeiros."""
+    return render_template('financial_reports.html', page_title="Relatórios Financeiros", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+
+
+@app.route('/report_daily_boleto_summary')
+@login_required
+def report_daily_boleto_summary():
+    """Exibe o resumo diário de boletos."""
+    conn_erp = None
+    try:
+        conn_erp = get_erp_db_connection()
+        if not conn_erp:
+            flash('Erro ao conectar ao banco de dados.', 'danger')
+            return redirect(url_for('financial_reports'))
+
+        cursor = conn_erp.cursor()
+
+        # Obter datas do filtro ou usar defaults
+        today = datetime.date.today()
+
+        # Lógica de data baseada no dia da semana
+        # Se for segunda-feira (weekday = 0), a primeira data é o sábado
+        if today.weekday() == 0:  # Segunda-feira
+            data1 = today - datetime.timedelta(days=2)  # Sábado
+            data2 = today  # Segunda-feira
+        else:  # Demais dias da semana
+            data1 = today  # Dia atual
+            data2 = today  # Dia atual
+
+        data3 = today + datetime.timedelta(days=1)  # Dia seguinte
+        data4 = today + datetime.timedelta(days=18250)  # Data distante (50 anos)
+
+        # Permitir que o usuário altere as datas via query parameters
+        data1_str = request.args.get('data1', data1.strftime('%Y-%m-%d'))
+        data2_str = request.args.get('data2', data2.strftime('%Y-%m-%d'))
+        data3_str = request.args.get('data3', data3.strftime('%Y-%m-%d'))
+        data4_str = request.args.get('data4', data4.strftime('%Y-%m-%d'))
+
+        # Converter strings de volta para objetos de data
+        data1 = datetime.datetime.strptime(data1_str, '%Y-%m-%d').date()
+        data2 = datetime.datetime.strptime(data2_str, '%Y-%m-%d').date()
+        data3 = datetime.datetime.strptime(data3_str, '%Y-%m-%d').date()
+        data4 = datetime.datetime.strptime(data4_str, '%Y-%m-%d').date()
+
+        # Calcular Cheques em Caixa
+        query_cheques_caixa = """
+            SELECT COALESCE(SUM(chvalor), 0) as total
+            FROM chpredat
+            WHERE chstatus = 'CX'
+        """
+        cursor.execute(query_cheques_caixa)
+        cheques_em_caixa = float(cursor.fetchone()[0])
+
+        # Calcular Cheques em Rota
+        query_cheques_rota = """
+            SELECT COALESCE(SUM(titvltotal - COALESCE(titvlpag, 0)), 0) as total
+            FROM titulos
+            WHERE titmodcobr = '02'
+            AND titrecpag = 'R'
+            AND (titvltotal - COALESCE(titvlpag, 0)) > 0
+        """
+        cursor.execute(query_cheques_rota)
+        cheques_em_rota = float(cursor.fetchone()[0])
+
+        # Calcular Pedido Sem Cheque
+        query_pedido_sem_cheque = """
+            SELECT COALESCE(SUM(titvltotal - COALESCE(titvlpag, 0)), 0) as total
+            FROM titulos
+            WHERE titmodcobr IN ('08', '27', '36', '45')
+            AND titrecpag = 'R'
+            AND (titvltotal - COALESCE(titvlpag, 0)) > 0
+        """
+        cursor.execute(query_pedido_sem_cheque)
+        pedido_sem_cheque = float(cursor.fetchone()[0])
+
+        # Total de Cheques
+        total_cheques = cheques_em_caixa + cheques_em_rota + pedido_sem_cheque
+
+        # Calcular Boletos BB - Com vencimento entre data1 e data2
+        query_bb_entre = """
+            SELECT COALESCE(SUM(titvltotal - COALESCE(titvlpag, 0)), 0) as total
+            FROM titulos
+            WHERE titbanco = '001'
+            AND titmodcobr IN ('20', '25', '34', '43')
+            AND titvencto >= %s AND titvencto <= %s
+            AND titrecpag = 'R'
+            AND (titvltotal - COALESCE(titvlpag, 0)) > 0
+        """
+        cursor.execute(query_bb_entre, (data1, data2))
+        bb_entre = float(cursor.fetchone()[0])
+
+        # Calcular Boletos BB - Com vencimento a partir de data3
+        query_bb_partir = """
+            SELECT COALESCE(SUM(titvltotal - COALESCE(titvlpag, 0)), 0) as total
+            FROM titulos
+            WHERE titbanco = '001'
+            AND titmodcobr IN ('20', '25', '34', '43')
+            AND titvencto >= %s AND titvencto <= %s
+            AND titrecpag = 'R'
+            AND (titvltotal - COALESCE(titvlpag, 0)) > 0
+        """
+        cursor.execute(query_bb_partir, (data3, data4))
+        bb_partir = float(cursor.fetchone()[0])
+
+        # Calcular Boletos Bradesco - Com vencimento entre data1 e data2
+        query_bradesco_entre = """
+            SELECT COALESCE(SUM(titvltotal - COALESCE(titvlpag, 0)), 0) as total
+            FROM titulos
+            WHERE titbanco = '023'
+            AND titmodcobr IN ('20', '25', '34', '43')
+            AND titvencto >= %s AND titvencto <= %s
+            AND titrecpag = 'R'
+            AND (titvltotal - COALESCE(titvlpag, 0)) > 0
+        """
+        cursor.execute(query_bradesco_entre, (data1, data2))
+        bradesco_entre = float(cursor.fetchone()[0])
+
+        # Calcular Boletos Bradesco - Com vencimento a partir de data3
+        query_bradesco_partir = """
+            SELECT COALESCE(SUM(titvltotal - COALESCE(titvlpag, 0)), 0) as total
+            FROM titulos
+            WHERE titbanco = '023'
+            AND titmodcobr IN ('20', '25', '34', '43')
+            AND titvencto >= %s AND titvencto <= %s
+            AND titrecpag = 'R'
+            AND (titvltotal - COALESCE(titvlpag, 0)) > 0
+        """
+        cursor.execute(query_bradesco_partir, (data3, data4))
+        bradesco_partir = float(cursor.fetchone()[0])
+
+        # Calcular Boletos Santander - Com vencimento entre data1 e data2
+        query_santander_entre = """
+            SELECT COALESCE(SUM(titvltotal - COALESCE(titvlpag, 0)), 0) as total
+            FROM titulos
+            WHERE titbanco = 'SAN'
+            AND titmodcobr IN ('20', '25', '34', '43')
+            AND titvencto >= %s AND titvencto <= %s
+            AND titrecpag = 'R'
+            AND (titvltotal - COALESCE(titvlpag, 0)) > 0
+        """
+        cursor.execute(query_santander_entre, (data1, data2))
+        santander_entre = float(cursor.fetchone()[0])
+
+        # Calcular Boletos Santander - Com vencimento a partir de data3
+        query_santander_partir = """
+            SELECT COALESCE(SUM(titvltotal - COALESCE(titvlpag, 0)), 0) as total
+            FROM titulos
+            WHERE titbanco = 'SAN'
+            AND titmodcobr IN ('20', '25', '34', '43')
+            AND titvencto >= %s AND titvencto <= %s
+            AND titrecpag = 'R'
+            AND (titvltotal - COALESCE(titvlpag, 0)) > 0
+        """
+        cursor.execute(query_santander_partir, (data3, data4))
+        santander_partir = float(cursor.fetchone()[0])
+
+        # Valor Total (desconsiderando os valores entre data1 e data2)
+        valor_total = (bb_partir + bradesco_partir + santander_partir + total_cheques)
+
+        cursor.close()
+        conn_erp.close()
+
+        return render_template('report_daily_boleto_summary.html',
+                             page_title="Resumo Diário de Boletos",
+                             system_version=SYSTEM_VERSION,
+                             usuario_logado=session.get('username', 'Convidado'),
+                             data1=data1,
+                             data2=data2,
+                             data3=data3,
+                             data4=data4,
+                             bb_entre=bb_entre,
+                             bb_partir=bb_partir,
+                             bradesco_entre=bradesco_entre,
+                             bradesco_partir=bradesco_partir,
+                             santander_entre=santander_entre,
+                             santander_partir=santander_partir,
+                             cheques_em_caixa=cheques_em_caixa,
+                             cheques_em_rota=cheques_em_rota,
+                             pedido_sem_cheque=pedido_sem_cheque,
+                             total_cheques=total_cheques,
+                             valor_total=valor_total)
+
+    except Exception as e:
+        flash(f'Erro ao gerar relatório: {str(e)}', 'danger')
+        if conn_erp:
+            conn_erp.close()
+        return redirect(url_for('financial_reports'))
+
+
 @app.route('/report_revenue_year_comparison')
 @login_required
 def report_revenue_year_comparison():
@@ -21501,6 +21971,12 @@ def gerencial_parameters():
         ranger_metas_directory = request.form.get('ranger_metas_directory', '').strip()
         if not save_user_parameters(user_id, RANGER_METAS_PATH_PARAM, ranger_metas_directory):
             success = False
+        mrp_component_photos_path = request.form.get('mrp_component_photos_path', '').strip()
+        if not save_user_parameters(user_id, MRP_COMPONENT_PHOTOS_PATH_PARAM, mrp_component_photos_path):
+            success = False
+        mrp_prep_pintura_photos_path = request.form.get('mrp_prep_pintura_photos_path', '').strip()
+        if not save_user_parameters(user_id, MRP_PREP_PINTURA_PHOTOS_PATH_PARAM, mrp_prep_pintura_photos_path):
+            success = False
         boleto_entries = []
         for idx in range(1, 6):
             bank_code = (request.form.get(f'ar_boleto_bank_{idx}') or '').strip()
@@ -21537,6 +22013,8 @@ def gerencial_parameters():
     assistance_media_base_path = get_user_parameters(user_id, ASSISTANCE_MEDIA_PATH_PARAM) or ''
     xml_storage_base_path = get_user_parameters(user_id, INVOICE_XML_STORAGE_PARAM) or ''
     ranger_metas_directory = get_user_parameters(user_id, RANGER_METAS_PATH_PARAM) or ''
+    mrp_component_photos_path = get_user_parameters(user_id, MRP_COMPONENT_PHOTOS_PATH_PARAM) or ''
+    mrp_prep_pintura_photos_path = get_user_parameters(user_id, MRP_PREP_PINTURA_PHOTOS_PATH_PARAM) or ''
     boleto_repositories = _load_boleto_repositories_for_user(user_id)
 
     # Marcar as transações e CFOPs que já estão selecionados
@@ -21561,6 +22039,8 @@ def gerencial_parameters():
         assistance_media_base_path=assistance_media_base_path,
         xml_storage_base_path=xml_storage_base_path,
         ranger_metas_directory=ranger_metas_directory,
+        mrp_component_photos_path=mrp_component_photos_path,
+        mrp_prep_pintura_photos_path=mrp_prep_pintura_photos_path,
         boleto_repositories=boleto_repositories,
     )
 
@@ -21588,6 +22068,143 @@ def _fetch_user_by_id(user_id):
         finally:
             conn.close()
     return user
+
+
+def _get_access_control_pages():
+    """
+    Lista base de telas/páginas do sistema para controle de acesso.
+    """
+    return [
+        {
+            "category": "Geral",
+            "items": [
+                {"endpoint": "dashboard", "label": "Visão Geral"},
+                {"endpoint": "op_dashboard", "label": "OP"},
+            ],
+        },
+        {
+            "category": "Cadastros",
+            "items": [
+                {"endpoint": "companies_list", "label": "Empresas"},
+                {"endpoint": "products_list", "label": "Produtos"},
+                {"endpoint": "vendors_list", "label": "Vendedores"},
+                {"endpoint": "cities_list", "label": "Cidades"},
+                {"endpoint": "groups_list", "label": "Grupos de Produto"},
+                {"endpoint": "conditions_list", "label": "Condições de Pagamento"},
+                {"endpoint": "operations_list", "label": "Operações"},
+                {"endpoint": "transporters_list", "label": "Transportadoras"},
+            ],
+        },
+        {
+            "category": "Comercial",
+            "items": [
+                {"endpoint": "invoices_mirror", "label": "Espelho Notas Fiscais"},
+                {"endpoint": "sales_orders_list", "label": "Pedidos de Vendas"},
+                {"endpoint": "load_lots_view", "label": "Lotes de Carga"},
+                {"endpoint": "technical_assistance_list", "label": "Assistência Técnica"},
+                {"endpoint": "sales_returns_list", "label": "Devoluções de Venda"},
+            ],
+        },
+        {
+            "category": "Produção",
+            "items": [
+                {"endpoint": "orders_list", "label": "Consultar Pedidos"},
+                {"endpoint": "production_assistance_list", "label": "Consultar Assistências"},
+                {"endpoint": "load_lot_route_planner", "label": "Mapa Interativo"},
+                {"endpoint": "load_lot_route_planner_v2", "label": "Mapa Interativo 2"},
+                {"endpoint": "oee_dashboard", "label": "OEE"},
+                {"endpoint": "mrp_sessoes", "label": "MRP - Sessões de Cálculo"},
+                {"endpoint": "mrp_calculation", "label": "MRP - Cálculo Rápido"},
+                {"endpoint": "mrp_reports", "label": "MRP - Relatórios"},
+            ],
+        },
+        {
+            "category": "Financeiro",
+            "items": [
+                {"endpoint": "accounts_receivable_list", "label": "Contas a Receber"},
+                {"endpoint": "accounts_payable_list", "label": "Contas a Pagar"},
+                {"endpoint": "titles_list", "label": "Títulos"},
+                {"endpoint": "checks_list", "label": "Cheques Pré-Datados"},
+            ],
+        },
+        {
+            "category": "Estoque",
+            "items": [
+                {"endpoint": "stock_movements_list", "label": "Movimentações de Estoque"},
+                {"endpoint": "product_batches_list", "label": "Lotes de Produto"},
+            ],
+        },
+        {
+            "category": "Relatórios",
+            "items": [
+                {"endpoint": "revenue_reports", "label": "Faturamento"},
+                {"endpoint": "commercial_reports", "label": "Comercial"},
+                {"endpoint": "financial_reports", "label": "Financeiro"},
+            ],
+        },
+        {
+            "category": "Gerencial",
+            "items": [
+                {"endpoint": "backup_db", "label": "Backup"},
+                {"endpoint": "users_list", "label": "Usuários"},
+                {"endpoint": "gerencial_parameters", "label": "Parâmetros"},
+            ],
+        },
+    ]
+
+
+def _flatten_access_endpoints(access_pages):
+    endpoints = []
+    for section in access_pages:
+        for item in section["items"]:
+            endpoints.append(item["endpoint"])
+    return endpoints
+
+
+def _get_user_access_permissions(user_id):
+    conn = get_siga_db_connection()
+    if not conn:
+        return set()
+    permissions = set()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT endpoint
+            FROM user_access_permissions
+            WHERE user_id = %s AND allowed = TRUE
+        """, (user_id,))
+        rows = cur.fetchall()
+        permissions = {row[0] for row in rows}
+        cur.close()
+    except Error as e:
+        print(f"Erro ao carregar permissões de acesso do usuário {user_id}: {e}")
+    finally:
+        conn.close()
+    return permissions
+
+
+def _save_user_access_permissions(user_id, endpoints):
+    conn = get_siga_db_connection()
+    if not conn:
+        return False, "Não foi possível conectar ao banco de dados auxiliar (siga_db)."
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM user_access_permissions WHERE user_id = %s", (user_id,))
+        if endpoints:
+            values = [(user_id, endpoint, True) for endpoint in endpoints]
+            cur.executemany(
+                "INSERT INTO user_access_permissions (user_id, endpoint, allowed) VALUES (%s, %s, %s)",
+                values
+            )
+        conn.commit()
+        cur.close()
+        return True, None
+    except Error as e:
+        conn.rollback()
+        print(f"Erro ao salvar permissões de acesso do usuário {user_id}: {e}")
+        return False, "Erro ao salvar permissões de acesso."
+    finally:
+        conn.close()
 
 
 @app.route('/users_list')
@@ -21642,6 +22259,46 @@ def user_detail(user_id):
         'user_detail.html',
         user=user,
         page_title=f"Usuário #{user_id}",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/users/<int:user_id>/access', methods=['GET', 'POST'])
+@login_required
+def user_access_control(user_id):
+    """
+    Exibe a tela de controle de acesso por usuário.
+    """
+    user = _fetch_user_by_id(user_id)
+    if not user:
+        flash('Usuário não encontrado.', 'warning')
+        return redirect(url_for('users_list'))
+
+    access_pages = _get_access_control_pages()
+    all_endpoints = _flatten_access_endpoints(access_pages)
+
+    if request.method == 'POST':
+        selected_endpoints = request.form.getlist('access_pages')
+        if (user.get('username') or '').strip().upper() == 'FABIO':
+            selected_endpoints = all_endpoints
+        success, error_message = _save_user_access_permissions(user_id, selected_endpoints)
+        if success:
+            flash('Permissões de acesso atualizadas.', 'success')
+        else:
+            flash(error_message or 'Erro ao salvar permissões.', 'danger')
+        return redirect(url_for('user_access_control', user_id=user_id))
+
+    allowed_endpoints = _get_user_access_permissions(user_id)
+    if not allowed_endpoints and (user.get('username') or '').strip().upper() == 'FABIO':
+        allowed_endpoints = set(all_endpoints)
+
+    return render_template(
+        'user_access_control.html',
+        user=user,
+        access_pages=access_pages,
+        allowed_endpoints=allowed_endpoints,
+        page_title=f"Controle de Acesso - {user['username']}",
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
@@ -21807,15 +22464,249 @@ def logout():
 # ROTAS DO SISTEMA MRP
 # =====================================================
 
+# Inicializa as tabelas MRP no banco siga_db (se não existirem)
+init_mrp_tables()
+
+
+@app.route('/mrp/sessoes')
+@login_required
+def mrp_sessoes():
+    """
+    Rota para exibir a lista de sessões de cálculo MRP.
+    """
+    sessoes = listar_sessoes_mrp()
+    return render_template(
+        'mrp_sessoes.html',
+        page_title="Sessões de Cálculo MRP",
+        sessoes=sessoes,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/mrp/sessoes/nova', methods=['POST'])
+@login_required
+def mrp_sessao_nova():
+    """
+    API para criar uma nova sessão de cálculo MRP com filtros pré-selecionados.
+    """
+    try:
+        data = request.get_json()
+        descricao = data.get('descricao', '').strip()
+        filtros = data.get('filtros', {})
+
+        if not descricao:
+            return jsonify({'error': 'Descrição é obrigatória'}), 400
+
+        usuario = session.get('username', 'Convidado')
+        sessao_id = criar_sessao_mrp(descricao, usuario, filtros)
+
+        if not sessao_id:
+            return jsonify({'error': 'Erro ao criar sessão'}), 500
+
+        return jsonify({
+            'success': True,
+            'sessao_id': sessao_id,
+            'message': 'Sessão criada com sucesso!'
+        })
+
+    except Exception as e:
+        print(f"Erro ao criar sessão MRP: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/sessoes/<int:sessao_id>')
+@login_required
+def mrp_sessao_detalhe(sessao_id):
+    """
+    Rota para exibir/editar uma sessão de cálculo MRP específica.
+    """
+    sessao = obter_sessao_mrp(sessao_id)
+    if not sessao:
+        flash('Sessão não encontrada.', 'error')
+        return redirect(url_for('mrp_sessoes'))
+
+    # Se a sessão já foi calculada, carregar os itens salvos
+    # Inclui status 'exportado' para permitir visualização/edição após exportação
+    itens_salvos = []
+    if sessao.get('status') in ['calculado', 'editado', 'exportado']:
+        itens_salvos = obter_itens_sessao_mrp(sessao_id)
+
+    return render_template(
+        'mrp_calculation.html',
+        page_title=f"MRP - {sessao['descricao']}",
+        sessao=sessao,
+        itens_salvos=itens_salvos,
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/mrp/sessoes/<int:sessao_id>/calcular', methods=['POST'])
+@login_required
+def mrp_sessao_calcular(sessao_id):
+    """
+    API para calcular o MRP e salvar os resultados na sessão.
+    """
+    try:
+        sessao = obter_sessao_mrp(sessao_id)
+        if not sessao:
+            return jsonify({'error': 'Sessão não encontrada'}), 404
+
+        filters = request.get_json()
+        produtos = calculate_mrp(filters)
+
+        # Salvar os produtos calculados na sessão
+        success = salvar_calculo_mrp_sessao(sessao_id, produtos, filters)
+
+        if not success:
+            return jsonify({'error': 'Erro ao salvar cálculo na sessão'}), 500
+
+        return jsonify({
+            'success': True,
+            'produtos': produtos,
+            'message': 'Cálculo realizado e salvo com sucesso!'
+        })
+
+    except Exception as e:
+        print(f"Erro ao calcular MRP para sessão: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/sessoes/<int:sessao_id>/salvar_op', methods=['POST'])
+@login_required
+def mrp_sessao_salvar_op(sessao_id):
+    """
+    API para salvar os valores de OP editados pelo usuário.
+    """
+    try:
+        sessao = obter_sessao_mrp(sessao_id)
+        if not sessao:
+            return jsonify({'error': 'Sessão não encontrada'}), 404
+
+        data = request.get_json()
+        itens_op = data.get('itens_op', {})
+
+        if not itens_op:
+            return jsonify({'error': 'Nenhum item OP para salvar'}), 400
+
+        success = atualizar_op_sessao(sessao_id, itens_op)
+
+        if not success:
+            return jsonify({'error': 'Erro ao salvar OPs'}), 500
+
+        return jsonify({
+            'success': True,
+            'message': 'OPs salvos com sucesso!'
+        })
+
+    except Exception as e:
+        print(f"Erro ao salvar OPs da sessão: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/sessoes/<int:sessao_id>/exportar', methods=['POST'])
+@login_required
+def mrp_sessao_exportar(sessao_id):
+    """
+    API para exportar os produtos da sessão com OP preenchido.
+    Também faz update dos valores de OP e muda status para 'exportado'.
+    """
+    try:
+        sessao = obter_sessao_mrp(sessao_id)
+        if not sessao:
+            return jsonify({'error': 'Sessão não encontrada'}), 404
+
+        data = request.get_json()
+        produtos = data.get('produtos', [])
+
+        # Atualizar OPs no banco antes de exportar
+        itens_op = {p['codigo']: p.get('op', 0) for p in produtos if p.get('op', 0) > 0}
+        if itens_op:
+            atualizar_op_sessao(sessao_id, itens_op)
+
+        # Atualizar status para 'exportado'
+        atualizar_status_sessao(sessao_id, 'exportado')
+
+        # Gerar Excel apenas com produtos com OP > 0
+        excel_file = generate_mrp_excel(produtos)
+
+        descricao_limpa = sessao['descricao'].replace(' ', '_').replace('/', '-')[:30]
+        nome_arquivo = f'MRP_{descricao_limpa}_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+
+        return send_file(
+            excel_file,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=nome_arquivo
+        )
+
+    except Exception as e:
+        print(f"Erro ao exportar MRP da sessão: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/sessoes/<int:sessao_id>/excluir', methods=['DELETE'])
+@login_required
+def mrp_sessao_excluir(sessao_id):
+    """
+    API para excluir uma sessão de cálculo MRP.
+    """
+    try:
+        sessao = obter_sessao_mrp(sessao_id)
+        if not sessao:
+            return jsonify({'error': 'Sessão não encontrada'}), 404
+
+        success = excluir_sessao_mrp(sessao_id)
+
+        if not success:
+            return jsonify({'error': 'Erro ao excluir sessão'}), 500
+
+        return jsonify({
+            'success': True,
+            'message': 'Sessão excluída com sucesso!'
+        })
+
+    except Exception as e:
+        print(f"Erro ao excluir sessão MRP: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/sessoes/<int:sessao_id>/itens', methods=['GET'])
+@login_required
+def mrp_sessao_obter_itens(sessao_id):
+    """
+    API para obter os itens salvos de uma sessão MRP.
+    """
+    try:
+        sessao = obter_sessao_mrp(sessao_id)
+        if not sessao:
+            return jsonify({'error': 'Sessão não encontrada'}), 404
+
+        itens = obter_itens_sessao_mrp(sessao_id)
+
+        return jsonify({
+            'success': True,
+            'itens': itens,
+            'sessao': sessao
+        })
+
+    except Exception as e:
+        print(f"Erro ao obter itens da sessão: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/mrp/calculation')
 @login_required
 def mrp_calculation():
     """
-    Rota para exibir a tela de cálculo MRP.
+    Rota para exibir a tela de cálculo MRP (modo rápido, sem sessão).
     """
     return render_template(
         'mrp_calculation.html',
         page_title="Cálculo MRP",
+        sessao=None,
+        itens_salvos=[],
         system_version=SYSTEM_VERSION,
         usuario_logado=session.get('username', 'Convidado')
     )
@@ -21962,9 +22853,2571 @@ def mrp_save_and_export():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/mrp/reports')
+@login_required
+def mrp_reports():
+    """
+    Rota para exibir a tela de relatórios MRP.
+    """
+    return render_template(
+        'mrp_reports.html',
+        page_title="Relatórios MRP",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado')
+    )
+
+
+@app.route('/mrp/report/assembly_output')
+@login_required
+def mrp_report_assembly_output():
+    """
+    Rota para exibir a tela de filtros do Relatório de Saída para Montagem.
+    """
+    user_id = session.get('user_id')
+
+    # Buscar lotes de produção disponíveis (PETRA, GARLAND, SOLARE)
+    conn_erp = get_erp_db_connection()
+    lotes_producao = []
+    localizacoes_agrupadas = []
+    if conn_erp:
+        try:
+            cur_erp = conn_erp.cursor()
+            cur_erp.execute("""
+                SELECT DISTINCT lotcod, lotdes, lotdtini
+                FROM loteprod
+                WHERE lotstatus IN ('EP', 'ES')
+                  AND lotdes ILIKE '%OP%'
+                  AND (lotdes ILIKE '%PETRA%' OR lotdes ILIKE '%GARLAND%' OR lotdes ILIKE '%SOLARE%')
+                ORDER BY lotdtini DESC
+                LIMIT 100
+            """)
+            lotes_producao = [{'codigo': row[0], 'descricao': row[1], 'data': row[2]} for row in cur_erp.fetchall()]
+
+            # Buscar localizações distintas e agrupar pelos dois primeiros caracteres
+            cur_erp.execute("""
+                SELECT DISTINCT TRIM(locsaliza) as localizacao
+                FROM localiz1
+                WHERE locsaliza IS NOT NULL AND TRIM(locsaliza) <> ''
+                ORDER BY localizacao
+            """)
+            todas_localizacoes = [row[0] for row in cur_erp.fetchall()]
+
+            # Agrupar localizações pelos dois primeiros caracteres
+            # Excluir localizações que começam com "S"
+            grupos_loc = {}
+            for loc in todas_localizacoes:
+                if loc and len(loc) >= 2:
+                    prefixo = loc[:2].upper()
+                    # Ignorar localizações que começam com S
+                    if prefixo.startswith('S'):
+                        continue
+                    if prefixo not in grupos_loc:
+                        grupos_loc[prefixo] = []
+                    grupos_loc[prefixo].append(loc)
+
+            # Criar lista de grupos com labels descritivos
+            # Mapear prefixos para nomes de blocos (BA = Bloco A, BB = Bloco B, BC = Bloco C, BD = Bloco D, BE = Bloco E)
+            for prefixo in sorted(grupos_loc.keys()):
+                # Se o prefixo começa com B e a segunda letra é A, B, C, D ou E, mostrar como "Bloco X"
+                if len(prefixo) == 2 and prefixo[0] == 'B' and prefixo[1] in ['A', 'B', 'C', 'D', 'E']:
+                    label = f"{prefixo} - Bloco {prefixo[1]}"
+                else:
+                    label = f"{prefixo}"
+                localizacoes_agrupadas.append({
+                    'prefixo': prefixo,
+                    'label': label,
+                    'localizacoes': grupos_loc[prefixo]
+                })
+
+            cur_erp.close()
+        except Error as e:
+            print(f"Erro ao buscar lotes de produção: {e}")
+            flash(f"Erro ao carregar lotes de produção: {e}", "danger")
+        finally:
+            if conn_erp:
+                conn_erp.close()
+
+    return render_template(
+        'mrp_report_assembly_output.html',
+        page_title="Relatório de Saída para Montagem",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
+        lotes_producao=lotes_producao,
+        localizacoes_agrupadas=localizacoes_agrupadas
+    )
+
+
+@app.route('/mrp/report/assembly_output/generate', methods=['POST'])
+@login_required
+def mrp_report_assembly_output_generate():
+    """
+    API para gerar o Relatório de Saída para Montagem.
+    """
+    user_id = session.get('user_id')
+
+    try:
+        data = request.get_json()
+        lote_codigo = data.get('lote_codigo')
+        material_filter = data.get('material_filter', 'all')  # madeira, mdf, compensado, all
+        location_filter = data.get('location_filter', [])  # lista de prefixos de localização
+
+        if not lote_codigo:
+            return jsonify({'error': 'Selecione uma OP'}), 400
+
+        # Buscar informações do lote
+        conn_erp = get_erp_db_connection()
+        if not conn_erp:
+            return jsonify({'error': 'Erro ao conectar ao banco de dados'}), 500
+
+        try:
+            cur_erp = conn_erp.cursor()
+
+            # Buscar informações do lote selecionado
+            cur_erp.execute("""
+                SELECT lotcod, lotdes, lotdtini
+                FROM loteprod
+                WHERE lotcod = %s
+            """, (lote_codigo,))
+            lote_info = cur_erp.fetchone()
+
+            if not lote_info:
+                return jsonify({'error': 'Lote não encontrado'}), 404
+
+            lote_descricao = lote_info[1]
+            lote_data_abertura = lote_info[2]
+
+            print(f"DEBUG: Buscando reservas para lote_codigo={lote_codigo}")
+
+            # Buscar reservas pendentes do lote
+            # Reservas pendentes = requisitado - movimentado
+            query = """
+                SELECT
+                    r.reqnumero as reserva,
+                    r.reqord as ordem,
+                    r.reqproduto as produto,
+                    p.pronome as descricao,
+                    p.subgrupo,
+                    g.subnome as subgrupo_nome,
+                    r.rqoquanti as quantidade,
+                    COALESCE(
+                        (SELECT SUM(t.priquanti)
+                         FROM toqmovi t
+                         WHERE t.priordem = r.reqord
+                           AND t.priproduto = r.reqproduto),
+                        0
+                    ) as quantidade_movimentada
+                FROM reqordem r
+                INNER JOIN ordem o ON r.reqord = o.ordem
+                INNER JOIN produto p ON TRIM(r.reqproduto) = TRIM(p.produto)
+                LEFT JOIN grupo1 g ON p.grupo = g.grupo AND p.subgrupo = g.subgrupo
+                WHERE o.lotcod = %s
+                  AND (o.orddtence IS NULL OR o.orddtence = '0001-01-01')
+                  AND UPPER(COALESCE(p.pronome, '')) NOT LIKE '%%CAVILHA%%'
+                  AND UPPER(COALESCE(p.pronome, '')) NOT LIKE '%%CANTONEIRA%%'
+            """
+
+            cur_erp.execute(query, (lote_codigo,))
+            reservas_raw = cur_erp.fetchall()
+
+            # Buscar localizações dos produtos
+            produtos_codigos = list(set([r[2] for r in reservas_raw]))
+            localizacoes_dict = {}
+
+            if produtos_codigos:
+                placeholders = ','.join(['%s'] * len(produtos_codigos))
+                cur_erp.execute(f"""
+                    SELECT produto, STRING_AGG(locsaliza, ' || ' ORDER BY locsequ)
+                    FROM localiz1
+                    WHERE TRIM(produto) IN ({placeholders})
+                    GROUP BY produto
+                """, tuple([p.strip() for p in produtos_codigos]))
+                localizacoes_dict = {row[0].strip(): row[1] for row in cur_erp.fetchall()}
+
+            # Buscar tipos de material (madeira, mdf, compensado) dos produtos
+            material_types = {}
+            if produtos_codigos:
+                placeholders = ','.join(['%s'] * len(produtos_codigos))
+                cur_erp.execute(f"""
+                    SELECT DISTINCT
+                        TRIM(e.estproduto) as produto_pai,
+                        p.subgrupo as subgrupo_filho
+                    FROM estrutur e
+                    INNER JOIN produto p ON TRIM(e.estfilho) = TRIM(p.produto)
+                    WHERE TRIM(e.estproduto) IN ({placeholders})
+                      AND p.grupo = 10
+                      AND p.subgrupo IN (1, 2, 3)
+                """, tuple([p.strip() for p in produtos_codigos]))
+
+                for row in cur_erp.fetchall():
+                    produto_code = row[0].strip() if row[0] else ''
+                    subgrupo = int(row[1]) if row[1] else 0
+                    if produto_code and produto_code not in material_types:
+                        if subgrupo == 2:
+                            material_types[produto_code] = 'compensado'
+                        elif subgrupo == 3:
+                            material_types[produto_code] = 'madeira'
+                        elif subgrupo == 1:
+                            material_types[produto_code] = 'mdf'
+
+            # Processar reservas
+            reservas = []
+            for row in reservas_raw:
+                produto_codigo = row[2].strip() if row[2] else ''
+                material_type = material_types.get(produto_codigo, '')
+
+                # Filtrar por material se especificado
+                if material_filter != 'all' and material_type != material_filter:
+                    continue
+
+                # Calcular quantidade pendente = quantidade - movimentada
+                quantidade = float(row[6] or 0)
+                quantidade_movimentada = float(row[7] or 0)
+                quantidade_pendente = quantidade - quantidade_movimentada
+
+                # Só incluir se houver quantidade pendente
+                if quantidade_pendente <= 0:
+                    continue
+
+                # Obter localização do produto
+                localizacao_produto = localizacoes_dict.get(produto_codigo, '')
+
+                # Filtrar por localização se especificado
+                if location_filter and len(location_filter) > 0:
+                    # Verificar se o produto deve ser incluído baseado no filtro de localização
+                    incluir_por_localizacao = False
+
+                    # Se "sem_localizacao" está selecionado e o produto não tem localização
+                    if 'sem_localizacao' in location_filter and not localizacao_produto:
+                        incluir_por_localizacao = True
+
+                    # Verificar se a localização do produto começa com algum dos prefixos selecionados
+                    if localizacao_produto:
+                        # A localização pode ter múltiplos valores separados por " || "
+                        locs_produto = [loc.strip() for loc in localizacao_produto.split('||')]
+                        for loc in locs_produto:
+                            if loc and len(loc) >= 2:
+                                prefixo_loc = loc[:2].upper()
+                                if prefixo_loc in location_filter:
+                                    incluir_por_localizacao = True
+                                    break
+
+                    if not incluir_por_localizacao:
+                        continue
+
+                reservas.append({
+                    'reserva': row[0],
+                    'ordem': row[1],
+                    'produto': produto_codigo,
+                    'descricao': (row[3] or '').strip(),
+                    'subgrupo': row[4],
+                    'subgrupo_nome': (row[5] or '').strip(),
+                    'quantidade': quantidade_pendente,
+                    'localizacao': localizacao_produto,
+                    'material_type': material_type
+                })
+
+            # Ordenar por subgrupo e descrição do produto
+            reservas.sort(key=lambda x: (x['subgrupo_nome'] or '', x['descricao'] or ''))
+
+            # Buscar caminho das fotos
+            mrp_photos_path = get_user_parameters(user_id, MRP_COMPONENT_PHOTOS_PATH_PARAM) or ''
+
+            cur_erp.close()
+            conn_erp.close()
+
+            return jsonify({
+                'success': True,
+                'lote': {
+                    'codigo': lote_codigo,
+                    'descricao': lote_descricao,
+                    'data_abertura': lote_data_abertura.strftime('%d/%m/%Y') if lote_data_abertura else ''
+                },
+                'material_filter': material_filter,
+                'location_filter': location_filter,
+                'reservas': reservas,
+                'photos_path': mrp_photos_path,
+                'generated_at': datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            })
+
+        except Error as e:
+            print(f"Erro ao gerar relatório: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            if conn_erp:
+                conn_erp.close()
+
+    except Exception as e:
+        print(f"Erro ao gerar relatório de saída para montagem: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/report/assembly_output/photo/<path:produto_codigo>')
+@login_required
+def mrp_report_component_photo(produto_codigo):
+    """
+    Rota para servir fotos de componentes.
+    """
+    user_id = session.get('user_id')
+    mrp_photos_path = get_user_parameters(user_id, MRP_COMPONENT_PHOTOS_PATH_PARAM) or ''
+
+    if not mrp_photos_path:
+        return abort(404)
+
+    # Tentar encontrar a foto com diferentes extensões
+    extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+    base_path = Path(mrp_photos_path)
+
+    for ext in extensions:
+        photo_path = base_path / f"{produto_codigo}{ext}"
+        if photo_path.exists():
+            return send_file(str(photo_path), mimetype=mimetypes.guess_type(str(photo_path))[0] or 'image/jpeg')
+
+        # Tentar com extensão em maiúsculo
+        photo_path_upper = base_path / f"{produto_codigo}{ext.upper()}"
+        if photo_path_upper.exists():
+            return send_file(str(photo_path_upper), mimetype=mimetypes.guess_type(str(photo_path_upper))[0] or 'image/jpeg')
+
+    # Retornar placeholder se não encontrar
+    return abort(404)
+
+
+@app.route('/mrp/report/assembly_output/export_pdf', methods=['POST'])
+@login_required
+def mrp_report_assembly_output_export_pdf():
+    """
+    Gera e exporta o Relatório de Saída para Montagem em PDF.
+    Formato A4 retrato.
+    """
+    user_id = session.get('user_id')
+
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'Dados não fornecidos'}), 400
+
+        lote_info = data.get('lote', {})
+        material_filter = data.get('material_filter', 'all')
+        reservas = data.get('reservas', [])
+        generated_at = data.get('generated_at', datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S'))
+
+        material_labels = {
+            'all': 'Todos',
+            'madeira': 'MADEIRA',
+            'mdf': 'MDF',
+            'compensado': 'COMPENSADO'
+        }
+
+        # Criar buffer para o PDF
+        buffer = BytesIO()
+
+        # Classe para contar páginas e adicionar numeração
+        class NumberedCanvas(canvas.Canvas):
+            def __init__(self, *args, **kwargs):
+                canvas.Canvas.__init__(self, *args, **kwargs)
+                self._saved_page_states = []
+
+            def showPage(self):
+                self._saved_page_states.append(dict(self.__dict__))
+                self._startPage()
+
+            def save(self):
+                num_pages = len(self._saved_page_states)
+                for state in self._saved_page_states:
+                    self.__dict__.update(state)
+                    self.draw_page_number(num_pages)
+                    canvas.Canvas.showPage(self)
+                canvas.Canvas.save(self)
+
+            def draw_page_number(self, page_count):
+                self.setFont("Helvetica", 8)
+                self.setFillColor(colors.gray)
+                page_num = f"{self._pageNumber}/{page_count}"
+                # Posicionar no canto inferior direito
+                self.drawRightString(A4[0] - 5*mm, 5*mm, page_num)
+
+        # Configurar documento A4 com margens mínimas para aproveitar melhor a folha
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            leftMargin=5*mm,
+            rightMargin=5*mm,
+            topMargin=5*mm,
+            bottomMargin=8*mm  # Um pouco mais de margem inferior para o número da página
+        )
+
+        elements = []
+        styles = getSampleStyleSheet()
+
+        # Estilo para texto pequeno (cabeçalhos e campos menores)
+        small_style = ParagraphStyle(
+            'SmallText',
+            parent=styles['Normal'],
+            fontSize=7,
+            leading=9
+        )
+
+        # Estilo para texto maior (subgrupo, concatenado, local, quantidade)
+        content_style = ParagraphStyle(
+            'ContentText',
+            parent=styles['Normal'],
+            fontSize=9,
+            leading=11
+        )
+
+        # Estilo para quantidade (negrito e maior)
+        qty_style = ParagraphStyle(
+            'QtyText',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=12,
+            alignment=TA_CENTER
+        )
+
+        header_style = ParagraphStyle(
+            'HeaderTitle',
+            parent=styles['Heading1'],
+            fontSize=12,
+            spaceAfter=2*mm
+        )
+
+        info_style = ParagraphStyle(
+            'InfoText',
+            parent=styles['Normal'],
+            fontSize=8
+        )
+
+        # Cabeçalho
+        title_text = 'Produção - Acompanhamento Montagem'
+        material_label = material_labels.get(material_filter, '')
+        if material_label and material_label != 'Todos':
+            title_text += f' - {material_label}'
+
+        elements.append(Paragraph(title_text, header_style))
+
+        info_text = f"<b>OP:</b> {lote_info.get('descricao', '')} | <b>Data Abertura:</b> {lote_info.get('data_abertura', '')} | <b>Material:</b> {material_label} | <b>Impresso em:</b> {generated_at}"
+        elements.append(Paragraph(info_text, info_style))
+        elements.append(Spacer(1, 4*mm))
+
+        # Função para gerar QR code como imagem (tamanho maior para facilitar leitura)
+        def generate_qr_image(text, size=50):
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=3,
+                border=0
+            )
+            qr.add_data(str(text))
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            img_buffer = BytesIO()
+            img.save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+            return RLImage(img_buffer, width=size, height=size)
+
+        # Função para carregar foto do componente
+        def get_component_photo(produto_codigo, size=45):
+            mrp_photos_path = get_user_parameters(user_id, MRP_COMPONENT_PHOTOS_PATH_PARAM) or ''
+            if not mrp_photos_path:
+                return ''
+
+            extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.JPG', '.JPEG', '.PNG']
+            base_path = Path(mrp_photos_path)
+
+            for ext in extensions:
+                photo_path = base_path / f"{produto_codigo}{ext}"
+                if photo_path.exists():
+                    try:
+                        return RLImage(str(photo_path), width=size, height=size)
+                    except:
+                        pass
+            return ''
+
+        # Agrupar por subgrupo
+        grouped_reservas = {}
+        for reserva in reservas:
+            subgrupo = reserva.get('subgrupo_nome') or 'Sem Subgrupo'
+            if subgrupo not in grouped_reservas:
+                grouped_reservas[subgrupo] = []
+            grouped_reservas[subgrupo].append(reserva)
+
+        # Criar dados da tabela
+        table_data = []
+
+        # Cabeçalho da tabela
+        table_data.append([
+            Paragraph('<b>Sub Grupo</b>', small_style),
+            Paragraph('<b>Foto</b>', small_style),
+            Paragraph('<b>QR</b>', small_style),
+            Paragraph('<b>Ordem - Reserva - Produto - Descrição</b>', small_style),
+            Paragraph('<b>Local</b>', small_style),
+            Paragraph('<b>Qtd</b>', small_style),
+            Paragraph('<b>QR</b>', small_style)
+        ])
+
+        row_index = 0
+        for subgrupo in sorted(grouped_reservas.keys()):
+            reservas_subgrupo = grouped_reservas[subgrupo]
+
+            for idx, reserva in enumerate(reservas_subgrupo):
+                is_even = row_index % 2 == 0
+
+                # Concatenar informações
+                concat_text = f"{reserva.get('ordem', '')} - {reserva.get('reserva', '')} - {reserva.get('produto', '')} - {reserva.get('descricao', '')}"
+
+                # Preparar células
+                row = []
+
+                # Coluna 1: Sub Grupo (repetido em todas as linhas) - fonte maior
+                row.append(Paragraph(subgrupo, content_style))
+
+                # Coluna 2: Foto
+                photo = get_component_photo(reserva.get('produto', ''))
+                row.append(photo)
+
+                # Coluna 3: QR Code (esquerda) - aparece em linhas ímpares
+                if not is_even:
+                    row.append(generate_qr_image(reserva.get('reserva', '')))
+                else:
+                    row.append('')
+
+                # Coluna 4: Concatenado - fonte maior
+                row.append(Paragraph(concat_text, content_style))
+
+                # Coluna 5: Localização - fonte maior
+                row.append(Paragraph(reserva.get('localizacao', '') or '', content_style))
+
+                # Coluna 6: Quantidade - fonte maior e em negrito
+                qtd = reserva.get('quantidade', 0)
+                row.append(Paragraph(f"<b>{int(qtd)}</b>", qty_style))
+
+                # Coluna 7: QR Code (direita) - aparece em linhas pares
+                if is_even:
+                    row.append(generate_qr_image(reserva.get('reserva', '')))
+                else:
+                    row.append('')
+
+                table_data.append(row)
+                row_index += 1
+
+        # Definir larguras das colunas (A4 width = 210mm, margens = 10mm, disponível = 200mm ≈ 567 pontos)
+        # Colunas: SubGrupo, Foto, QR esq, Concat, Local, Qtd, QR dir
+        col_widths = [55, 50, 55, 250, 55, 35, 55]  # Total ~555 pontos
+
+        # Criar tabela
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+        # Estilo da tabela
+        table_style = TableStyle([
+            # Cabeçalho
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 7),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+
+            # Corpo
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 6),
+            ('ALIGN', (0, 1), (0, -1), 'CENTER'),  # Sub Grupo
+            ('ALIGN', (1, 1), (1, -1), 'CENTER'),  # Foto
+            ('ALIGN', (2, 1), (2, -1), 'CENTER'),  # QR esquerda
+            ('ALIGN', (3, 1), (3, -1), 'LEFT'),    # Concat
+            ('ALIGN', (4, 1), (4, -1), 'CENTER'),  # Local
+            ('ALIGN', (5, 1), (5, -1), 'CENTER'),  # Qtd
+            ('ALIGN', (6, 1), (6, -1), 'CENTER'),  # QR direita
+            ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
+
+            # Grade
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('BOX', (0, 0), (-1, -1), 1, colors.black),
+
+            # Padding
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ])
+
+        # Adicionar cores alternadas nas linhas
+        for i in range(1, len(table_data)):
+            if i % 2 == 0:
+                table_style.add('BACKGROUND', (0, i), (-1, i), colors.Color(0.97, 0.97, 0.97))
+
+        table.setStyle(table_style)
+        elements.append(table)
+
+        # Gerar PDF com numeração de páginas
+        doc.build(elements, canvasmaker=NumberedCanvas)
+
+        buffer.seek(0)
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'Relatorio_Saida_Montagem_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        )
+
+    except Exception as e:
+        print(f"Erro ao gerar PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
+# RELATÓRIO ACOMPANHAMENTO DE PLANILHAMENTO
+# =====================================================
+
+@app.route('/mrp/report/planning_tracking')
+@login_required
+def mrp_report_planning_tracking():
+    """
+    Rota para exibir a tela de filtros do Relatório de Acompanhamento de Planilhamento.
+    """
+    user_id = session.get('user_id')
+
+    # Buscar lotes de produção disponíveis (OP)
+    conn_erp = get_erp_db_connection()
+    lotes_producao = []
+    operacoes = []
+
+    if conn_erp:
+        try:
+            cur_erp = conn_erp.cursor()
+
+            # Buscar lotes de produção (OP)
+            cur_erp.execute("""
+                SELECT DISTINCT lotcod, lotdes, lotdtini
+                FROM loteprod
+                WHERE lotstatus IN ('EP', 'ES')
+                  AND lotdes ILIKE '%OP%'
+                ORDER BY lotdtini DESC
+                LIMIT 100
+            """)
+            lotes_producao = [{'codigo': row[0], 'descricao': row[1], 'data': row[2]} for row in cur_erp.fetchall()]
+
+            # Buscar operações disponíveis da tabela opproc
+            cur_erp.execute("""
+                SELECT DISTINCT oppcodi, oppdesc
+                FROM opproc
+                WHERE oppdesc IS NOT NULL AND TRIM(oppdesc) <> ''
+                ORDER BY oppdesc
+            """)
+            operacoes = [{'codigo': row[0], 'descricao': row[1]} for row in cur_erp.fetchall()]
+
+            cur_erp.close()
+        except Error as e:
+            print(f"Erro ao buscar dados para planilhamento: {e}")
+            flash(f"Erro ao carregar dados: {e}", "danger")
+        finally:
+            if conn_erp:
+                conn_erp.close()
+
+    return render_template(
+        'mrp_report_planning_tracking.html',
+        page_title="Acompanhamento de Planilhamento",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
+        lotes_producao=lotes_producao,
+        operacoes=operacoes
+    )
+
+
+@app.route('/mrp/report/planning_tracking/generate', methods=['POST'])
+@login_required
+def mrp_report_planning_tracking_generate():
+    """
+    API para gerar o Relatório de Acompanhamento de Planilhamento.
+    """
+    user_id = session.get('user_id')
+
+    try:
+        data = request.get_json()
+        lote_codigo = data.get('lote_codigo')
+        operacao_codigo = data.get('operacao_codigo')
+
+        if not lote_codigo:
+            return jsonify({'error': 'Selecione uma OP'}), 400
+
+        if not operacao_codigo:
+            return jsonify({'error': 'Selecione uma Operação'}), 400
+
+        # Buscar informações do lote e dados do processo
+        conn_erp = get_erp_db_connection()
+        if not conn_erp:
+            return jsonify({'error': 'Erro ao conectar ao banco de dados'}), 500
+
+        try:
+            cur_erp = conn_erp.cursor()
+
+            # Buscar informações do lote selecionado
+            cur_erp.execute("""
+                SELECT lotcod, lotdes, lotdtini
+                FROM loteprod
+                WHERE lotcod = %s
+            """, (lote_codigo,))
+            lote_info = cur_erp.fetchone()
+
+            if not lote_info:
+                return jsonify({'error': 'Lote não encontrado'}), 404
+
+            lote_descricao = lote_info[1]
+            lote_data_abertura = lote_info[2]
+
+            # Buscar descrição da operação
+            cur_erp.execute("""
+                SELECT oppdesc FROM opproc WHERE oppcodi = %s
+            """, (operacao_codigo,))
+            operacao_info = cur_erp.fetchone()
+            operacao_descricao = operacao_info[0] if operacao_info else ''
+
+            # Buscar dados do processo
+            # A query busca os itens do processo filtrados pela operação e pelo lote de produção
+            # Ligação: ordem.ordproduto = processo.produto
+            cur_erp.execute("""
+                SELECT
+                    o.ordem as numero_ordem,
+                    TRIM(o.ordproduto) as codigo_produto,
+                    prod.pronome as descricao_produto,
+                    COALESCE(g.subnome, '') as grupo,
+                    o.ordquanti as quantidade,
+                    TRIM(pr.processo) as codigo_processo
+                FROM ordem o
+                INNER JOIN processo pr ON TRIM(pr.produto) = TRIM(o.ordproduto)
+                INNER JOIN produto prod ON TRIM(prod.produto) = TRIM(o.ordproduto)
+                LEFT JOIN grupo1 g ON prod.grupo = g.grupo AND prod.subgrupo = g.subgrupo
+                WHERE pr.prccodig = %s
+                  AND o.lotcod = %s
+                ORDER BY g.subnome, o.ordem
+            """, (operacao_codigo, lote_codigo))
+
+            rows = cur_erp.fetchall()
+
+            # Buscar caminho das fotos de Preparação e Pintura
+            prep_pintura_photos_path = get_user_parameters(user_id, MRP_PREP_PINTURA_PHOTOS_PATH_PARAM) or ''
+
+            # Listar arquivos de fotos disponíveis
+            fotos_disponiveis = []
+            if prep_pintura_photos_path and os.path.isdir(prep_pintura_photos_path):
+                try:
+                    for arquivo in os.listdir(prep_pintura_photos_path):
+                        if arquivo.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp')):
+                            fotos_disponiveis.append(arquivo)
+                except Exception as e:
+                    print(f"Erro ao listar fotos: {e}")
+
+            # Função para encontrar foto baseada no código ou descrição do produto
+            def encontrar_foto(codigo_produto, descricao_produto):
+                if not fotos_disponiveis:
+                    return None
+                codigo_upper = (codigo_produto or '').upper().strip()
+                descricao_upper = (descricao_produto or '').upper().strip()
+                for foto in fotos_disponiveis:
+                    # Remove extensão e compara com o código e descrição
+                    nome_foto = os.path.splitext(foto)[0].upper().strip()
+                    # Verifica se o nome da foto está no código ou descrição
+                    if nome_foto and (nome_foto in codigo_upper or nome_foto in descricao_upper or
+                                       codigo_upper in nome_foto or descricao_upper in nome_foto):
+                        return foto
+                return None
+
+            # Formatar dados para retorno
+            items = []
+            for row in rows:
+                numero_ordem = row[0]
+                codigo_produto = row[1]
+                descricao_produto = row[2]
+                grupo = row[3]
+                quantidade = row[4] or 0
+                codigo_processo = row[5] or ''
+
+                # O código de barras é: numero_ordem + codigo do processo (da tabela processo)
+                codigo_barras = f"{numero_ordem}{codigo_processo}"
+
+                # Buscar foto
+                foto_arquivo = encontrar_foto(codigo_produto, descricao_produto)
+                foto_url = None
+                if foto_arquivo and prep_pintura_photos_path:
+                    foto_url = f"/mrp/report/planning_tracking/photo/{foto_arquivo}"
+
+                items.append({
+                    'grupo': grupo or '',
+                    'ordem': numero_ordem,
+                    'codigo_barras': codigo_barras,
+                    'produto': f"{codigo_produto} - {descricao_produto}",
+                    'descricao_produto': descricao_produto,
+                    'quantidade': int(quantidade) if quantidade else 0,
+                    'foto': foto_arquivo,
+                    'foto_url': foto_url
+                })
+
+            cur_erp.close()
+
+            return jsonify({
+                'success': True,
+                'lote': {
+                    'codigo': lote_codigo,
+                    'descricao': lote_descricao,
+                    'data_abertura': lote_data_abertura.strftime('%d/%m/%Y') if lote_data_abertura else ''
+                },
+                'operacao': {
+                    'codigo': operacao_codigo,
+                    'descricao': operacao_descricao
+                },
+                'items': items,
+                'generated_at': datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            })
+
+        except Error as e:
+            print(f"Erro ao buscar dados do planilhamento: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': f'Erro ao buscar dados: {str(e)}'}), 500
+        finally:
+            if conn_erp:
+                conn_erp.close()
+
+    except Exception as e:
+        print(f"Erro ao gerar relatório de planilhamento: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/report/planning_tracking/export_pdf', methods=['POST'])
+@login_required
+def mrp_report_planning_tracking_export_pdf():
+    """
+    Gera e exporta o Relatório de Acompanhamento de Planilhamento em PDF.
+    """
+    user_id = session.get('user_id')
+
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'Dados não fornecidos'}), 400
+
+        lote_info = data.get('lote', {})
+        operacao_info = data.get('operacao', {})
+        items = data.get('items', [])
+        generated_at = data.get('generated_at', datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S'))
+
+        # Criar buffer para o PDF
+        buffer = BytesIO()
+
+        # Classe para contar páginas e adicionar numeração
+        class NumberedCanvas(canvas.Canvas):
+            def __init__(self, *args, **kwargs):
+                canvas.Canvas.__init__(self, *args, **kwargs)
+                self._saved_page_states = []
+
+            def showPage(self):
+                self._saved_page_states.append(dict(self.__dict__))
+                self._startPage()
+
+            def save(self):
+                num_pages = len(self._saved_page_states)
+                for state in self._saved_page_states:
+                    self.__dict__.update(state)
+                    self.draw_page_number(num_pages)
+                    canvas.Canvas.showPage(self)
+                canvas.Canvas.save(self)
+
+            def draw_page_number(self, page_count):
+                self.setFont("Helvetica", 8)
+                self.setFillColor(colors.gray)
+                page_num = f"{self._pageNumber}/{page_count}"
+                self.drawRightString(A4[0] - 5*mm, 5*mm, page_num)
+
+        # Configurar documento A4 com margens mínimas
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            leftMargin=5*mm,
+            rightMargin=5*mm,
+            topMargin=5*mm,
+            bottomMargin=8*mm
+        )
+
+        elements = []
+        styles = getSampleStyleSheet()
+
+        # Estilos
+        header_style = ParagraphStyle(
+            'HeaderTitle',
+            parent=styles['Heading1'],
+            fontSize=12,
+            spaceAfter=2*mm
+        )
+
+        info_style = ParagraphStyle(
+            'InfoText',
+            parent=styles['Normal'],
+            fontSize=8
+        )
+
+        content_style = ParagraphStyle(
+            'ContentText',
+            parent=styles['Normal'],
+            fontSize=9,
+            leading=11
+        )
+
+        qty_style = ParagraphStyle(
+            'QtyText',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=12,
+            alignment=TA_CENTER
+        )
+
+        # Cabeçalho
+        elements.append(Paragraph('Produção - Acompanhamento de Saídas', header_style))
+
+        info_text = f"<b>{lote_info.get('codigo', '')} - {lote_info.get('descricao', '')}</b>"
+        elements.append(Paragraph(info_text, info_style))
+
+        operacao_text = f"<b>Operação:</b> {operacao_info.get('descricao', '')} | <b>Início:</b> __________ | <b>Fim:</b> __________"
+        elements.append(Paragraph(operacao_text, info_style))
+        elements.append(Spacer(1, 4*mm))
+
+        # Função para gerar código de barras como imagem
+        def generate_barcode_image(text, width=28*mm, height=10*mm):
+            try:
+                from barcode import Code128
+                from barcode.writer import ImageWriter
+                import io
+
+                # Gerar código de barras Code128 sem texto (write_text=False)
+                code128 = Code128(str(text), writer=ImageWriter())
+                barcode_buffer = io.BytesIO()
+                code128.write(barcode_buffer, options={
+                    'module_width': 0.2,
+                    'module_height': 8,
+                    'font_size': 0,
+                    'text_distance': 0,
+                    'quiet_zone': 1,
+                    'write_text': False
+                })
+                barcode_buffer.seek(0)
+                return RLImage(barcode_buffer, width=width, height=height)
+            except Exception as e:
+                print(f"Erro ao gerar código de barras: {e}")
+                return Paragraph(str(text), content_style)
+
+        # Carregar caminho das fotos do parâmetro
+        fotos_path = get_user_parameters(user_id, MRP_PREP_PINTURA_PHOTOS_PATH_PARAM) or ''
+        fotos_disponiveis = []
+        if fotos_path and os.path.isdir(fotos_path):
+            try:
+                fotos_disponiveis = [f for f in os.listdir(fotos_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
+            except Exception as e:
+                print(f"Erro ao listar fotos: {e}")
+
+        def encontrar_foto_pdf(produto_texto):
+            if not produto_texto or not fotos_disponiveis:
+                return None
+            produto_upper = produto_texto.upper().strip()
+            for foto in fotos_disponiveis:
+                nome_foto = os.path.splitext(foto)[0].upper().strip()
+                if nome_foto and (nome_foto in produto_upper or produto_upper in nome_foto):
+                    return foto
+            return None
+
+        def load_photo_image(foto_nome, max_width=12*mm, max_height=12*mm):
+            if not foto_nome or not fotos_path:
+                return ''
+            try:
+                foto_path = os.path.join(fotos_path, foto_nome)
+                if os.path.exists(foto_path):
+                    return RLImage(foto_path, width=max_width, height=max_height)
+            except Exception as e:
+                print(f"Erro ao carregar foto {foto_nome}: {e}")
+            return ''
+
+        # Montar tabela
+        # Colunas: Grupo | Foto | Ordem | Cod Barras | Produto | Qtd | Cod Barras
+        table_data = []
+
+        # Cabeçalho da tabela
+        header_row = [
+            Paragraph('<b>Grupo</b>', content_style),
+            Paragraph('<b>Foto</b>', content_style),
+            Paragraph('<b>Ordem</b>', content_style),
+            Paragraph('<b>Cod Barras</b>', content_style),
+            Paragraph('<b>Produto</b>', content_style),
+            Paragraph('<b>Qtd</b>', content_style),
+            Paragraph('<b>Cod Barras</b>', content_style)
+        ]
+        table_data.append(header_row)
+
+        # Dados das linhas (alternando posição do código de barras)
+        for idx, item in enumerate(items):
+            barcode_img = generate_barcode_image(item.get('codigo_barras', ''))
+
+            # Buscar foto do produto
+            foto_nome = item.get('foto') or encontrar_foto_pdf(item.get('produto', ''))
+            foto_img = load_photo_image(foto_nome) if foto_nome else ''
+
+            # Alternar posição do código de barras (esquerda nas linhas pares, direita nas ímpares)
+            if idx % 2 == 0:
+                # Código de barras na coluna esquerda
+                row = [
+                    Paragraph(item.get('grupo', ''), content_style),
+                    foto_img,
+                    Paragraph(str(item.get('ordem', '')), content_style),
+                    barcode_img,
+                    Paragraph(item.get('produto', ''), content_style),
+                    Paragraph(str(item.get('quantidade', 0)), qty_style),
+                    ''  # Vazio na direita
+                ]
+            else:
+                # Código de barras na coluna direita
+                row = [
+                    Paragraph(item.get('grupo', ''), content_style),
+                    foto_img,
+                    Paragraph(str(item.get('ordem', '')), content_style),
+                    '',  # Vazio na esquerda
+                    Paragraph(item.get('produto', ''), content_style),
+                    Paragraph(str(item.get('quantidade', 0)), qty_style),
+                    barcode_img
+                ]
+
+            table_data.append(row)
+
+        # Definir larguras das colunas (A4 retrato = 210mm, menos margens 10mm = 200mm disponíveis)
+        # Colunas: Grupo | Foto | Ordem | Cod Barras | Produto | Qtd | Cod Barras
+        col_widths = [25*mm, 15*mm, 16*mm, 30*mm, 64*mm, 12*mm, 30*mm]
+
+        # Criar tabela
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f8fafc')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1e293b')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+            ('TOPPADDING', (0, 0), (-1, 0), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('TOPPADDING', (0, 1), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (1, 0), (1, -1), 'CENTER'),  # Foto centralizada
+            ('ALIGN', (5, 0), (5, -1), 'CENTER'),  # Qtd centralizada
+        ]))
+
+        elements.append(table)
+
+        # Gerar PDF
+        doc.build(elements, canvasmaker=NumberedCanvas)
+        buffer.seek(0)
+
+        # Criar nome do arquivo
+        filename = f"Planilhamento_{lote_info.get('codigo', 'OP')}_{operacao_info.get('descricao', '').replace(' ', '_')[:20]}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        print(f"Erro ao gerar PDF de planilhamento: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/report/planning_tracking/photo/<path:foto_nome>')
+@login_required
+def mrp_report_planning_tracking_photo(foto_nome):
+    """
+    Rota para servir fotos de Preparação e Pintura.
+    """
+    user_id = session.get('user_id')
+    prep_pintura_photos_path = get_user_parameters(user_id, MRP_PREP_PINTURA_PHOTOS_PATH_PARAM) or ''
+
+    if not prep_pintura_photos_path:
+        return abort(404)
+
+    foto_path = Path(prep_pintura_photos_path) / foto_nome
+
+    if foto_path.exists() and foto_path.is_file():
+        return send_file(str(foto_path))
+
+    return abort(404)
+
+
 # =====================================================
 # FIM DAS ROTAS MRP
 # =====================================================
+
+
+# =====================================================
+# ROTAS DE OP (ORDEM DE PRODUÇÃO)
+# =====================================================
+
+def get_op_dashboard_data(args=None):
+    """Carrega dados do Dashboard OP para reutilizar em outras páginas."""
+    conn = get_erp_db_connection()
+    if not conn:
+        return {"error": "Erro ao conectar ao banco de dados."}
+
+    cur = None
+    try:
+        cur = conn.cursor()
+
+        args = args or {}
+
+        # ========== PROCESSAR FILTROS ==========
+        # Verificar se algum filtro foi passado (formulário submetido)
+        filtro_keys = ['garland_garland', 'garland_moveis', 'garland_solare',
+                       'moveis_garland', 'moveis_moveis', 'moveis_solare',
+                       'solare_garland', 'solare_moveis', 'solare_solare']
+        filtro_submetido = any(key in args for key in filtro_keys)
+
+        def build_filters(prefix):
+            if filtro_submetido:
+                filtros = []
+                if args.get(f'{prefix}_garland') == '1':
+                    filtros.append('LIBERADO P/ OP GARLAND')
+                if args.get(f'{prefix}_moveis') == '1':
+                    filtros.append('LIBERADO P/ OP MOVEIS')
+                if args.get(f'{prefix}_solare') == '1':
+                    filtros.append('LIBERADO P/ OP SOLARE')
+                if not filtros:
+                    filtros = ['LIBERADO P/ OP GARLAND', 'LIBERADO P/ OP MOVEIS', 'LIBERADO P/ OP SOLARE']
+            else:
+                filtros = ['LIBERADO P/ OP GARLAND', 'LIBERADO P/ OP MOVEIS', 'LIBERADO P/ OP SOLARE']
+            return filtros
+
+        garland_filters = build_filters('garland')
+        moveis_filters = build_filters('moveis')
+        solare_filters = build_filters('solare')
+
+        # Criar placeholders para as queries
+        solare_placeholders = ','.join(['%s'] * len(solare_filters))
+        garland_placeholders = ','.join(['%s'] * len(garland_filters))
+        moveis_placeholders = ','.join(['%s'] * len(moveis_filters))
+
+        # Criar tuplas de parâmetros para queries com múltiplos UNIONs
+        moveis_params = tuple(moveis_filters * 3)  # 3 UNIONs na query de MOVEIS
+
+        # ========== SOLARE - PEDIDOS ==========
+        solare_pedido_query = f"""
+        WITH itens_pedido AS (
+            SELECT DISTINCT
+                p.pedido,
+                TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                pp.pprproduto AS produto,
+                pr.pronome,
+                pp.pprquanti
+            FROM pedido p
+            INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+            INNER JOIN acompanh a ON p.pedido = a.peds1ped
+            INNER JOIN produto pr ON pp.pprproduto = pr.produto
+            WHERE 1=1
+                AND p.lcapecod = ''
+                AND p.pedsitua = ''
+                AND a.peds1doco IN ({solare_placeholders})
+        ),
+        itens_filhos AS (
+            WITH RECURSIVE estrutura_hierarquia AS (
+                SELECT
+                    estproduto AS cod_pai,
+                    estfilho AS cod_filho,
+                    1 AS nivel,
+                    estproduto || ' -> ' || estfilho AS caminho
+                FROM estrutur
+                WHERE estproduto IN (SELECT produto FROM itens_pedido)
+                UNION ALL
+                SELECT
+                    eh.cod_pai,
+                    e.estfilho AS cod_filho,
+                    eh.nivel + 1,
+                    eh.caminho || ' -> ' || e.estfilho
+                FROM estrutura_hierarquia eh
+                INNER JOIN estrutur e ON eh.cod_filho = e.estproduto
+            )
+            SELECT * FROM estrutura_hierarquia
+        ),
+        processos_filhos as (
+            SELECT
+                if.cod_pai,
+                a.produto,
+                a.processo,
+                a.prcnome,
+                a.prhoras
+            FROM processo a
+            INNER JOIN itens_filhos if ON a.produto = if.cod_filho
+            WHERE a.prcnome IN ('CORTE E DOBRA', 'SOLDA')
+        ),
+        bloco_geral as (
+            SELECT DISTINCT *, 'FILHO' AS FONTE FROM processos_filhos
+        ),
+        conversao as (
+            SELECT
+                bg.*,
+                (
+                    floor(bg.prhoras)
+                    + (substring(lpad(split_part(bg.prhoras::text, '.', 2), 6, '0') from 1 for 2)::numeric / 60)
+                    + (substring(lpad(split_part(bg.prhoras::text, '.', 2), 6, '0') from 3 for 2)::numeric / 3600)
+                ) AS horas_decimais,
+                ip.pedido,
+                ip.pprquanti,
+                CASE bg.prcnome
+                    WHEN 'CORTE E DOBRA' THEN 1
+                    WHEN 'SOLDA' THEN 2
+                    ELSE 1
+                END AS func_setor
+            FROM bloco_geral bg
+            LEFT JOIN itens_pedido ip ON bg.cod_pai = ip.produto
+        ),
+        calc_balisador as (
+            SELECT
+                *,
+                (pprquanti * horas_decimais) as soma_solare,
+                ((pprquanti * horas_decimais) / func_setor) * 1.2 as balisador
+            FROM conversao
+        ),
+        pecas_unicas as (
+            SELECT DISTINCT cod_pai, pprquanti
+            FROM calc_balisador
+        )
+        SELECT
+            COUNT(DISTINCT cb.pedido) as total_pedidos,
+            COALESCE((SELECT SUM(pprquanti) FROM pecas_unicas), 0) as total_pecas,
+            COALESCE(SUM(cb.balisador), 0) as total_balisador
+        FROM calc_balisador cb
+        """
+        cur.execute(solare_pedido_query, solare_filters)
+        solare_pedido_result = cur.fetchone()
+        solare_ped_count = solare_pedido_result[0] if solare_pedido_result else 0
+        solare_ped_pecas = float(solare_pedido_result[1]) if solare_pedido_result else 0
+        solare_ped_balisador = float(solare_pedido_result[2]) if solare_pedido_result else 0
+
+        # ========== SOLARE - ASSISTÊNCIAS ==========
+        # Construir filtro de grupo baseado nos tipos de liberação selecionados
+        # Mapeamento: MOVEIS -> grupo 100-120 ou 300-399, SOLARE -> 200-299, GARLAND -> 400-499
+        solare_grupo_conditions = []
+        if 'LIBERADO P/ OP MOVEIS' in solare_filters:
+            solare_grupo_conditions.append("(pr.grupo >= 100 AND pr.grupo <= 120)")
+            solare_grupo_conditions.append("(pr.grupo >= 300 AND pr.grupo <= 399)")
+        if 'LIBERADO P/ OP SOLARE' in solare_filters:
+            solare_grupo_conditions.append("(pr.grupo >= 200 AND pr.grupo <= 299)")
+        if 'LIBERADO P/ OP GARLAND' in solare_filters:
+            solare_grupo_conditions.append("(pr.grupo >= 400 AND pr.grupo <= 499)")
+
+        # Se nenhum filtro selecionado, incluir todos os grupos
+        if solare_grupo_conditions:
+            solare_grupo_filter = "AND (" + " OR ".join(solare_grupo_conditions) + ")"
+        else:
+            solare_grupo_filter = ""
+
+        solare_assist_query = f"""
+        WITH itens_pedido AS (
+            SELECT
+                a1.assistec AS pedido,
+                TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                a2.aspproduto AS produto,
+                pr.pronome,
+                a2.aspquanti AS pprquanti,
+                COALESCE(TRIM(a1.asshistor), '') AS asshistor
+            FROM assistec a1
+            INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+            INNER JOIN produto pr ON a2.aspproduto = pr.produto
+            WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                {solare_grupo_filter}
+        ),
+        itens_filhos AS (
+            WITH RECURSIVE estrutura_hierarquia AS (
+                SELECT
+                    estproduto AS cod_pai,
+                    estfilho AS cod_filho,
+                    1 AS nivel,
+                    estproduto || ' -> ' || estfilho AS caminho
+                FROM estrutur
+                WHERE estproduto IN (SELECT produto FROM itens_pedido)
+                UNION ALL
+                SELECT
+                    eh.cod_pai,
+                    e.estfilho AS cod_filho,
+                    eh.nivel + 1,
+                    eh.caminho || ' -> ' || e.estfilho
+                FROM estrutura_hierarquia eh
+                INNER JOIN estrutur e ON eh.cod_filho = e.estproduto
+            )
+            SELECT * FROM estrutura_hierarquia
+        ),
+        processos_filhos AS (
+            SELECT
+                if.cod_pai,
+                a.produto,
+                a.processo,
+                a.prcnome,
+                a.prhoras
+            FROM processo a
+            INNER JOIN itens_filhos if ON a.produto = if.cod_filho
+            WHERE a.prcnome IN ('CORTE E DOBRA', 'SOLDA')
+        ),
+        bloco_geral AS (
+            SELECT DISTINCT *, 'FILHO' AS FONTE FROM processos_filhos
+        ),
+        conversao AS (
+            SELECT
+                bg.*,
+                (
+                    floor(bg.prhoras)
+                    + (substring(lpad(split_part(bg.prhoras::text, '.', 2), 6, '0') from 1 for 2)::numeric / 60)
+                    + (substring(lpad(split_part(bg.prhoras::text, '.', 2), 6, '0') from 3 for 2)::numeric / 3600)
+                ) AS horas_decimais,
+                ip.pedido,
+                ip.pprquanti,
+                ip.asshistor,
+                CASE bg.prcnome
+                    WHEN 'CORTE E DOBRA' THEN 1
+                    WHEN 'SOLDA' THEN 2
+                    ELSE 1
+                END AS func_setor
+            FROM bloco_geral bg
+            LEFT JOIN itens_pedido ip ON bg.cod_pai = ip.produto
+        ),
+        calc_balisador AS (
+            SELECT
+                *,
+                CASE WHEN asshistor = 'NOP' THEN 0 ELSE (pprquanti * horas_decimais) END as soma_solare,
+                CASE WHEN asshistor = 'NOP' THEN 0 ELSE ((pprquanti * horas_decimais) / func_setor) * 1.2 END as balisador
+            FROM conversao
+        ),
+        pecas_unicas AS (
+            SELECT DISTINCT cod_pai, pprquanti, asshistor
+            FROM calc_balisador
+        )
+        SELECT
+            COUNT(DISTINCT CASE WHEN cb.asshistor <> 'NOP' THEN cb.pedido END) as total_assistencias,
+            COALESCE((SELECT SUM(CASE WHEN asshistor = 'NOP' THEN 0 ELSE pprquanti END) FROM pecas_unicas), 0) as total_pecas,
+            COALESCE(SUM(cb.balisador), 0) as total_balisador
+        FROM calc_balisador cb
+        """
+        cur.execute(solare_assist_query)
+        solare_assist_result = cur.fetchone()
+        solare_ass_count = solare_assist_result[0] if solare_assist_result else 0
+        solare_ass_pecas = float(solare_assist_result[1]) if solare_assist_result else 0
+        solare_ass_balisador = float(solare_assist_result[2]) if solare_assist_result else 0
+
+        # Total Solare
+        # Fórmula do Power BI: DIAS DE OP SOLARE = SUM(Balisador) / 7.48 / 2
+        solare_total_pecas = solare_ped_pecas + solare_ass_pecas
+        solare_total_balisador = solare_ped_balisador + solare_ass_balisador
+        solare_dias = round(solare_total_balisador / 7.48 / 2, 2) if solare_total_balisador > 0 else 0
+
+        # ========== GARLAND - PEDIDOS ==========
+        garland_pedido_query = f"""
+        WITH pedidos_produtos AS (
+            SELECT DISTINCT
+                p.pedido,
+                TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                pp.pprproduto AS produto,
+                pr.pronome,
+                pp.pprquanti,
+                COALESCE(
+                    (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                     FROM processo pc
+                     WHERE TRIM(pc.produto) = TRIM(pp.pprproduto)
+                       AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                       AND TRIM(pc.probserv) ~ '^[0-9]+([,\\.][0-9]+)?$'
+                     ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                     LIMIT 1),
+                    (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                     FROM processo pc
+                     WHERE TRIM(pc.produto) = TRIM(SUBSTRING(pp.pprproduto FROM 1 FOR LENGTH(pp.pprproduto) - 5))
+                       AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                       AND TRIM(pc.probserv) ~ '^[0-9]+([,\\.][0-9]+)?$'
+                     ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                     LIMIT 1),
+                    0
+                ) AS peso
+            FROM pedido p
+            INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+            INNER JOIN acompanh a ON p.pedido = a.peds1ped
+            INNER JOIN produto pr ON pp.pprproduto = pr.produto
+            WHERE p.lcapecod = '' AND p.pedsitua = ''
+                AND a.peds1doco IN ({garland_placeholders})
+        )
+        SELECT
+            COUNT(DISTINCT pp.pedido) as total_pedidos,
+            COALESCE(SUM(pp.pprquanti), 0) as total_pecas,
+            COALESCE(SUM(CASE WHEN pp.peso > 0 THEN pp.pprquanti / pp.peso ELSE 0 END), 0) as total_divisao
+        FROM pedidos_produtos pp
+        WHERE pp.peso > 0
+        """
+        cur.execute(garland_pedido_query, garland_filters)
+        garland_pedido_result = cur.fetchone()
+        garland_ped_count = garland_pedido_result[0] if garland_pedido_result else 0
+        garland_ped_pecas = float(garland_pedido_result[1]) if garland_pedido_result else 0
+        garland_ped_divisao = float(garland_pedido_result[2]) if garland_pedido_result else 0
+
+        # ========== GARLAND - ASSISTÊNCIAS ==========
+        # Construir filtro de grupo baseado nos tipos de liberação selecionados
+        # Mapeamento: MOVEIS -> grupo 100-120 ou 300-399, SOLARE -> 200-299, GARLAND -> 400-499
+        garland_grupo_conditions = []
+        if 'LIBERADO P/ OP MOVEIS' in garland_filters:
+            garland_grupo_conditions.append("(pr.grupo >= 100 AND pr.grupo <= 120)")
+            garland_grupo_conditions.append("(pr.grupo >= 300 AND pr.grupo <= 399)")
+        if 'LIBERADO P/ OP SOLARE' in garland_filters:
+            garland_grupo_conditions.append("(pr.grupo >= 200 AND pr.grupo <= 299)")
+        if 'LIBERADO P/ OP GARLAND' in garland_filters:
+            garland_grupo_conditions.append("(pr.grupo >= 400 AND pr.grupo <= 499)")
+
+        # Se nenhum filtro selecionado, incluir todos os grupos
+        if garland_grupo_conditions:
+            garland_grupo_filter = "AND (" + " OR ".join(garland_grupo_conditions) + ")"
+        else:
+            garland_grupo_filter = ""
+
+        garland_assist_query = f"""
+        WITH pedidos_produtos AS (
+            SELECT DISTINCT
+                a1.assistec AS pedido,
+                TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                a2.aspproduto AS produto,
+                pr.pronome,
+                a2.aspquanti AS pprquanti,
+                COALESCE(TRIM(a1.asshistor), '') AS asshistor,
+                COALESCE(
+                    (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                     FROM processo pc
+                     WHERE TRIM(pc.produto) = TRIM(a2.aspproduto)
+                       AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                       AND TRIM(pc.probserv) ~ '^[0-9]+([,\\.][0-9]+)?$'
+                     ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                     LIMIT 1),
+                    (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                     FROM processo pc
+                     WHERE TRIM(pc.produto) = TRIM(SUBSTRING(a2.aspproduto FROM 1 FOR LENGTH(a2.aspproduto) - 5))
+                       AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                       AND TRIM(pc.probserv) ~ '^[0-9]+([,\\.][0-9]+)?$'
+                     ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                     LIMIT 1),
+                    0
+                ) AS peso
+            FROM assistec a1
+            INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+            INNER JOIN produto pr ON a2.aspproduto = pr.produto
+            WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                {garland_grupo_filter}
+        )
+        SELECT
+            COUNT(DISTINCT CASE WHEN pp.asshistor <> 'NOP' THEN pp.pedido END) as total_assistencias,
+            COALESCE(SUM(CASE WHEN pp.asshistor = 'NOP' THEN 0 ELSE pp.pprquanti END), 0) as total_pecas,
+            COALESCE(SUM(CASE WHEN pp.asshistor = 'NOP' THEN 0 ELSE pp.pprquanti / pp.peso END), 0) as total_divisao
+        FROM pedidos_produtos pp
+        WHERE pp.peso > 0
+        """
+        cur.execute(garland_assist_query)
+        garland_assist_result = cur.fetchone()
+        garland_ass_count = garland_assist_result[0] if garland_assist_result else 0
+        garland_ass_pecas = float(garland_assist_result[1]) if garland_assist_result else 0
+        garland_ass_divisao = float(garland_assist_result[2]) if garland_assist_result else 0
+
+        # Total Garland
+        garland_total_pecas = garland_ped_pecas + garland_ass_pecas
+        garland_total_divisao = garland_ped_divisao + garland_ass_divisao
+        garland_dias = round(garland_total_divisao / 7, 2) if garland_total_divisao > 0 else 0
+
+        # ========== MÓVEIS - PEDIDOS ==========
+        moveis_pedido_query = f"""
+        WITH base_pedidos AS (
+            SELECT DISTINCT
+                'FORM1' AS TIPO,
+                p.pedido,
+                TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                pp.pprproduto AS produto,
+                pr.pronome,
+                pp.pprquanti,
+                gr.subgiro
+            FROM pedido p
+            INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+            INNER JOIN acompanh a ON p.pedido = a.peds1ped
+            INNER JOIN produto pr ON pp.pprproduto = pr.produto
+            INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+            WHERE p.lcapecod = '' AND p.pedsitua = '' AND p.pedaprova = 'S'
+                AND a.peds1doco IN ({moveis_placeholders})
+                AND gr.subgiro <> 0
+                AND NOT (pr.pronome ILIKE 'BA%%' OR pr.pronome ILIKE 'MJ%%')
+
+            UNION
+
+            SELECT DISTINCT
+                'FORM2' AS TIPO,
+                p.pedido,
+                TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                pp.pprproduto AS produto,
+                pr.pronome,
+                pp.pprquanti,
+                gr.subgiro
+            FROM pedido p
+            INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+            INNER JOIN acompanh a ON p.pedido = a.peds1ped
+            INNER JOIN produto pr ON pp.pprproduto = pr.produto
+            INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+            WHERE p.lcapecod = '' AND p.pedsitua = '' AND p.pedaprova = 'S'
+                AND a.peds1doco IN ({moveis_placeholders})
+                AND gr.subgiro <> 0
+                AND (pr.pronome ILIKE 'BA%%' OR pr.pronome ILIKE 'MJ%%')
+                AND pr.pronome LIKE '%%,%%'
+
+            UNION
+
+            SELECT DISTINCT
+                'FORM3' AS TIPO,
+                p.pedido,
+                TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                pp.pprproduto AS produto,
+                pr.pronome,
+                pp.pprquanti,
+                gr.subgiro
+            FROM pedido p
+            INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+            INNER JOIN acompanh a ON p.pedido = a.peds1ped
+            INNER JOIN produto pr ON pp.pprproduto = pr.produto
+            INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+            WHERE p.lcapecod = '' AND p.pedsitua = '' AND p.pedaprova = 'S'
+                AND a.peds1doco IN ({moveis_placeholders})
+                AND gr.subgiro <> 0
+                AND (pr.pronome ILIKE 'BA%%' OR pr.pronome ILIKE 'MJ%%')
+                AND NOT pr.pronome LIKE '%%,%%'
+        ),
+        calc_fator AS (
+            SELECT
+                *,
+                CASE
+                    WHEN RIGHT(subgiro::text, 1) = '0' THEN 0.5
+                    ELSE RIGHT(subgiro::text, 1)::numeric
+                END AS ultimo_char,
+                CASE
+                    WHEN tipo = 'FORM1' THEN pprquanti * (CASE WHEN RIGHT(subgiro::text, 1) = '0' THEN 0.5 ELSE RIGHT(subgiro::text, 1)::numeric END)
+                    WHEN tipo = 'FORM2' THEN pprquanti * 2
+                    WHEN tipo = 'FORM3' THEN pprquanti
+                    ELSE 0
+                END AS fator
+            FROM base_pedidos
+        )
+        SELECT
+            COUNT(DISTINCT pedido) as total_pedidos,
+            COALESCE(SUM(fator), 0) as total_pecas
+        FROM calc_fator
+        """
+        cur.execute(moveis_pedido_query, moveis_params)
+        moveis_pedido_result = cur.fetchone()
+        moveis_ped_count = moveis_pedido_result[0] if moveis_pedido_result else 0
+        moveis_ped_pecas = float(moveis_pedido_result[1]) if moveis_pedido_result else 0
+
+        # ========== MÓVEIS - ASSISTÊNCIAS ==========
+        # Construir filtro de grupo baseado nos tipos de liberação selecionados
+        # Mapeamento: MOVEIS -> grupo 100-120 ou 300-399, SOLARE -> 200-299, GARLAND -> 400-499
+        moveis_grupo_conditions = []
+        if 'LIBERADO P/ OP MOVEIS' in moveis_filters:
+            moveis_grupo_conditions.append("(pr.grupo >= 100 AND pr.grupo <= 120)")
+            moveis_grupo_conditions.append("(pr.grupo >= 300 AND pr.grupo <= 399)")
+        if 'LIBERADO P/ OP SOLARE' in moveis_filters:
+            moveis_grupo_conditions.append("(pr.grupo >= 200 AND pr.grupo <= 299)")
+        if 'LIBERADO P/ OP GARLAND' in moveis_filters:
+            moveis_grupo_conditions.append("(pr.grupo >= 400 AND pr.grupo <= 499)")
+
+        # Se nenhum filtro selecionado, incluir todos os grupos
+        if moveis_grupo_conditions:
+            moveis_grupo_filter = "AND (" + " OR ".join(moveis_grupo_conditions) + ")"
+        else:
+            moveis_grupo_filter = ""
+
+        moveis_assist_query = f"""
+        WITH base_assistencias AS (
+            SELECT
+                'FORM1' AS TIPO,
+                a1.assistec AS pedido,
+                TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                a2.aspproduto AS produto,
+                pr.pronome,
+                a2.aspquanti AS pprquanti,
+                gr.subgiro,
+                COALESCE(TRIM(a1.asshistor), '') AS asshistor
+            FROM assistec a1
+            INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+            INNER JOIN produto pr ON a2.aspproduto = pr.produto
+            INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+            WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                AND gr.subgiro <> 0
+                AND NOT (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%')
+                {moveis_grupo_filter}
+
+            UNION
+
+            SELECT
+                'FORM2' AS TIPO,
+                a1.assistec AS pedido,
+                TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                a2.aspproduto AS produto,
+                pr.pronome,
+                a2.aspquanti AS pprquanti,
+                gr.subgiro,
+                COALESCE(TRIM(a1.asshistor), '') AS asshistor
+            FROM assistec a1
+            INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+            INNER JOIN produto pr ON a2.aspproduto = pr.produto
+            INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+            WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                AND gr.subgiro <> 0
+                AND (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%')
+                AND pr.pronome LIKE '%,%'
+                {moveis_grupo_filter}
+
+            UNION
+
+            SELECT
+                'FORM3' AS TIPO,
+                a1.assistec AS pedido,
+                TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                a2.aspproduto AS produto,
+                pr.pronome,
+                a2.aspquanti AS pprquanti,
+                gr.subgiro,
+                COALESCE(TRIM(a1.asshistor), '') AS asshistor
+            FROM assistec a1
+            INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+            INNER JOIN produto pr ON a2.aspproduto = pr.produto
+            INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+            WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                AND gr.subgiro <> 0
+                AND (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%')
+                AND NOT pr.pronome LIKE '%,%'
+                {moveis_grupo_filter}
+        ),
+        calc_fator AS (
+            SELECT
+                *,
+                CASE
+                    WHEN RIGHT(subgiro::text, 1) = '0' THEN 0.5
+                    ELSE RIGHT(subgiro::text, 1)::numeric
+                END AS ultimo_char,
+                CASE
+                    WHEN asshistor = 'NOP' THEN 0
+                    WHEN tipo = 'FORM1' THEN pprquanti * (CASE WHEN RIGHT(subgiro::text, 1) = '0' THEN 0.5 ELSE RIGHT(subgiro::text, 1)::numeric END)
+                    WHEN tipo = 'FORM2' THEN pprquanti * 2
+                    WHEN tipo = 'FORM3' THEN pprquanti
+                    ELSE 0
+                END AS fator
+            FROM base_assistencias
+        )
+        SELECT
+            COUNT(DISTINCT CASE WHEN asshistor <> 'NOP' THEN pedido END) as total_assistencias,
+            COALESCE(SUM(fator), 0) as total_pecas
+        FROM calc_fator
+        """
+        cur.execute(moveis_assist_query)
+        moveis_assist_result = cur.fetchone()
+        moveis_ass_count = moveis_assist_result[0] if moveis_assist_result else 0
+        moveis_ass_pecas = float(moveis_assist_result[1]) if moveis_assist_result else 0
+
+        # Total Móveis - Dias calculado com base em capacidade de 120 peças/dia
+        moveis_total_pecas = moveis_ped_pecas + moveis_ass_pecas
+        moveis_dias = round(moveis_total_pecas / 120, 2) if moveis_total_pecas > 0 else 0
+
+        cur.close()
+        conn.close()
+
+        # Preparar dados para o template
+        garland_data = {
+            'dias': garland_dias,
+            'pecas': int(garland_total_pecas),
+            'pedidos': garland_ped_count,
+            'assistencias': garland_ass_count
+        }
+
+        moveis_data = {
+            'dias': moveis_dias,
+            'pecas': round(moveis_total_pecas, 1),
+            'pedidos': moveis_ped_count,
+            'assistencias': moveis_ass_count
+        }
+
+        solare_data = {
+            'dias': solare_dias,
+            'pecas': int(solare_total_pecas),
+            'pedidos': solare_ped_count,
+            'assistencias': solare_ass_count
+        }
+
+        # Preparar estado dos filtros para o template
+        if filtro_submetido:
+            filtros_aplicados = {
+                'garland_garland': request.args.get('garland_garland') == '1',
+                'garland_moveis': request.args.get('garland_moveis') == '1',
+                'garland_solare': request.args.get('garland_solare') == '1',
+                'moveis_garland': request.args.get('moveis_garland') == '1',
+                'moveis_moveis': request.args.get('moveis_moveis') == '1',
+                'moveis_solare': request.args.get('moveis_solare') == '1',
+                'solare_garland': request.args.get('solare_garland') == '1',
+                'solare_moveis': request.args.get('solare_moveis') == '1',
+                'solare_solare': request.args.get('solare_solare') == '1',
+            }
+        else:
+            # Padrão: todos marcados
+            filtros_aplicados = {
+                'garland_garland': True,
+                'garland_moveis': True,
+                'garland_solare': True,
+                'moveis_garland': True,
+                'moveis_moveis': True,
+                'moveis_solare': True,
+                'solare_garland': True,
+                'solare_moveis': True,
+                'solare_solare': True,
+            }
+
+        return {
+            "garland_data": garland_data,
+            "moveis_data": moveis_data,
+            "solare_data": solare_data,
+            "filtros_aplicados": filtros_aplicados
+        }
+
+    except Exception as e:
+        print(f"Erro ao carregar dashboard OP: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": f"Erro ao carregar dados: {e}"}
+    finally:
+        if cur:
+            cur.close()
+        conn.close()
+
+
+@app.route('/op_dashboard')
+@login_required
+def op_dashboard():
+    """Página principal do dashboard de OP com cards de Garland, Móveis e Solare."""
+    op_data = get_op_dashboard_data(request.args)
+    if op_data.get("error"):
+        flash(op_data["error"], "danger")
+        return render_template('op_dashboard.html',
+                             page_title="Dashboard OP",
+                             system_version=SYSTEM_VERSION,
+                             usuario_logado=session.get('username', 'Convidado'),
+                             garland_data=None, moveis_data=None, solare_data=None,
+                             filtros=None)
+
+    return render_template('op_dashboard.html',
+                         page_title="Dashboard OP",
+                         system_version=SYSTEM_VERSION,
+                         usuario_logado=session.get('username', 'Convidado'),
+                         garland_data=op_data["garland_data"],
+                         moveis_data=op_data["moveis_data"],
+                         solare_data=op_data["solare_data"],
+                         filtros=op_data["filtros_aplicados"])
+
+
+@app.route('/op_detail/<tipo>')
+@login_required
+def op_detail(tipo):
+    """Página de detalhamento de OP por tipo (garland, moveis, solare)."""
+    conn = get_erp_db_connection()
+    if not conn:
+        flash("Erro ao conectar ao banco de dados.", "danger")
+        return redirect(url_for('op_dashboard'))
+
+    try:
+        cur = conn.cursor()
+        pedidos = []
+        assistencias = []
+        titulo = tipo.upper()
+
+        if tipo == 'solare':
+            # Query Solare Pedidos
+            pedido_query = """
+            WITH itens_pedido AS (
+                SELECT DISTINCT
+                    p.pedido,
+                    TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                    pp.pprproduto AS produto,
+                    pr.pronome,
+                    pp.pprquanti
+                FROM pedido p
+                INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+                INNER JOIN acompanh a ON p.pedido = a.peds1ped
+                INNER JOIN produto pr ON pp.pprproduto = pr.produto
+                WHERE p.lcapecod = '' AND p.pedsitua = ''
+                    AND a.peds1doco IN ('LIBERADO P/ OP GARLAND','LIBERADO P/ OP SOLARE')
+            ),
+            itens_filhos AS (
+                WITH RECURSIVE estrutura_hierarquia AS (
+                    SELECT estproduto AS cod_pai, estfilho AS cod_filho, 1 AS nivel
+                    FROM estrutur WHERE estproduto IN (SELECT produto FROM itens_pedido)
+                    UNION ALL
+                    SELECT eh.cod_pai, e.estfilho AS cod_filho, eh.nivel + 1
+                    FROM estrutura_hierarquia eh
+                    INNER JOIN estrutur e ON eh.cod_filho = e.estproduto
+                )
+                SELECT * FROM estrutura_hierarquia
+            ),
+            processos_filhos as (
+                SELECT if.cod_pai, a.produto, a.prcnome, a.prhoras
+                FROM processo a
+                INNER JOIN itens_filhos if ON a.produto = if.cod_filho
+                WHERE a.prcnome IN ('CORTE E DOBRA', 'SOLDA')
+            ),
+            bloco_geral as (
+                SELECT DISTINCT cod_pai, produto, prcnome, prhoras FROM processos_filhos
+            ),
+            conversao as (
+                SELECT bg.*, ip.pedido, ip.data, ip.pronome, ip.pprquanti,
+                    (floor(bg.prhoras) + (substring(lpad(split_part(bg.prhoras::text, '.', 2), 6, '0') from 1 for 2)::numeric / 60)) AS horas_decimais
+                FROM bloco_geral bg
+                LEFT JOIN itens_pedido ip ON bg.cod_pai = ip.produto
+            )
+            SELECT DISTINCT pedido, data, cod_pai as produto, pronome, pprquanti,
+                   SUM(horas_decimais) as total_horas
+            FROM conversao
+            WHERE pedido IS NOT NULL
+            GROUP BY pedido, data, cod_pai, pronome, pprquanti
+            ORDER BY pedido
+            """
+            cur.execute(pedido_query)
+            pedidos = cur.fetchall()
+
+            # Query Solare Assistências
+            assist_query = """
+            WITH itens_pedido AS (
+                SELECT a1.assistec AS pedido, TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                    a2.aspproduto AS produto, pr.pronome, a2.aspquanti AS pprquanti,
+                    COALESCE(TRIM(a1.asshistor), '') AS asshistor
+                FROM assistec a1
+                INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+                INNER JOIN produto pr ON a2.aspproduto = pr.produto
+                WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+            ),
+            itens_filhos AS (
+                WITH RECURSIVE estrutura_hierarquia AS (
+                    SELECT estproduto AS cod_pai, estfilho AS cod_filho, 1 AS nivel
+                    FROM estrutur WHERE estproduto IN (SELECT produto FROM itens_pedido)
+                    UNION ALL
+                    SELECT eh.cod_pai, e.estfilho AS cod_filho, eh.nivel + 1
+                    FROM estrutura_hierarquia eh
+                    INNER JOIN estrutur e ON eh.cod_filho = e.estproduto
+                )
+                SELECT * FROM estrutura_hierarquia
+            ),
+            processos_filhos AS (
+                SELECT if.cod_pai, a.produto, a.prcnome, a.prhoras
+                FROM processo a INNER JOIN itens_filhos if ON a.produto = if.cod_filho
+                WHERE a.prcnome IN ('CORTE E DOBRA', 'SOLDA')
+            ),
+            bloco_geral AS (
+                SELECT DISTINCT cod_pai, produto, prcnome, prhoras FROM processos_filhos
+            ),
+            conversao AS (
+                SELECT bg.*, ip.pedido, ip.data, ip.pronome, ip.pprquanti, ip.asshistor,
+                    CASE WHEN ip.asshistor = 'NOP' THEN 0
+                    ELSE (floor(bg.prhoras) + (substring(lpad(split_part(bg.prhoras::text, '.', 2), 6, '0') from 1 for 2)::numeric / 60))
+                    END AS horas_decimais
+                FROM bloco_geral bg
+                LEFT JOIN itens_pedido ip ON bg.cod_pai = ip.produto
+            )
+            SELECT DISTINCT pedido, data, cod_pai as produto, pronome, pprquanti,
+                   SUM(horas_decimais) as total_horas, MAX(asshistor) as asshistor
+            FROM conversao WHERE pedido IS NOT NULL
+            GROUP BY pedido, data, cod_pai, pronome, pprquanti
+            ORDER BY pedido
+            """
+            cur.execute(assist_query)
+            assistencias = cur.fetchall()
+
+        elif tipo == 'garland':
+            # Query Garland Pedidos
+            pedido_query = """
+            WITH pedidos_produtos AS (
+                SELECT DISTINCT p.pedido, TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                    pp.pprproduto AS produto, pr.pronome, pp.pprquanti,
+                    COALESCE(
+                        (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                         FROM processo pc
+                         WHERE TRIM(pc.produto) = TRIM(pp.pprproduto)
+                           AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                           AND TRIM(pc.probserv) ~ '^[0-9]+([,\.][0-9]+)?$'
+                         ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                         LIMIT 1),
+                        (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                         FROM processo pc
+                         WHERE TRIM(pc.produto) = TRIM(SUBSTRING(pp.pprproduto FROM 1 FOR LENGTH(pp.pprproduto) - 5))
+                           AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                           AND TRIM(pc.probserv) ~ '^[0-9]+([,\.][0-9]+)?$'
+                         ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                         LIMIT 1),
+                        0
+                    ) AS peso
+                FROM pedido p
+                INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+                INNER JOIN acompanh a ON p.pedido = a.peds1ped
+                INNER JOIN produto pr ON pp.pprproduto = pr.produto
+                WHERE p.lcapecod = '' AND p.pedsitua = ''
+                    AND a.peds1doco IN ('LIBERADO P/ OP GARLAND', 'LIBERADO P/ OP SOLARE','LIBERADO P/ OP MOVEIS')
+            )
+            SELECT pp.pedido, pp.data, pp.produto, pp.pronome, pp.pprquanti,
+                   pp.peso as probserv,
+                   CASE WHEN pp.peso > 0 THEN pp.pprquanti / pp.peso ELSE 0 END as divisao
+            FROM pedidos_produtos pp
+            WHERE pp.peso > 0
+            ORDER BY pp.pedido
+            """
+            cur.execute(pedido_query)
+            pedidos = cur.fetchall()
+
+            # Query Garland Assistências
+            assist_query = """
+            WITH pedidos_produtos AS (
+                SELECT DISTINCT a1.assistec AS pedido, TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                    a2.aspproduto AS produto, pr.pronome, a2.aspquanti AS pprquanti,
+                    COALESCE(TRIM(a1.asshistor), '') AS asshistor,
+                    COALESCE(
+                        (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                         FROM processo pc
+                         WHERE TRIM(pc.produto) = TRIM(a2.aspproduto)
+                           AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                           AND TRIM(pc.probserv) ~ '^[0-9]+([,\.][0-9]+)?$'
+                         ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                         LIMIT 1),
+                        (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                         FROM processo pc
+                         WHERE TRIM(pc.produto) = TRIM(SUBSTRING(a2.aspproduto FROM 1 FOR LENGTH(a2.aspproduto) - 5))
+                           AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                           AND TRIM(pc.probserv) ~ '^[0-9]+([,\.][0-9]+)?$'
+                         ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                         LIMIT 1),
+                        0
+                    ) AS peso
+                FROM assistec a1
+                INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+                INNER JOIN produto pr ON a2.aspproduto = pr.produto
+                WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+            )
+            SELECT pp.pedido, pp.data, pp.produto, pp.pronome, pp.pprquanti,
+                   CASE WHEN pp.asshistor = 'NOP' THEN 0 ELSE pp.peso END as probserv,
+                   CASE WHEN pp.asshistor = 'NOP' THEN 0 WHEN pp.peso > 0 THEN pp.pprquanti / pp.peso ELSE 0 END as divisao,
+                   pp.asshistor
+            FROM pedidos_produtos pp
+            WHERE pp.peso > 0
+            ORDER BY pp.pedido
+            """
+            cur.execute(assist_query)
+            assistencias = cur.fetchall()
+
+        elif tipo == 'moveis':
+            # Query Móveis Pedidos
+            pedido_query = """
+            WITH base_pedidos AS (
+                SELECT DISTINCT 'FORM1' AS TIPO, p.pedido, TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                    pp.pprproduto AS produto, pr.pronome, pp.pprquanti, gr.subgiro
+                FROM pedido p
+                INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+                INNER JOIN acompanh a ON p.pedido = a.peds1ped
+                INNER JOIN produto pr ON pp.pprproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE p.lcapecod = '' AND p.pedsitua = '' AND p.pedaprova = 'S'
+                    AND a.peds1doco IN ('LIBERADO P/ OP GARLAND','LIBERADO P/ OP SOLARE', 'LIBERADO P/ OP MOVEIS')
+                    AND gr.subgiro <> 0 AND NOT (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%')
+                UNION ALL
+                SELECT DISTINCT 'FORM2' AS TIPO, p.pedido, TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                    pp.pprproduto AS produto, pr.pronome, pp.pprquanti, gr.subgiro
+                FROM pedido p
+                INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+                INNER JOIN acompanh a ON p.pedido = a.peds1ped
+                INNER JOIN produto pr ON pp.pprproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE p.lcapecod = '' AND p.pedsitua = '' AND p.pedaprova = 'S'
+                    AND a.peds1doco IN ('LIBERADO P/ OP GARLAND','LIBERADO P/ OP SOLARE', 'LIBERADO P/ OP MOVEIS')
+                    AND gr.subgiro <> 0 AND (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%') AND pr.pronome LIKE '%,%'
+                UNION ALL
+                SELECT DISTINCT 'FORM3' AS TIPO, p.pedido, TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                    pp.pprproduto AS produto, pr.pronome, pp.pprquanti, gr.subgiro
+                FROM pedido p
+                INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+                INNER JOIN acompanh a ON p.pedido = a.peds1ped
+                INNER JOIN produto pr ON pp.pprproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE p.lcapecod = '' AND p.pedsitua = '' AND p.pedaprova = 'S'
+                    AND a.peds1doco IN ('LIBERADO P/ OP GARLAND','LIBERADO P/ OP SOLARE', 'LIBERADO P/ OP MOVEIS')
+                    AND gr.subgiro <> 0 AND (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%') AND NOT pr.pronome LIKE '%,%'
+            )
+            SELECT pedido, data, produto, pronome, pprquanti, tipo, subgiro,
+                CASE
+                    WHEN tipo = 'FORM1' THEN pprquanti * (CASE WHEN RIGHT(subgiro::text, 1) = '0' THEN 0.5 ELSE RIGHT(subgiro::text, 1)::numeric END)
+                    WHEN tipo = 'FORM2' THEN pprquanti * 2
+                    WHEN tipo = 'FORM3' THEN pprquanti
+                    ELSE 0
+                END AS fator
+            FROM base_pedidos ORDER BY pedido
+            """
+            cur.execute(pedido_query)
+            pedidos = cur.fetchall()
+
+            # Query Móveis Assistências
+            assist_query = """
+            WITH base_assistencias AS (
+                SELECT 'FORM1' AS TIPO, a1.assistec AS pedido, TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                    a2.aspproduto AS produto, pr.pronome, a2.aspquanti AS pprquanti, gr.subgiro,
+                    COALESCE(TRIM(a1.asshistor), '') AS asshistor
+                FROM assistec a1
+                INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+                INNER JOIN produto pr ON a2.aspproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                    AND gr.subgiro <> 0 AND NOT (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%')
+                UNION ALL
+                SELECT 'FORM2' AS TIPO, a1.assistec AS pedido, TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                    a2.aspproduto AS produto, pr.pronome, a2.aspquanti AS pprquanti, gr.subgiro,
+                    COALESCE(TRIM(a1.asshistor), '') AS asshistor
+                FROM assistec a1
+                INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+                INNER JOIN produto pr ON a2.aspproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                    AND gr.subgiro <> 0 AND (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%') AND pr.pronome LIKE '%,%'
+                UNION ALL
+                SELECT 'FORM3' AS TIPO, a1.assistec AS pedido, TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                    a2.aspproduto AS produto, pr.pronome, a2.aspquanti AS pprquanti, gr.subgiro,
+                    COALESCE(TRIM(a1.asshistor), '') AS asshistor
+                FROM assistec a1
+                INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+                INNER JOIN produto pr ON a2.aspproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                    AND gr.subgiro <> 0 AND (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%') AND NOT pr.pronome LIKE '%,%'
+            )
+            SELECT pedido, data, produto, pronome, pprquanti, tipo, subgiro,
+                CASE
+                    WHEN asshistor = 'NOP' THEN 0
+                    WHEN tipo = 'FORM1' THEN pprquanti * (CASE WHEN RIGHT(subgiro::text, 1) = '0' THEN 0.5 ELSE RIGHT(subgiro::text, 1)::numeric END)
+                    WHEN tipo = 'FORM2' THEN pprquanti * 2
+                    WHEN tipo = 'FORM3' THEN pprquanti
+                    ELSE 0
+                END AS fator,
+                asshistor
+            FROM base_assistencias ORDER BY pedido
+            """
+            cur.execute(assist_query)
+            assistencias = cur.fetchall()
+
+        cur.close()
+        conn.close()
+
+        # Contar pedidos/assistências únicos (pelo primeiro campo que é o número do pedido)
+        pedidos_unicos = len(set(p[0] for p in pedidos)) if pedidos else 0
+        assistencias_unicas = len(set(a[0] for a in assistencias)) if assistencias else 0
+
+        return render_template('op_detail.html',
+                             page_title=f"Detalhes OP - {titulo}",
+                             system_version=SYSTEM_VERSION,
+                             usuario_logado=session.get('username', 'Convidado'),
+                             tipo=tipo,
+                             titulo=titulo,
+                             pedidos=pedidos,
+                             assistencias=assistencias,
+                             pedidos_count=pedidos_unicos,
+                             assistencias_count=assistencias_unicas)
+
+    except Exception as e:
+        print(f"Erro ao carregar detalhes OP: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f"Erro ao carregar dados: {e}", "danger")
+        return redirect(url_for('op_dashboard'))
+
+
+@app.route('/op_detail/<tipo>/export')
+@login_required
+def op_detail_export(tipo):
+    """Exporta os detalhes de OP para Excel."""
+    if tipo not in ['garland', 'moveis', 'solare']:
+        flash("Tipo inválido.", "danger")
+        return redirect(url_for('op_dashboard'))
+
+    conn = get_erp_db_connection()
+    if not conn:
+        flash("Erro ao conectar ao banco de dados.", "danger")
+        return redirect(url_for('op_detail', tipo=tipo))
+
+    try:
+        cur = conn.cursor()
+        pedidos = []
+        assistencias = []
+        titulo = tipo.upper()
+
+        if tipo == 'solare':
+            # Query Solare Pedidos
+            pedido_query = """
+            WITH itens_pedido AS (
+                SELECT DISTINCT
+                    p.pedido,
+                    TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                    pp.pprproduto AS produto,
+                    pr.pronome,
+                    pp.pprquanti
+                FROM pedido p
+                INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+                INNER JOIN acompanh a ON p.pedido = a.peds1ped
+                INNER JOIN produto pr ON pp.pprproduto = pr.produto
+                WHERE p.lcapecod = '' AND p.pedsitua = ''
+                    AND a.peds1doco IN ('LIBERADO P/ OP GARLAND','LIBERADO P/ OP SOLARE')
+            ),
+            itens_filhos AS (
+                WITH RECURSIVE estrutura_hierarquia AS (
+                    SELECT estproduto AS cod_pai, estfilho AS cod_filho, 1 AS nivel
+                    FROM estrutur WHERE estproduto IN (SELECT produto FROM itens_pedido)
+                    UNION ALL
+                    SELECT eh.cod_pai, e.estfilho AS cod_filho, eh.nivel + 1
+                    FROM estrutura_hierarquia eh
+                    INNER JOIN estrutur e ON eh.cod_filho = e.estproduto
+                )
+                SELECT * FROM estrutura_hierarquia
+            ),
+            processos_filhos as (
+                SELECT if.cod_pai, a.produto, a.prcnome, a.prhoras
+                FROM processo a
+                INNER JOIN itens_filhos if ON a.produto = if.cod_filho
+                WHERE a.prcnome IN ('CORTE E DOBRA', 'SOLDA')
+            ),
+            bloco_geral as (
+                SELECT DISTINCT cod_pai, produto, prcnome, prhoras FROM processos_filhos
+            ),
+            conversao as (
+                SELECT bg.*, ip.pedido, ip.data, ip.pronome, ip.pprquanti,
+                    (floor(bg.prhoras) + (substring(lpad(split_part(bg.prhoras::text, '.', 2), 6, '0') from 1 for 2)::numeric / 60)) AS horas_decimais
+                FROM bloco_geral bg
+                LEFT JOIN itens_pedido ip ON bg.cod_pai = ip.produto
+            )
+            SELECT DISTINCT pedido, data, cod_pai as produto, pronome, pprquanti,
+                   SUM(horas_decimais) as total_horas
+            FROM conversao
+            WHERE pedido IS NOT NULL
+            GROUP BY pedido, data, cod_pai, pronome, pprquanti
+            ORDER BY pedido
+            """
+            cur.execute(pedido_query)
+            pedidos = cur.fetchall()
+
+            # Query Solare Assistências
+            assist_query = """
+            WITH itens_pedido AS (
+                SELECT a1.assistec AS pedido, TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                    a2.aspproduto AS produto, pr.pronome, a2.aspquanti AS pprquanti,
+                    COALESCE(TRIM(a1.asshistor), '') AS asshistor
+                FROM assistec a1
+                INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+                INNER JOIN produto pr ON a2.aspproduto = pr.produto
+                WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+            ),
+            itens_filhos AS (
+                WITH RECURSIVE estrutura_hierarquia AS (
+                    SELECT estproduto AS cod_pai, estfilho AS cod_filho, 1 AS nivel
+                    FROM estrutur WHERE estproduto IN (SELECT produto FROM itens_pedido)
+                    UNION ALL
+                    SELECT eh.cod_pai, e.estfilho AS cod_filho, eh.nivel + 1
+                    FROM estrutura_hierarquia eh
+                    INNER JOIN estrutur e ON eh.cod_filho = e.estproduto
+                )
+                SELECT * FROM estrutura_hierarquia
+            ),
+            processos_filhos as (
+                SELECT if.cod_pai, a.produto, a.prcnome, a.prhoras
+                FROM processo a
+                INNER JOIN itens_filhos if ON a.produto = if.cod_filho
+                WHERE a.prcnome IN ('CORTE E DOBRA', 'SOLDA')
+            ),
+            bloco_geral as (
+                SELECT DISTINCT cod_pai, produto, prcnome, prhoras FROM processos_filhos
+            ),
+            conversao as (
+                SELECT bg.*, ip.pedido, ip.data, ip.pronome, ip.pprquanti, ip.asshistor,
+                    CASE WHEN ip.asshistor = 'NOP' THEN 0
+                    ELSE (floor(bg.prhoras) + (substring(lpad(split_part(bg.prhoras::text, '.', 2), 6, '0') from 1 for 2)::numeric / 60))
+                    END AS horas_decimais
+                FROM bloco_geral bg
+                LEFT JOIN itens_pedido ip ON bg.cod_pai = ip.produto
+            )
+            SELECT DISTINCT pedido, data, cod_pai as produto, pronome, pprquanti,
+                   SUM(horas_decimais) as total_horas, MAX(asshistor) as asshistor
+            FROM conversao
+            WHERE pedido IS NOT NULL
+            GROUP BY pedido, data, cod_pai, pronome, pprquanti
+            ORDER BY pedido
+            """
+            cur.execute(assist_query)
+            assistencias = cur.fetchall()
+
+        elif tipo == 'garland':
+            # Query Garland Pedidos
+            pedido_query = """
+            WITH pedidos_produtos AS (
+                SELECT DISTINCT p.pedido, TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                    pp.pprproduto AS produto, pr.pronome, pp.pprquanti,
+                    COALESCE(
+                        (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                         FROM processo pc
+                         WHERE TRIM(pc.produto) = TRIM(pp.pprproduto)
+                           AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                           AND TRIM(pc.probserv) ~ '^[0-9]+([,\.][0-9]+)?$'
+                         ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                         LIMIT 1),
+                        (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                         FROM processo pc
+                         WHERE TRIM(pc.produto) = TRIM(SUBSTRING(pp.pprproduto FROM 1 FOR LENGTH(pp.pprproduto) - 5))
+                           AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                           AND TRIM(pc.probserv) ~ '^[0-9]+([,\.][0-9]+)?$'
+                         ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                         LIMIT 1),
+                        0
+                    ) AS peso
+                FROM pedido p
+                INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+                INNER JOIN acompanh a ON p.pedido = a.peds1ped
+                INNER JOIN produto pr ON pp.pprproduto = pr.produto
+                WHERE p.lcapecod = '' AND p.pedsitua = ''
+                    AND a.peds1doco IN ('LIBERADO P/ OP GARLAND', 'LIBERADO P/ OP SOLARE','LIBERADO P/ OP MOVEIS')
+            )
+            SELECT pp.pedido, pp.data, pp.produto, pp.pronome, pp.pprquanti,
+                   pp.peso as probserv,
+                   CASE WHEN pp.peso > 0 THEN pp.pprquanti / pp.peso ELSE 0 END as divisao
+            FROM pedidos_produtos pp
+            WHERE pp.peso > 0
+            ORDER BY pp.pedido
+            """
+            cur.execute(pedido_query)
+            pedidos = cur.fetchall()
+
+            # Query Garland Assistências
+            assist_query = """
+            WITH pedidos_produtos AS (
+                SELECT DISTINCT a1.assistec AS pedido, TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                    a2.aspproduto AS produto, pr.pronome, a2.aspquanti AS pprquanti,
+                    COALESCE(TRIM(a1.asshistor), '') AS asshistor,
+                    COALESCE(
+                        (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                         FROM processo pc
+                         WHERE TRIM(pc.produto) = TRIM(a2.aspproduto)
+                           AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                           AND TRIM(pc.probserv) ~ '^[0-9]+([,\.][0-9]+)?$'
+                         ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                         LIMIT 1),
+                        (SELECT CAST(NULLIF(TRIM(pc.probserv), '') AS DECIMAL(10,3))
+                         FROM processo pc
+                         WHERE TRIM(pc.produto) = TRIM(SUBSTRING(a2.aspproduto FROM 1 FOR LENGTH(a2.aspproduto) - 5))
+                           AND NULLIF(TRIM(pc.probserv), '') IS NOT NULL
+                           AND TRIM(pc.probserv) ~ '^[0-9]+([,\.][0-9]+)?$'
+                         ORDER BY CAST(REPLACE(NULLIF(TRIM(pc.probserv), ''), ',', '.') AS DECIMAL(10,3)) DESC
+                         LIMIT 1),
+                        0
+                    ) AS peso
+                FROM assistec a1
+                INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+                INNER JOIN produto pr ON a2.aspproduto = pr.produto
+                WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+            )
+            SELECT pp.pedido, pp.data, pp.produto, pp.pronome, pp.pprquanti,
+                   CASE WHEN pp.asshistor = 'NOP' THEN 0 ELSE pp.peso END as probserv,
+                   CASE WHEN pp.asshistor = 'NOP' THEN 0 WHEN pp.peso > 0 THEN pp.pprquanti / pp.peso ELSE 0 END as divisao,
+                   pp.asshistor
+            FROM pedidos_produtos pp
+            WHERE pp.peso > 0
+            ORDER BY pp.pedido
+            """
+            cur.execute(assist_query)
+            assistencias = cur.fetchall()
+
+        elif tipo == 'moveis':
+            # Query Móveis Pedidos
+            pedido_query = """
+            WITH base_pedidos AS (
+                SELECT DISTINCT 'FORM1' AS TIPO, p.pedido, TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                    pp.pprproduto AS produto, pr.pronome, pp.pprquanti, gr.subgiro
+                FROM pedido p
+                INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+                INNER JOIN acompanh a ON p.pedido = a.peds1ped
+                INNER JOIN produto pr ON pp.pprproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE p.lcapecod = '' AND p.pedsitua = '' AND p.pedaprova = 'S'
+                    AND a.peds1doco IN ('LIBERADO P/ OP GARLAND','LIBERADO P/ OP SOLARE', 'LIBERADO P/ OP MOVEIS')
+                    AND gr.subgiro <> 0 AND NOT (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%')
+                UNION ALL
+                SELECT DISTINCT 'FORM2' AS TIPO, p.pedido, TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                    pp.pprproduto AS produto, pr.pronome, pp.pprquanti, gr.subgiro
+                FROM pedido p
+                INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+                INNER JOIN acompanh a ON p.pedido = a.peds1ped
+                INNER JOIN produto pr ON pp.pprproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE p.lcapecod = '' AND p.pedsitua = '' AND p.pedaprova = 'S'
+                    AND a.peds1doco IN ('LIBERADO P/ OP GARLAND','LIBERADO P/ OP SOLARE', 'LIBERADO P/ OP MOVEIS')
+                    AND gr.subgiro <> 0 AND (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%') AND pr.pronome LIKE '%,%'
+                UNION ALL
+                SELECT DISTINCT 'FORM3' AS TIPO, p.pedido, TO_CHAR(p.peddata::date, 'DD/MM/YYYY') AS data,
+                    pp.pprproduto AS produto, pr.pronome, pp.pprquanti, gr.subgiro
+                FROM pedido p
+                INNER JOIN pedprodu pp ON p.pedido = pp.pedido
+                INNER JOIN acompanh a ON p.pedido = a.peds1ped
+                INNER JOIN produto pr ON pp.pprproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE p.lcapecod = '' AND p.pedsitua = '' AND p.pedaprova = 'S'
+                    AND a.peds1doco IN ('LIBERADO P/ OP GARLAND','LIBERADO P/ OP SOLARE', 'LIBERADO P/ OP MOVEIS')
+                    AND gr.subgiro <> 0 AND (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%') AND NOT pr.pronome LIKE '%,%'
+            )
+            SELECT pedido, data, produto, pronome, pprquanti, tipo, subgiro,
+                CASE
+                    WHEN tipo = 'FORM1' THEN pprquanti * (CASE WHEN RIGHT(subgiro::text, 1) = '0' THEN 0.5 ELSE RIGHT(subgiro::text, 1)::numeric END)
+                    WHEN tipo = 'FORM2' THEN pprquanti * 2
+                    WHEN tipo = 'FORM3' THEN pprquanti
+                    ELSE 0
+                END AS fator
+            FROM base_pedidos ORDER BY pedido
+            """
+            cur.execute(pedido_query)
+            pedidos = cur.fetchall()
+
+            # Query Móveis Assistências
+            assist_query = """
+            WITH base_assistencias AS (
+                SELECT 'FORM1' AS TIPO, a1.assistec AS pedido, TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                    a2.aspproduto AS produto, pr.pronome, a2.aspquanti AS pprquanti, gr.subgiro,
+                    COALESCE(TRIM(a1.asshistor), '') AS asshistor
+                FROM assistec a1
+                INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+                INNER JOIN produto pr ON a2.aspproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                    AND gr.subgiro <> 0 AND NOT (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%')
+                UNION ALL
+                SELECT 'FORM2' AS TIPO, a1.assistec AS pedido, TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                    a2.aspproduto AS produto, pr.pronome, a2.aspquanti AS pprquanti, gr.subgiro,
+                    COALESCE(TRIM(a1.asshistor), '') AS asshistor
+                FROM assistec a1
+                INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+                INNER JOIN produto pr ON a2.aspproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                    AND gr.subgiro <> 0 AND (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%') AND pr.pronome LIKE '%,%'
+                UNION ALL
+                SELECT 'FORM3' AS TIPO, a1.assistec AS pedido, TO_CHAR(a1.assdata::date, 'DD/MM/YYYY') AS data,
+                    a2.aspproduto AS produto, pr.pronome, a2.aspquanti AS pprquanti, gr.subgiro,
+                    COALESCE(TRIM(a1.asshistor), '') AS asshistor
+                FROM assistec a1
+                INNER JOIN assiste1 a2 ON a1.assistec = a2.assistec
+                INNER JOIN produto pr ON a2.aspproduto = pr.produto
+                INNER JOIN grupo1 gr ON pr.grupo = gr.grupo AND pr.subgrupo = gr.subgrupo
+                WHERE a1.assstatus = 'PT' AND a1.asssitua = 'AP' AND asslcacod = ''
+                    AND gr.subgiro <> 0 AND (pr.pronome ILIKE 'BA%' OR pr.pronome ILIKE 'MJ%') AND NOT pr.pronome LIKE '%,%'
+            )
+            SELECT pedido, data, produto, pronome, pprquanti, tipo, subgiro,
+                CASE
+                    WHEN asshistor = 'NOP' THEN 0
+                    WHEN tipo = 'FORM1' THEN pprquanti * (CASE WHEN RIGHT(subgiro::text, 1) = '0' THEN 0.5 ELSE RIGHT(subgiro::text, 1)::numeric END)
+                    WHEN tipo = 'FORM2' THEN pprquanti * 2
+                    WHEN tipo = 'FORM3' THEN pprquanti
+                    ELSE 0
+                END AS fator,
+                asshistor
+            FROM base_assistencias ORDER BY pedido
+            """
+            cur.execute(assist_query)
+            assistencias = cur.fetchall()
+
+        cur.close()
+        conn.close()
+
+        # Criar arquivo Excel
+        wb = openpyxl.Workbook()
+
+        # Aba de Pedidos
+        ws_ped = wb.active
+        ws_ped.title = "Pedidos"
+
+        # Definir cabeçalhos conforme o tipo
+        if tipo == 'solare':
+            headers_ped = ['Pedido', 'Data', 'Produto', 'Nome', 'Qtd', 'Horas']
+        elif tipo == 'garland':
+            headers_ped = ['Pedido', 'Data', 'Produto', 'Nome', 'Qtd', 'Peso', 'Divisão']
+        elif tipo == 'moveis':
+            headers_ped = ['Pedido', 'Data', 'Produto', 'Nome', 'Qtd', 'Tipo', 'SubGiro', 'Fator']
+
+        ws_ped.append(headers_ped)
+
+        # Estilo do cabeçalho
+        header_fill = openpyxl.styles.PatternFill(start_color="1F3A5F", end_color="1F3A5F", fill_type="solid")
+        header_font = openpyxl.styles.Font(color="FFFFFF", bold=True)
+        for cell in ws_ped[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+        # Adicionar dados de pedidos
+        total_qtd_ped = 0
+        total_col5_ped = 0
+        total_col6_ped = 0
+        total_col7_ped = 0
+
+        for row in pedidos:
+            if tipo == 'solare':
+                # Converter horas decimais para formato HH:MM
+                horas_dec = float(row[5]) if row[5] else 0
+                hours = int(horas_dec)
+                minutes = int((horas_dec - hours) * 60)
+                horas_str = f"{hours:02d}:{minutes:02d}"
+                ws_ped.append([row[0], row[1], row[2], row[3], int(row[4]) if row[4] else 0, horas_str])
+                total_qtd_ped += int(row[4]) if row[4] else 0
+                total_col5_ped += horas_dec
+            elif tipo == 'garland':
+                ws_ped.append([row[0], row[1], row[2], row[3],
+                              int(row[4]) if row[4] else 0,
+                              float(row[5]) if row[5] else 0,
+                              float(row[6]) if row[6] else 0])
+                total_qtd_ped += int(row[4]) if row[4] else 0
+                total_col5_ped += float(row[5]) if row[5] else 0
+                total_col6_ped += float(row[6]) if row[6] else 0
+            elif tipo == 'moveis':
+                ws_ped.append([row[0], row[1], row[2], row[3],
+                              int(row[4]) if row[4] else 0,
+                              row[5], row[6],
+                              float(row[7]) if row[7] else 0])
+                total_qtd_ped += int(row[4]) if row[4] else 0
+                total_col7_ped += float(row[7]) if row[7] else 0
+
+        # Linha de total para pedidos
+        total_row_ped = ws_ped.max_row + 1
+        if tipo == 'solare':
+            hours = int(total_col5_ped)
+            minutes = int((total_col5_ped - hours) * 60)
+            ws_ped.append(['', '', '', 'TOTAL:', total_qtd_ped, f"{hours:02d}:{minutes:02d}"])
+        elif tipo == 'garland':
+            ws_ped.append(['', '', '', 'TOTAL:', total_qtd_ped, round(total_col5_ped, 2), round(total_col6_ped, 2)])
+        elif tipo == 'moveis':
+            ws_ped.append(['', '', '', 'TOTAL:', total_qtd_ped, '', '', round(total_col7_ped, 1)])
+
+        # Estilo da linha de total
+        total_fill = openpyxl.styles.PatternFill(start_color="E3F2FD", end_color="E3F2FD", fill_type="solid")
+        total_font = openpyxl.styles.Font(bold=True)
+        for cell in ws_ped[total_row_ped]:
+            cell.fill = total_fill
+            cell.font = total_font
+
+        # Aba de Assistências
+        ws_ass = wb.create_sheet("Assistências")
+
+        if tipo == 'solare':
+            headers_ass = ['Assistência', 'Data', 'Produto', 'Nome', 'Qtd', 'Horas']
+        elif tipo == 'garland':
+            headers_ass = ['Assistência', 'Data', 'Produto', 'Nome', 'Qtd', 'Peso', 'Divisão']
+        elif tipo == 'moveis':
+            headers_ass = ['Assistência', 'Data', 'Produto', 'Nome', 'Qtd', 'Tipo', 'SubGiro', 'Fator']
+
+        ws_ass.append(headers_ass)
+
+        for cell in ws_ass[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+        # Adicionar dados de assistências
+        total_qtd_ass = 0
+        total_col5_ass = 0
+        total_col6_ass = 0
+        total_col7_ass = 0
+
+        for row in assistencias:
+            if tipo == 'solare':
+                horas_dec = float(row[5]) if row[5] else 0
+                hours = int(horas_dec)
+                minutes = int((horas_dec - hours) * 60)
+                horas_str = f"{hours:02d}:{minutes:02d}"
+                ws_ass.append([row[0], row[1], row[2], row[3], int(row[4]) if row[4] else 0, horas_str])
+                total_qtd_ass += int(row[4]) if row[4] else 0
+                total_col5_ass += horas_dec
+            elif tipo == 'garland':
+                ws_ass.append([row[0], row[1], row[2], row[3],
+                              int(row[4]) if row[4] else 0,
+                              float(row[5]) if row[5] else 0,
+                              float(row[6]) if row[6] else 0])
+                total_qtd_ass += int(row[4]) if row[4] else 0
+                total_col5_ass += float(row[5]) if row[5] else 0
+                total_col6_ass += float(row[6]) if row[6] else 0
+            elif tipo == 'moveis':
+                ws_ass.append([row[0], row[1], row[2], row[3],
+                              int(row[4]) if row[4] else 0,
+                              row[5], row[6],
+                              float(row[7]) if row[7] else 0])
+                total_qtd_ass += int(row[4]) if row[4] else 0
+                total_col7_ass += float(row[7]) if row[7] else 0
+
+        # Linha de total para assistências
+        total_row_ass = ws_ass.max_row + 1
+        if tipo == 'solare':
+            hours = int(total_col5_ass)
+            minutes = int((total_col5_ass - hours) * 60)
+            ws_ass.append(['', '', '', 'TOTAL:', total_qtd_ass, f"{hours:02d}:{minutes:02d}"])
+        elif tipo == 'garland':
+            ws_ass.append(['', '', '', 'TOTAL:', total_qtd_ass, round(total_col5_ass, 2), round(total_col6_ass, 2)])
+        elif tipo == 'moveis':
+            ws_ass.append(['', '', '', 'TOTAL:', total_qtd_ass, '', '', round(total_col7_ass, 1)])
+
+        for cell in ws_ass[total_row_ass]:
+            cell.fill = total_fill
+            cell.font = total_font
+
+        # Ajustar largura das colunas
+        for ws in [ws_ped, ws_ass]:
+            for column in ws.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                ws.column_dimensions[column_letter].width = adjusted_width
+
+        # Salvar em memória e enviar
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"op_detail_{tipo}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        print(f"Erro ao exportar detalhes OP: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f"Erro ao exportar dados: {e}", "danger")
+        return redirect(url_for('op_detail', tipo=tipo))
+
+
+# =====================================================
+# FIM DAS ROTAS OP
+# =====================================================
+
 
 # Adiciona um print para depuração do mapa de URLs
 if __name__ == '__main__':

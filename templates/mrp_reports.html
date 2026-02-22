@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Relatórios MRP{% endblock %}
+
+{% block page_title %}Relatórios MRP{% endblock %}
+
+{% block header_action %}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Card: Relatório de Saída para Montagem -->
+        <a href="{{ url_for('mrp_report_assembly_output') }}" class="dashboard-card hover:shadow-lg transition-shadow cursor-pointer">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-clipboard-list text-2xl text-blue-600"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800">Saída para Montagem</h3>
+                    <p class="text-sm text-gray-500">Relatório de componentes para montagem com QR Code</p>
+                </div>
+            </div>
+        </a>
+
+        <!-- Card: Acompanhamento de Planilhamento -->
+        <a href="{{ url_for('mrp_report_planning_tracking') }}" class="dashboard-card hover:shadow-lg transition-shadow cursor-pointer">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-barcode text-2xl text-green-600"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800">Acompanhamento de Planilhamento</h3>
+                    <p class="text-sm text-gray-500">Relatório de acompanhamento de saídas com código de barras</p>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+{% endblock %}

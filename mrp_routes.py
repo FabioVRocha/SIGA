@@ -887,6 +887,503 @@ def generate_mrp_excel(produtos):
     return excel_file
 
 
+def init_mrp_tables():
+    """
+    Cria as tabelas necessárias para o sistema de sessões MRP no banco siga_db.
+    Tabelas:
+        - mrp_sessoes: Armazena as sessões de cálculo MRP
+        - mrp_calculo_itens: Armazena os itens calculados de cada sessão
+    """
+    connection = get_db_connection(SIGA_DB_NAME)
+    if not connection:
+        print("Erro: Não foi possível conectar ao banco siga_db para criar tabelas MRP")
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        # Criar tabela de sessões MRP
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS mrp_sessoes (
+                id SERIAL PRIMARY KEY,
+                descricao VARCHAR(500) NOT NULL,
+                usuario VARCHAR(100) NOT NULL,
+                data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                data_calculo TIMESTAMP,
+                data_atualizacao TIMESTAMP,
+                status VARCHAR(20) DEFAULT 'pendente',
+                filtros_json TEXT,
+                observacoes TEXT
+            )
+        """)
+
+        # Criar tabela de itens do cálculo MRP
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS mrp_calculo_itens (
+                id SERIAL PRIMARY KEY,
+                sessao_id INTEGER NOT NULL REFERENCES mrp_sessoes(id) ON DELETE CASCADE,
+                codigo_produto VARCHAR(50) NOT NULL,
+                descricao_produto VARCHAR(500),
+                grupo VARCHAR(20),
+                estoque_minimo DECIMAL(15,4) DEFAULT 0,
+                lote_economico DECIMAL(15,4) DEFAULT 0,
+                estoque DECIMAL(15,4) DEFAULT 0,
+                ordem DECIMAL(15,4) DEFAULT 0,
+                reserva DECIMAL(15,4) DEFAULT 0,
+                sem_necessidade DECIMAL(15,4) DEFAULT 0,
+                necessidade DECIMAL(15,4) DEFAULT 0,
+                urgente DECIMAL(15,4) DEFAULT 0,
+                op DECIMAL(15,4) DEFAULT 0,
+                saldo_menos_reserva DECIMAL(15,4) DEFAULT 0,
+                saldo_futuro DECIMAL(15,4) DEFAULT 0,
+                categoria VARCHAR(50),
+                material_type VARCHAR(50),
+                cubagem_unitaria DECIMAL(15,6) DEFAULT 0,
+                data_inclusao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                data_atualizacao TIMESTAMP
+            )
+        """)
+
+        # Criar índices para melhor performance
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mrp_sessoes_usuario ON mrp_sessoes(usuario)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mrp_sessoes_data ON mrp_sessoes(data_criacao DESC)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mrp_calculo_itens_sessao ON mrp_calculo_itens(sessao_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mrp_calculo_itens_produto ON mrp_calculo_itens(codigo_produto)
+        """)
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+        print("Tabelas MRP criadas/verificadas com sucesso no banco siga_db")
+        return True
+
+    except Error as e:
+        print(f"Erro ao criar tabelas MRP: {e}")
+        if connection:
+            connection.rollback()
+            connection.close()
+        return False
+
+
+def criar_sessao_mrp(descricao, usuario, filtros=None):
+    """
+    Cria uma nova sessão de cálculo MRP com filtros pré-selecionados.
+
+    Args:
+        descricao: Descrição da sessão (ex: "OP 001 - PETRA")
+        usuario: Nome do usuário que está criando
+        filtros: Dict com filtros selecionados (pedidos, lotes_carga, lotes_producao)
+
+    Returns:
+        ID da sessão criada ou None em caso de erro
+    """
+    connection = get_db_connection(SIGA_DB_NAME)
+    if not connection:
+        return None
+
+    try:
+        import json
+        filtros_json = json.dumps(filtros) if filtros else None
+
+        cursor = connection.cursor()
+        cursor.execute("""
+            INSERT INTO mrp_sessoes (descricao, usuario, status, filtros_json)
+            VALUES (%s, %s, 'pendente', %s)
+            RETURNING id
+        """, (descricao, usuario, filtros_json))
+
+        sessao_id = cursor.fetchone()[0]
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return sessao_id
+
+    except Error as e:
+        print(f"Erro ao criar sessão MRP: {e}")
+        if connection:
+            connection.rollback()
+            connection.close()
+        return None
+
+
+def atualizar_status_sessao(sessao_id, novo_status):
+    """
+    Atualiza o status de uma sessão MRP.
+
+    Args:
+        sessao_id: ID da sessão
+        novo_status: Novo status (pendente, calculado, editado, exportado)
+
+    Returns:
+        True se sucesso, False em caso de erro
+    """
+    connection = get_db_connection(SIGA_DB_NAME)
+    if not connection:
+        return False
+
+    try:
+        cursor = connection.cursor()
+        cursor.execute("""
+            UPDATE mrp_sessoes
+            SET status = %s,
+                data_atualizacao = CURRENT_TIMESTAMP
+            WHERE id = %s
+        """, (novo_status, sessao_id))
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+
+    except Error as e:
+        print(f"Erro ao atualizar status da sessão: {e}")
+        if connection:
+            connection.rollback()
+            connection.close()
+        return False
+
+
+def listar_sessoes_mrp(usuario=None, limite=50):
+    """
+    Lista as sessões de cálculo MRP.
+
+    Args:
+        usuario: Filtrar por usuário (opcional)
+        limite: Quantidade máxima de sessões a retornar
+
+    Returns:
+        Lista de sessões
+    """
+    connection = get_db_connection(SIGA_DB_NAME)
+    if not connection:
+        return []
+
+    try:
+        cursor = connection.cursor()
+
+        if usuario:
+            cursor.execute("""
+                SELECT id, descricao, usuario, data_criacao, data_calculo,
+                       data_atualizacao, status, observacoes
+                FROM mrp_sessoes
+                WHERE usuario = %s
+                ORDER BY data_criacao DESC
+                LIMIT %s
+            """, (usuario, limite))
+        else:
+            cursor.execute("""
+                SELECT id, descricao, usuario, data_criacao, data_calculo,
+                       data_atualizacao, status, observacoes
+                FROM mrp_sessoes
+                ORDER BY data_criacao DESC
+                LIMIT %s
+            """, (limite,))
+
+        sessoes = []
+        for row in cursor.fetchall():
+            sessoes.append({
+                'id': row[0],
+                'descricao': row[1],
+                'usuario': row[2],
+                'data_criacao': row[3],
+                'data_calculo': row[4],
+                'data_atualizacao': row[5],
+                'status': row[6],
+                'observacoes': row[7]
+            })
+
+        cursor.close()
+        connection.close()
+        return sessoes
+
+    except Error as e:
+        print(f"Erro ao listar sessões MRP: {e}")
+        if connection:
+            connection.close()
+        return []
+
+
+def obter_sessao_mrp(sessao_id):
+    """
+    Obtém os detalhes de uma sessão MRP específica.
+
+    Args:
+        sessao_id: ID da sessão
+
+    Returns:
+        Dict com dados da sessão ou None
+    """
+    connection = get_db_connection(SIGA_DB_NAME)
+    if not connection:
+        return None
+
+    try:
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT id, descricao, usuario, data_criacao, data_calculo,
+                   data_atualizacao, status, filtros_json, observacoes
+            FROM mrp_sessoes
+            WHERE id = %s
+        """, (sessao_id,))
+
+        row = cursor.fetchone()
+        if not row:
+            cursor.close()
+            connection.close()
+            return None
+
+        sessao = {
+            'id': row[0],
+            'descricao': row[1],
+            'usuario': row[2],
+            'data_criacao': row[3],
+            'data_calculo': row[4],
+            'data_atualizacao': row[5],
+            'status': row[6],
+            'filtros_json': row[7],
+            'observacoes': row[8]
+        }
+
+        cursor.close()
+        connection.close()
+        return sessao
+
+    except Error as e:
+        print(f"Erro ao obter sessão MRP: {e}")
+        if connection:
+            connection.close()
+        return None
+
+
+def salvar_calculo_mrp_sessao(sessao_id, produtos, filtros=None):
+    """
+    Salva os itens calculados do MRP em uma sessão.
+
+    Args:
+        sessao_id: ID da sessão
+        produtos: Lista de produtos calculados
+        filtros: Filtros utilizados no cálculo (opcional)
+
+    Returns:
+        True se sucesso, False em caso de erro
+    """
+    connection = get_db_connection(SIGA_DB_NAME)
+    if not connection:
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        # Limpar itens anteriores da sessão (se existirem)
+        cursor.execute("DELETE FROM mrp_calculo_itens WHERE sessao_id = %s", (sessao_id,))
+
+        # Inserir novos itens
+        for produto in produtos:
+            cursor.execute("""
+                INSERT INTO mrp_calculo_itens (
+                    sessao_id, codigo_produto, descricao_produto, grupo,
+                    estoque_minimo, lote_economico, estoque, ordem, reserva,
+                    sem_necessidade, necessidade, urgente, op,
+                    saldo_menos_reserva, saldo_futuro, categoria,
+                    material_type, cubagem_unitaria
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+            """, (
+                sessao_id,
+                produto.get('codigo', ''),
+                produto.get('descricao', ''),
+                produto.get('grupo', ''),
+                produto.get('estoque_minimo', 0),
+                produto.get('lote_economico', 0),
+                produto.get('estoque', 0),
+                produto.get('ordem', 0),
+                produto.get('reserva', 0),
+                produto.get('sem_necessidade', 0),
+                produto.get('necessidade', 0),
+                produto.get('urgente', 0),
+                produto.get('op', 0),
+                produto.get('saldo_menos_reserva', 0),
+                produto.get('saldo_futuro', 0),
+                produto.get('categoria', ''),
+                produto.get('material_type', ''),
+                produto.get('cubagem_unitaria', 0)
+            ))
+
+        # Atualizar sessão com data do cálculo e filtros
+        import json
+        filtros_json = json.dumps(filtros) if filtros else None
+        cursor.execute("""
+            UPDATE mrp_sessoes
+            SET data_calculo = CURRENT_TIMESTAMP,
+                status = 'calculado',
+                filtros_json = %s
+            WHERE id = %s
+        """, (filtros_json, sessao_id))
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+
+    except Error as e:
+        print(f"Erro ao salvar cálculo MRP na sessão: {e}")
+        import traceback
+        traceback.print_exc()
+        if connection:
+            connection.rollback()
+            connection.close()
+        return False
+
+
+def atualizar_op_sessao(sessao_id, itens_op):
+    """
+    Atualiza os valores de OP dos itens de uma sessão.
+
+    Args:
+        sessao_id: ID da sessão
+        itens_op: Dict {codigo_produto: valor_op}
+
+    Returns:
+        True se sucesso, False em caso de erro
+    """
+    connection = get_db_connection(SIGA_DB_NAME)
+    if not connection:
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        for codigo, op in itens_op.items():
+            # Calcular saldo_futuro = estoque + ordem - reserva + op
+            cursor.execute("""
+                UPDATE mrp_calculo_itens
+                SET op = %s,
+                    saldo_futuro = estoque + ordem - reserva + %s,
+                    data_atualizacao = CURRENT_TIMESTAMP
+                WHERE sessao_id = %s AND codigo_produto = %s
+            """, (op, op, sessao_id, codigo))
+
+        # Atualizar data de atualização da sessão
+        cursor.execute("""
+            UPDATE mrp_sessoes
+            SET data_atualizacao = CURRENT_TIMESTAMP,
+                status = 'editado'
+            WHERE id = %s
+        """, (sessao_id,))
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+
+    except Error as e:
+        print(f"Erro ao atualizar OP da sessão: {e}")
+        if connection:
+            connection.rollback()
+            connection.close()
+        return False
+
+
+def obter_itens_sessao_mrp(sessao_id):
+    """
+    Obtém os itens calculados de uma sessão MRP.
+
+    Args:
+        sessao_id: ID da sessão
+
+    Returns:
+        Lista de produtos/itens
+    """
+    connection = get_db_connection(SIGA_DB_NAME)
+    if not connection:
+        return []
+
+    try:
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT codigo_produto, descricao_produto, grupo, estoque_minimo,
+                   lote_economico, estoque, ordem, reserva, sem_necessidade,
+                   necessidade, urgente, op, saldo_menos_reserva, saldo_futuro,
+                   categoria, material_type, cubagem_unitaria
+            FROM mrp_calculo_itens
+            WHERE sessao_id = %s
+            ORDER BY grupo, codigo_produto
+        """, (sessao_id,))
+
+        produtos = []
+        for row in cursor.fetchall():
+            produtos.append({
+                'codigo': row[0],
+                'descricao': row[1],
+                'grupo': row[2],
+                'estoque_minimo': float(row[3] or 0),
+                'lote_economico': float(row[4] or 0),
+                'estoque': float(row[5] or 0),
+                'ordem': float(row[6] or 0),
+                'reserva': float(row[7] or 0),
+                'sem_necessidade': float(row[8] or 0),
+                'necessidade': float(row[9] or 0),
+                'urgente': float(row[10] or 0),
+                'op': float(row[11] or 0),
+                'saldo_menos_reserva': float(row[12] or 0),
+                'saldo_futuro': float(row[13] or 0),
+                'categoria': row[14],
+                'material_type': row[15],
+                'cubagem_unitaria': float(row[16] or 0)
+            })
+
+        cursor.close()
+        connection.close()
+        return produtos
+
+    except Error as e:
+        print(f"Erro ao obter itens da sessão MRP: {e}")
+        if connection:
+            connection.close()
+        return []
+
+
+def excluir_sessao_mrp(sessao_id):
+    """
+    Exclui uma sessão MRP e seus itens.
+
+    Args:
+        sessao_id: ID da sessão
+
+    Returns:
+        True se sucesso, False em caso de erro
+    """
+    connection = get_db_connection(SIGA_DB_NAME)
+    if not connection:
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        # Os itens serão excluídos automaticamente por ON DELETE CASCADE
+        cursor.execute("DELETE FROM mrp_sessoes WHERE id = %s", (sessao_id,))
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+
+    except Error as e:
+        print(f"Erro ao excluir sessão MRP: {e}")
+        if connection:
+            connection.rollback()
+            connection.close()
+        return False
+
+
 def generate_mrp_excel_all(produtos):
     """
     Gera arquivo Excel com TODOS os produtos calculados.

@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    .report-card {
+        background: #fff;
+        border-radius: 0.75rem;
+        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+        padding: 1.25rem;
+    }
+    .report-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 12px;
+    }
+    .report-table th,
+    .report-table td {
+        border: 1px solid #e2e8f0;
+        padding: 6px;
+        vertical-align: top;
+    }
+    .report-table th {
+        background: #f8fafc;
+        font-weight: 600;
+        text-align: left;
+    }
+    .col-subgrupo { width: 12%; }
+    .col-foto { width: 10%; }
+    .col-qr { width: 8%; }
+    .col-info { width: 36%; }
+    .col-local { width: 16%; }
+    .col-qtde { width: 6%; text-align: right; }
+    .details-cell {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .photo-cell {
+        position: relative;
+        width: 100%;
+        height: 56px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .photo-cell img {
+        max-height: 100%;
+        width: auto;
+        display: block;
+    }
+    .photo-placeholder {
+        font-size: 10px;
+        color: #64748b;
+    }
+    .qr-slot {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto;
+    }
+    @media print {
+        body, html {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+        }
+        .sidebar,
+        .main-header,
+        .flash-message,
+        .no-print {
+            display: none !important;
+        }
+        .main-content {
+            margin: 0 !important;
+            padding: 0.2in !important;
+            background: #fff !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block title %}Relatorio de saida para Montagem{% endblock %}
+{% block page_title %}Relatorio de saida para Montagem{% endblock %}
+
+{% block header_action %}
+<a href="{{ url_for('mrp_calculation') }}" class="btn-secondary flex items-center px-4 py-2 rounded-lg">
+    <i class="fas fa-arrow-left mr-2"></i> Voltar
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="report-card mb-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-2">Filtros</h2>
+    <form method="get" action="{{ url_for('mrp_report_saida_montagem') }}" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+            <label for="op" class="form-label text-sm font-medium">OP</label>
+            <select id="op" name="op" class="form-input w-full rounded-lg border-gray-300">
+                <option value="">Selecione</option>
+                {% for lote in op_lotes %}
+                <option value="{{ lote.codigo }}" {% if op == lote.codigo %}selected{% endif %}>
+                    {{ lote.descricao or lote.codigo }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="material" class="form-label text-sm font-medium">Materia-prima</label>
+            <select id="material" name="material" class="form-input w-full rounded-lg border-gray-300">
+                <option value="">Selecione</option>
+                <option value="Madeira" {% if material == 'Madeira' %}selected{% endif %}>Madeira</option>
+                <option value="MDF" {% if material == 'MDF' %}selected{% endif %}>MDF</option>
+                <option value="Compensado" {% if material == 'Compensado' %}selected{% endif %}>Compensado</option>
+            </select>
+        </div>
+        <div class="flex items-end gap-2">
+                <button type="submit" class="btn-primary px-4 py-2 rounded-lg">
+                    <i class="fas fa-search mr-2"></i> Pre-visualizar
+                </button>
+        </div>
+    </form>
+</div>
+
+{% if op and material %}
+<div class="report-card mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="text-sm text-gray-700">
+            <span class="mr-4"><strong>OP:</strong> {{ op_label or op }}</span>
+            <span class="mr-4"><strong>Data de abertura:</strong> {{ data_abertura or '-' }}</span>
+            <span><strong>Impresso em:</strong> {{ printed_at }}</span>
+        </div>
+        <div class="no-print">
+            <form method="post" action="{{ url_for('mrp_report_saida_montagem_export') }}">
+                <input type="hidden" name="op" value="{{ op }}">
+                <input type="hidden" name="material" value="{{ material }}">
+                <button type="submit" class="btn-secondary px-4 py-2 rounded-lg">
+                    <i class="fas fa-file-pdf mr-2"></i> Exportar PDF
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="report-card">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Pre-visualizacao</h2>
+    {% if rows %}
+    <div class="overflow-x-auto">
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th class="col-subgrupo">Subgrupo</th>
+                    <th class="col-foto">Foto</th>
+                    <th class="col-qr">QR</th>
+                    <th class="col-info">Ordem / Reserva / Produto / Descricao</th>
+                    <th class="col-local">Localização</th>
+                    <th class="col-qtde">Qtde</th>
+                    <th class="col-qr">QR</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>{{ row.subgrupo }}</td>
+                    <td>
+                        <div class="photo-cell">
+                            <div class="photo-placeholder">Sem foto</div>
+                            <img src="{{ url_for('mrp_report_component_image', produto=row.produto) }}"
+                                 alt="Foto {{ row.produto }}"
+                                 loading="lazy"
+                                 onload="this.previousElementSibling.style.display='none';"
+                                 onerror="this.style.display='none';">
+                        </div>
+                    </td>
+                    <td>
+                        {% if loop.index is even %}
+                        <div class="qr-slot" data-qr="{{ row.reserva }}"></div>
+                        {% endif %}
+                    </td>
+                    <td class="details-cell" title="{{ row.detalhes }}">{{ row.detalhes }}</td>
+                    <td>{{ row.localizacao }}</td>
+                    <td class="col-qtde">{{ row.quantidade|int }}</td>
+                    <td>
+                        {% if loop.index is odd %}
+                        <div class="qr-slot" data-qr="{{ row.reserva }}"></div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-sm text-gray-500">Nenhum dado para exibir. Selecione os filtros e clique em pre-visualizar.</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.qr-slot').forEach(slot => {
+        const value = slot.dataset.qr;
+        if (!value) return;
+        slot.innerHTML = '';
+        new QRCode(slot, {
+            text: value,
+            width: 48,
+            height: 48,
+            correctLevel: QRCode.CorrectLevel.M
+        });
+    });
+});
+</script>
+{% endblock %}
