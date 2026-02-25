@@ -1,0 +1,599 @@
+{% extends "base.html" %}
+
+{% block title %}Ficha de Componente{% endblock %}
+{% block page_title %}Ficha de Componente{% endblock %}
+{% block header_action %}{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+/* ===== TELA (SCREEN) ===== */
+.filtro-panel {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.btn-gerar {
+    background: #2563eb;
+    color: white;
+    padding: 10px 24px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+}
+.btn-gerar:hover { background: #1d4ed8; }
+.btn-gerar:disabled { background: #93c5fd; cursor: not-allowed; }
+
+.btn-imprimir {
+    background: #16a34a;
+    color: white;
+    padding: 10px 24px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+}
+.btn-imprimir:hover { background: #15803d; }
+
+.btn-pdf {
+    background: #dc2626;
+    color: white;
+    padding: 10px 24px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+}
+.btn-pdf:hover { background: #b91c1c; }
+.btn-pdf:disabled { background: #fca5a5; cursor: not-allowed; }
+
+.status-bar {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: #475569;
+    margin-bottom: 12px;
+    display: none;
+}
+
+/* ===== FICHAS (SCREEN + PRINT) ===== */
+#fichas-container {
+    width: 210mm;
+    margin: 0 auto;
+    background: white;
+}
+
+.ficha {
+    border: 1px solid #333;
+    margin-bottom: 3mm;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    font-family: Arial, sans-serif;
+    font-size: 10px;
+    background: white;
+}
+
+/* Header linha 1: OF + Lote */
+.ficha-header1 {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid #333;
+}
+.ficha-of {
+    background: #222;
+    color: white;
+    font-weight: bold;
+    font-size: 10px;
+    padding: 3px 7px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-right: 1px solid #555;
+    min-width: 140px;
+}
+.ficha-of .of-num { font-size: 11px; }
+.ficha-of .qtd-val { font-size: 11px; }
+.ficha-lote {
+    background: #222;
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 3px 7px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+
+/* Header linha 2: Localização + Produto */
+.ficha-header2 {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid #333;
+    min-height: 15px;
+}
+.ficha-loc {
+    font-weight: bold;
+    font-size: 8.5px;
+    padding: 2px 5px;
+    border-right: 1px solid #333;
+    white-space: normal;
+    word-break: break-word;
+    display: flex;
+    align-items: center;
+    width: 90px;
+    flex-shrink: 0;
+}
+.ficha-produto-info {
+    font-size: 9.5px;
+    padding: 2px 5px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ficha-produto-info .prod-code { font-weight: bold; }
+.ficha-dim-sep {
+    color: #666;
+    font-size: 9px;
+    white-space: nowrap;
+}
+
+/* Área de processos: tabela 4 colunas */
+.ficha-body {
+    display: grid;
+    grid-template-columns: 90px 1fr 1fr 1fr;
+}
+
+.ficha-photo-col {
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    min-height: 85px;
+}
+.ficha-photo-col img {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+    display: block;
+}
+.ficha-photo-col .no-photo {
+    width: 58px;
+    height: 58px;
+    border: 1px dashed #aaa;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    color: #999;
+    text-align: center;
+}
+
+.ficha-sec {
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+}
+.ficha-sec:last-child { border-right: none; }
+
+.ficha-sec-header {
+    text-align: center;
+    font-weight: bold;
+    font-size: 10px;
+    padding: 2px 3px;
+    border-bottom: 1px solid #333;
+}
+.ficha-sec-header.corte   { background: #b2f0e8; }
+.ficha-sec-header.prensa  { background: #fff3b0; }
+.ficha-sec-header.usin    { background: #b2f0b2; }
+
+.ficha-qr-area {
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 38px;
+    padding: 4px 6px;
+    min-height: 64px;
+}
+.ficha-qr-area .qr-box {
+    width: 54px;
+    height: 54px;
+}
+.ficha-qr-area .qr-box canvas,
+.ficha-qr-area .qr-box img {
+    width: 54px !important;
+    height: 54px !important;
+}
+.ficha-qr-empty {
+    width: 54px;
+    height: 54px;
+    background: #f8f8f8;
+    border: 1px dashed #ccc;
+}
+
+.ficha-proc-list {
+    padding: 2px 4px;
+    font-size: 9px;
+    line-height: 1.4;
+    color: #111;
+    flex: 1;
+}
+
+/* Separador entre fichas (linha tracejada) */
+.ficha-separator {
+    border: none;
+    border-top: 1px dashed #bbb;
+    margin: 1.5mm 0;
+}
+
+.ficha {
+    margin-bottom: 0;
+}
+
+/* ===== PRINT ===== */
+@media print {
+    body * { visibility: hidden; }
+    #print-area, #print-area * { visibility: visible; }
+    #print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+    .no-print { display: none !important; }
+    .sidebar, .main-header { display: none !important; }
+    .main-content { margin-left: 0 !important; padding: 0 !important; }
+
+    @page {
+        size: A4 portrait;
+        margin: 5mm;
+    }
+
+    #fichas-container {
+        width: 200mm;
+        margin: 0;
+    }
+
+    .ficha {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        margin-bottom: 0;
+    }
+
+    .ficha-separator {
+        margin: 1mm 0;
+        border-top: 1px dashed #999;
+    }
+
+    /* Cabeçalho escuro: inverte para preto e branco na impressão P&B */
+    .ficha-of,
+    .ficha-lote {
+        background: white !important;
+        color: black !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        border-bottom: 1px solid #333;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-4">
+
+    <!-- FILTROS (no-print) -->
+    <div class="filtro-panel no-print">
+        <h2 class="text-base font-semibold text-gray-700 mb-3">Filtros</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+
+            <!-- Seleção de OP -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">OP de Produção</label>
+                <select id="sel-lote" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">-- Selecione a OP --</option>
+                    {% for lote in lotes_producao %}
+                    <option value="{{ lote.codigo }}">{{ lote.codigo }} - {{ lote.descricao }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Classificação -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Classificação</label>
+                <div class="flex flex-wrap gap-3 mt-1">
+                    <label class="flex items-center gap-1 text-sm cursor-pointer">
+                        <input type="radio" name="classificacao" value="madeira" checked class="text-blue-600"> Madeira
+                    </label>
+                    <label class="flex items-center gap-1 text-sm cursor-pointer">
+                        <input type="radio" name="classificacao" value="mdf" class="text-blue-600"> MDF
+                    </label>
+                    <label class="flex items-center gap-1 text-sm cursor-pointer">
+                        <input type="radio" name="classificacao" value="compensado" class="text-blue-600"> Compensado
+                    </label>
+                    <label class="flex items-center gap-1 text-sm cursor-pointer">
+                        <input type="radio" name="classificacao" value="montados" class="text-blue-600"> Montados
+                    </label>
+                </div>
+            </div>
+
+            <!-- Botões -->
+            <div class="flex gap-2">
+                <button id="btn-gerar" class="btn-gerar" onclick="gerarFichas()">
+                    <i class="fas fa-cog mr-1"></i> Gerar Fichas
+                </button>
+                <button id="btn-imprimir" class="btn-imprimir" onclick="window.print()" style="display:none">
+                    <i class="fas fa-print mr-1"></i> Imprimir
+                </button>
+                <button id="btn-pdf" class="btn-pdf" onclick="exportarPDF()" style="display:none">
+                    <i class="fas fa-file-pdf mr-1"></i> Exportar PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status bar (no-print) -->
+    <div id="status-bar" class="status-bar no-print">
+        <span id="status-msg"></span>
+    </div>
+
+    <!-- Área de impressão -->
+    <div id="print-area">
+        <div id="fichas-container">
+            <!-- Fichas geradas dinamicamente -->
+        </div>
+    </div>
+
+</div>
+
+<script>
+let qrInstances = [];
+
+function gerarFichas() {
+    const lote = document.getElementById('sel-lote').value;
+    const classificacao = document.querySelector('input[name="classificacao"]:checked')?.value || 'madeira';
+
+    if (!lote) {
+        alert('Selecione uma OP de produção.');
+        return;
+    }
+
+    const btn = document.getElementById('btn-gerar');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Gerando...';
+
+    const status = document.getElementById('status-bar');
+    const statusMsg = document.getElementById('status-msg');
+    status.style.display = 'block';
+    statusMsg.textContent = 'Buscando dados...';
+
+    document.getElementById('fichas-container').innerHTML = '';
+    document.getElementById('btn-imprimir').style.display = 'none';
+    document.getElementById('btn-pdf').style.display = 'none';
+
+    // Destruir QR codes anteriores
+    qrInstances = [];
+
+    fetch('/mrp/report/ficha_componente/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({lote_codigo: lote, classificacao: classificacao})
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-cog mr-1"></i> Gerar Fichas';
+
+        if (data.error) {
+            statusMsg.textContent = 'Erro: ' + data.error;
+            return;
+        }
+
+        const fichas = data.fichas || [];
+        statusMsg.textContent = `${fichas.length} ficha(s) gerada(s) — OP: ${data.lote.descricao} — Classificação: ${classificacao.toUpperCase()}`;
+
+        if (fichas.length === 0) {
+            document.getElementById('fichas-container').innerHTML =
+                '<p style="text-align:center;color:#666;padding:20px;">Nenhuma ficha encontrada para os filtros selecionados.</p>';
+            return;
+        }
+
+        renderFichas(fichas);
+        document.getElementById('btn-imprimir').style.display = '';
+        document.getElementById('btn-pdf').style.display = '';
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-cog mr-1"></i> Gerar Fichas';
+        statusMsg.textContent = 'Erro de conexão: ' + err.message;
+    });
+}
+
+function esc(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function renderProcs(lista) {
+    if (!lista || lista.length === 0) return '<span style="color:#aaa;font-size:6px;">—</span>';
+    return lista.map(p => `${p.seq}: [ ] ${esc(p.nome)} &gt;`).join(' ');
+}
+
+async function exportarPDF() {
+    const btn = document.getElementById('btn-pdf');
+    btn.disabled = true;
+
+    const fichaEls = document.querySelectorAll('#fichas-container .ficha');
+    if (fichaEls.length === 0) {
+        alert('Nenhuma ficha para exportar.');
+        btn.disabled = false;
+        return;
+    }
+
+    const loteEl = document.getElementById('sel-lote');
+    const loteCod = loteEl.value || 'fichas';
+    const classificacao = document.querySelector('input[name="classificacao"]:checked')?.value || '';
+    const filename = `fichas_${classificacao}_${loteCod}.pdf`;
+
+    // Dimensões A4 em mm
+    const PAGE_W = 210, PAGE_H = 297, MARGIN = 5;
+    const contentW = PAGE_W - 2 * MARGIN; // 200mm
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    let yPos = MARGIN;
+    let firstPage = true;
+
+    try {
+        for (let i = 0; i < fichaEls.length; i++) {
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i> ${i + 1}/${fichaEls.length}...`;
+
+            // Renderiza cada ficha individualmente — sem risco de corte
+            const canvas = await html2canvas(fichaEls[i], {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.95);
+            // Mantém proporção, largura = contentW
+            const fichaH = (canvas.height / canvas.width) * contentW;
+
+            // Nova página se não couber
+            if (!firstPage && yPos + fichaH > PAGE_H - MARGIN) {
+                pdf.addPage();
+                yPos = MARGIN;
+            }
+
+            pdf.addImage(imgData, 'JPEG', MARGIN, yPos, contentW, fichaH);
+            yPos += fichaH + 2; // 2mm de espaço entre fichas
+            firstPage = false;
+        }
+
+        pdf.save(filename);
+    } catch(e) {
+        alert('Erro ao gerar PDF: ' + e.message);
+        console.error(e);
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-file-pdf mr-1"></i> Exportar PDF';
+}
+
+function renderFichas(fichas) {
+    const container = document.getElementById('fichas-container');
+    container.innerHTML = '';
+
+    fichas.forEach((f, idx) => {
+        const fichaId = 'ficha-' + idx;
+
+        // Monta HTML da ficha
+        const html = `
+<div class="ficha" id="${fichaId}">
+  <!-- Linha 1: OF + Lote -->
+  <div class="ficha-header1">
+    <div class="ficha-of">
+      <span>OF <span class="of-num">${esc(f.ordem)}</span></span>
+      <span>Qtd: <span class="qtd-val">${f.qtd}</span></span>
+    </div>
+    <div class="ficha-lote">
+      Lote: ${esc(f.lotcod)} - ${esc(f.lote_desc)}${f.mat_info ? ' / ' + esc(f.mat_info) : ''} &nbsp;&nbsp; Abertura: ${esc(f.abertura)}
+    </div>
+  </div>
+
+  <!-- Linha 2: Localização + Produto -->
+  <div class="ficha-header2">
+    <div class="ficha-loc">${esc(f.localizacao) || '—'}</div>
+    <div class="ficha-produto-info">
+      <span>Produto: <span class="prod-code">${esc(f.produto)} - ${esc(f.pronome)}</span></span>
+      ${f.corte_bruto ? `<span class="ficha-dim-sep">${esc(f.corte_bruto)}</span>` : ''}
+      ${f.corte_final  ? `<span class="ficha-dim-sep">| ${esc(f.corte_final)}</span>` : ''}
+    </div>
+  </div>
+
+  <!-- Corpo: Foto + 3 seções -->
+  <div class="ficha-body">
+    <!-- Foto -->
+    <div class="ficha-photo-col">
+      <img src="/mrp/report/ficha_componente/photo/${esc(f.produto)}"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+           alt="Foto" />
+      <div class="no-photo" style="display:none;">
+        <span>PRODUTO</span><span>SEM IMAGEM</span>
+      </div>
+    </div>
+
+    <!-- Seção CORTE -->
+    <div class="ficha-sec">
+      <div class="ficha-sec-header corte">Corte</div>
+      <div class="ficha-qr-area">
+        ${f.qr1_corte ? `<div class="qr-box" id="${fichaId}-qr1c"></div>` : '<div class="ficha-qr-empty"></div>'}
+        ${f.qr2_corte ? `<div class="qr-box" id="${fichaId}-qr2c"></div>` : ''}
+      </div>
+      <div class="ficha-proc-list">${renderProcs(f.processos_corte)}</div>
+    </div>
+
+    <!-- Seção PRENSA -->
+    <div class="ficha-sec">
+      <div class="ficha-sec-header prensa">Prensa</div>
+      <div class="ficha-qr-area">
+        ${f.qr1_prensa ? `<div class="qr-box" id="${fichaId}-qr1p"></div>` : '<div class="ficha-qr-empty"></div>'}
+        ${f.qr2_prensa ? `<div class="qr-box" id="${fichaId}-qr2p"></div>` : ''}
+      </div>
+      <div class="ficha-proc-list">${renderProcs(f.processos_prensa)}</div>
+    </div>
+
+    <!-- Seção USINAGEM -->
+    <div class="ficha-sec">
+      <div class="ficha-sec-header usin">Usinagem</div>
+      <div class="ficha-qr-area">
+        ${f.qr1_usinagem ? `<div class="qr-box" id="${fichaId}-qr1u"></div>` : '<div class="ficha-qr-empty"></div>'}
+        ${f.qr2_usinagem ? `<div class="qr-box" id="${fichaId}-qr2u"></div>` : ''}
+      </div>
+      <div class="ficha-proc-list">${renderProcs(f.processos_usinagem)}</div>
+    </div>
+
+  </div><!-- /ficha-body -->
+</div>`;
+
+        container.insertAdjacentHTML('beforeend', html);
+
+        // Separador tracejado entre fichas (não após a última)
+        if (idx < fichas.length - 1) {
+            container.insertAdjacentHTML('beforeend', '<hr class="ficha-separator">');
+        }
+
+        // Gerar QR codes
+        const qrOpts = { width: 54, height: 54, colorDark: '#000000', colorLight: '#ffffff',
+                         correctLevel: QRCode.CorrectLevel.L };
+        if (f.qr1_corte)    { new QRCode(document.getElementById(`${fichaId}-qr1c`), {...qrOpts, text: String(f.qr1_corte)}); }
+        if (f.qr2_corte)    { new QRCode(document.getElementById(`${fichaId}-qr2c`), {...qrOpts, text: String(f.qr2_corte)}); }
+        if (f.qr1_prensa)   { new QRCode(document.getElementById(`${fichaId}-qr1p`), {...qrOpts, text: String(f.qr1_prensa)}); }
+        if (f.qr2_prensa)   { new QRCode(document.getElementById(`${fichaId}-qr2p`), {...qrOpts, text: String(f.qr2_prensa)}); }
+        if (f.qr1_usinagem) { new QRCode(document.getElementById(`${fichaId}-qr1u`), {...qrOpts, text: String(f.qr1_usinagem)}); }
+        if (f.qr2_usinagem) { new QRCode(document.getElementById(`${fichaId}-qr2u`), {...qrOpts, text: String(f.qr2_usinagem)}); }
+    });
+}
+</script>
+{% endblock %}

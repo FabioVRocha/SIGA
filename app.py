@@ -191,6 +191,7 @@ REPORT_REVENUE_YEAR_COMPARISON_FILTERS_PARAM = 'report_revenue_year_comparison_f
 REPORT_PENDING_ORDERS_FILTERS_PARAM = 'report_pending_orders_filters'
 ACCOUNTS_RECEIVABLE_FILTERS_PARAM = 'accounts_receivable_filters'
 ACCOUNTS_PAYABLE_FILTERS_PARAM = 'accounts_payable_filters'
+STOCK_MANAGEMENT_FILTERS_PARAM = 'stock_management_filters'
 ACCOUNTS_RECEIVABLE_BOLETO_REPOSITORIES_PARAM = 'accounts_receivable_boleto_repositories'
 ACCOUNTS_RECEIVABLE_BOLETO_INDEX_TABLE = 'accounts_receivable_boleto_index'
 ACCOUNTS_RECEIVABLE_BOLETO_INDEX_SCOPE_TABLE = 'accounts_receivable_boleto_index_scope'
@@ -15985,11 +15986,587 @@ def titles_list():
 def checks_list():
     return render_template('placeholder.html', page_title="Cheques Pré-Datados", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
 
+# --- Gestao do Estoque (Filtros e Exportacao) ---
+
+def _normalize_filter_list(values):
+    if values is None:
+        return []
+    source = values if isinstance(values, list) else [values]
+    normalized = []
+    for value in source:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        normalized.append(text)
+    return normalized
+
+
+def _parse_stock_management_filters(args):
+    return _normalize_stock_management_filters({
+        'grupo': args.getlist('grupo'),
+        'subgrupo': args.getlist('subgrupo'),
+        'produto': args.getlist('produto'),
+        'tipo': args.getlist('tipo'),
+        'fornecedor': args.getlist('fornecedor'),
+        'status': args.getlist('status'),
+        'estoque_zero': args.getlist('estoque_zero'),
+        'abaixo_minimo': args.getlist('abaixo_minimo')
+    })
+
+
+def _normalize_stock_management_filters(raw_filters):
+    raw_filters = raw_filters or {}
+    normalized = {}
+    for key in ['grupo', 'subgrupo', 'produto', 'tipo', 'fornecedor', 'status']:
+        normalized[key] = _normalize_filter_list(raw_filters.get(key, []))
+
+    estoque_zero = raw_filters.get('estoque_zero')
+    if isinstance(estoque_zero, list):
+        normalized['estoque_zero'] = _normalize_filter_list(estoque_zero)
+    else:
+        text = str(estoque_zero).strip().lower() if estoque_zero is not None else ''
+        normalized['estoque_zero'] = [text] if text else []
+
+    abaixo_minimo = raw_filters.get('abaixo_minimo')
+    if isinstance(abaixo_minimo, list):
+        normalized['abaixo_minimo'] = len(_normalize_filter_list(abaixo_minimo)) > 0
+    else:
+        normalized['abaixo_minimo'] = (
+            str(abaixo_minimo).strip().lower() in ['1', 'true', 'sim', 'yes']
+            if abaixo_minimo is not None else False
+        )
+
+    return normalized
+
+
+def _build_stock_management_query(filters):
+    base_query = """
+        WITH last_pos AS (
+            SELECT produto, MAX(psidata::date) AS last_pos_date
+            FROM possali1
+            GROUP BY produto
+        ),
+        posicao AS (
+            SELECT p1.produto,
+                   SUM(CASE WHEN p1.psidata::date = lp.last_pos_date THEN p1.psisaldo ELSE 0 END) AS posicao
+            FROM possali1 p1
+            JOIN last_pos lp ON lp.produto = p1.produto
+            GROUP BY p1.produto
+        ),
+        mov_quant AS (
+            SELECT tm.priproduto AS produto,
+                   SUM(CASE WHEN tm.pritransac IN (1,2,3,4,6,9) THEN tm.quantidade_ajustada ELSE 0 END) AS entrada,
+                   SUM(CASE WHEN tm.pritransac IN (11,12,14,16,19) THEN tm.quantidade_ajustada ELSE 0 END) AS saida_geral
+            FROM (
+                SELECT tm.*,
+                       CASE
+                           WHEN lp.last_pos_date IS NOT NULL AND tm.pridata::date <= lp.last_pos_date THEN 0
+                           WHEN d.notstatus IN ('C', 'D', 'I') THEN 0
+                           ELSE tm.priquanti
+                       END AS quantidade_ajustada
+                FROM toqmovi tm
+                LEFT JOIN last_pos lp ON lp.produto = tm.priproduto
+                LEFT JOIN doctos d ON d.controle = tm.itecontrol
+            ) tm
+            GROUP BY tm.priproduto
+        ),
+        last_date AS (
+            SELECT COALESCE(MAX(pridata::date), CURRENT_DATE) AS last_date
+            FROM toqmovi
+            WHERE pridata::date <= CURRENT_DATE
+        ),
+        consumo AS (
+            SELECT tm.priproduto AS produto,
+                   SUM(
+                       CASE
+                           WHEN tm.pritransac IN (11,12,14)
+                                AND tm.pridata::date > (ld.last_date - INTERVAL '7 months')
+                                AND tm.pridata::date <= ld.last_date
+                           THEN tm.priquanti
+                           ELSE 0
+                       END
+                   ) AS saida_7m,
+                   SUM(
+                       CASE
+                           WHEN tm.pritransac IN (11,12,14)
+                                AND tm.pridata::date > (ld.last_date - INTERVAL '1 month')
+                                AND tm.pridata::date <= ld.last_date
+                           THEN tm.priquanti
+                           ELSE 0
+                       END
+                   ) AS saida_1m
+            FROM toqmovi tm
+            CROSS JOIN last_date ld
+            GROUP BY tm.priproduto
+        ),
+        pedido_pendente AS (
+            SELECT produto, SUM(cmpquanti) AS pedido_pendente
+            FROM compra3
+            WHERE cmpated = DATE '0001-01-01'
+            GROUP BY produto
+        ),
+        produto_foto AS (
+            SELECT DISTINCT ON (proimgcod::text)
+                proimgcod::text AS proimgcod,
+                proimgrot
+            FROM proimag1
+            ORDER BY proimgcod::text, proimgseq ASC
+        ),
+        base AS (
+            SELECT
+                p.produto AS codigo,
+                p.pronome AS produto,
+                p.unimedida AS um,
+                COALESCE(p.prosldmin, 0) AS estoque_minimo,
+                (COALESCE(consumo.saida_7m, 0) - COALESCE(consumo.saida_1m, 0)) / 6.0 AS media_consumo,
+                ((COALESCE(consumo.saida_7m, 0) - COALESCE(consumo.saida_1m, 0)) / 6.0) * 1.5 AS media_consumo_50,
+                COALESCE(posicao.posicao, 0) + COALESCE(mov_quant.entrada, 0) - COALESCE(mov_quant.saida_geral, 0) AS estoque,
+                COALESCE(pedido_pendente.pedido_pendente, 0) AS pedido_pendente,
+                CASE
+                    WHEN (((COALESCE(consumo.saida_7m, 0) - COALESCE(consumo.saida_1m, 0)) / 6.0) * 1.5)
+                         - (COALESCE(posicao.posicao, 0) + COALESCE(mov_quant.entrada, 0) - COALESCE(mov_quant.saida_geral, 0) + COALESCE(pedido_pendente.pedido_pendente, 0)) <= 0
+                    THEN NULL
+                    ELSE
+                        (((COALESCE(consumo.saida_7m, 0) - COALESCE(consumo.saida_1m, 0)) / 6.0) * 1.5)
+                        - (COALESCE(posicao.posicao, 0) + COALESCE(mov_quant.entrada, 0) - COALESCE(mov_quant.saida_geral, 0) + COALESCE(pedido_pendente.pedido_pendente, 0))
+                        + ((((COALESCE(consumo.saida_7m, 0) - COALESCE(consumo.saida_1m, 0)) / 6.0) * 1.5) * 2)
+                END AS simulacao_compra,
+                CASE
+                    WHEN (COALESCE(posicao.posicao, 0) + COALESCE(mov_quant.entrada, 0) - COALESCE(mov_quant.saida_geral, 0)) IS NULL THEN NULL
+                    WHEN (((COALESCE(consumo.saida_7m, 0) - COALESCE(consumo.saida_1m, 0)) / 6.0) * 1.5) IS NULL THEN 0
+                    WHEN ((COALESCE(consumo.saida_7m, 0) - COALESCE(consumo.saida_1m, 0)) / 6.0) = 0 THEN 0
+                    ELSE GREATEST(
+                        0,
+                        (30 / NULLIF((COALESCE(consumo.saida_7m, 0) - COALESCE(consumo.saida_1m, 0)) / 6.0, 0))
+                        * (COALESCE(posicao.posicao, 0) + COALESCE(mov_quant.entrada, 0) - COALESCE(mov_quant.saida_geral, 0))
+                    )
+                END AS dias_estoque,
+                p.grupo AS grupo,
+                p.subgrupo AS subgrupo,
+                p.prostatus AS status,
+                g.tgrucod AS tipo,
+                e.empnome AS fornecedor,
+                pf.proimgrot AS foto_path
+            FROM produto p
+            LEFT JOIN grupo g ON g.grupo = p.grupo
+            LEFT JOIN grupo1 sg ON sg.grupo = p.grupo AND sg.subgrupo = p.subgrupo
+            LEFT JOIN empresa e ON e.empresa::text = p.procodfor::text
+            LEFT JOIN posicao ON posicao.produto = p.produto
+            LEFT JOIN mov_quant ON mov_quant.produto = p.produto
+            LEFT JOIN consumo ON consumo.produto = p.produto
+            LEFT JOIN pedido_pendente ON pedido_pendente.produto = p.produto
+            LEFT JOIN produto_foto pf ON pf.proimgcod = p.produto::text
+        )
+        SELECT
+            codigo,
+            produto,
+            um,
+            estoque_minimo,
+            media_consumo,
+            media_consumo_50,
+            estoque,
+            pedido_pendente,
+            simulacao_compra,
+            dias_estoque,
+            foto_path
+        FROM base
+        WHERE 1=1
+    """
+
+    clauses = []
+    params = []
+
+    if filters.get('grupo'):
+        placeholders = ','.join(['%s'] * len(filters['grupo']))
+        clauses.append(f"grupo IN ({placeholders})")
+        params.extend(filters['grupo'])
+
+    if filters.get('subgrupo'):
+        placeholders = ','.join(['%s'] * len(filters['subgrupo']))
+        clauses.append(f"subgrupo IN ({placeholders})")
+        params.extend(filters['subgrupo'])
+
+    if filters.get('produto'):
+        placeholders = ','.join(['%s'] * len(filters['produto']))
+        clauses.append(f"codigo IN ({placeholders})")
+        params.extend(filters['produto'])
+
+    if filters.get('tipo'):
+        placeholders = ','.join(['%s'] * len(filters['tipo']))
+        clauses.append(f"tipo IN ({placeholders})")
+        params.extend(filters['tipo'])
+
+    if filters.get('fornecedor'):
+        placeholders = ','.join(['%s'] * len(filters['fornecedor']))
+        clauses.append(f"fornecedor IN ({placeholders})")
+        params.extend(filters['fornecedor'])
+
+    if filters.get('status'):
+        placeholders = ','.join(['%s'] * len(filters['status']))
+        clauses.append(f"status IN ({placeholders})")
+        params.extend(filters['status'])
+
+    estoque_zero = _normalize_filter_list(filters.get('estoque_zero') or [])
+    if 'sim' in estoque_zero and 'nao' in estoque_zero:
+        pass
+    elif 'sim' in estoque_zero:
+        clauses.append("estoque = 0")
+    elif 'nao' in estoque_zero:
+        clauses.append("estoque <> 0")
+
+    if filters.get('abaixo_minimo'):
+        clauses.append("estoque < estoque_minimo")
+
+    if clauses:
+        base_query += " AND " + " AND ".join(clauses)
+
+    base_query += " ORDER BY codigo"
+
+    return base_query, params
+
+
+def _fetch_stock_management_rows(conn, filters):
+    query, params = _build_stock_management_query(filters)
+    cur = conn.cursor()
+    cur.execute(query, params)
+    columns = [desc[0] for desc in cur.description]
+    rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+    cur.close()
+    return rows
+
+
+def _fetch_stock_management_filter_options(conn):
+    options = {
+        'grupos': [],
+        'subgrupos': [],
+        'produtos': [],
+        'fornecedores': [],
+        'status': [],
+        'tipos': [
+            {'code': 'F', 'label': 'Fabricado'},
+            {'code': 'C', 'label': 'Componentes'},
+            {'code': 'M', 'label': 'Materia-Prima'},
+            {'code': 'U', 'label': 'Uso e Consumo'},
+            {'code': 'Z', 'label': 'Sem Controle'},
+            {'code': 'I', 'label': 'Imobilizado'},
+        ]
+    }
+
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT grupo, grunome, tgrucod
+        FROM grupo
+        ORDER BY grunome, grupo
+    """)
+    options['grupos'] = [
+        {
+            'code': str(row[0]).strip(),
+            'label': f"{row[1]} ({row[0]})" if row[1] else str(row[0]),
+            'tipo': (row[2] or '').strip()
+        }
+        for row in cur.fetchall()
+    ]
+
+    cur.execute("""
+        SELECT grupo, subgrupo, subnome
+        FROM grupo1
+        ORDER BY subnome, subgrupo
+    """)
+    options['subgrupos'] = [
+        {
+            'code': str(row[1]).strip(),
+            'label': f"{row[2]} ({row[1]})" if row[2] else str(row[1]),
+            'grupo': str(row[0]).strip()
+        }
+        for row in cur.fetchall()
+    ]
+
+    cur.execute("""
+        SELECT produto, pronome
+        FROM produto
+        ORDER BY pronome, produto
+    """)
+    options['produtos'] = [
+        {
+            'code': str(row[0]).strip(),
+            'label': f"{row[0]} - {row[1]}" if row[1] else str(row[0])
+        }
+        for row in cur.fetchall()
+    ]
+
+    cur.execute("""
+        SELECT DISTINCT e.empnome
+        FROM empresa e
+        JOIN produto p ON p.procodfor::text = e.empresa::text
+        WHERE e.empnome IS NOT NULL AND e.empnome <> ''
+        ORDER BY e.empnome
+    """)
+    options['fornecedores'] = [str(row[0]).strip() for row in cur.fetchall()]
+
+    cur.execute("""
+        SELECT DISTINCT prostatus
+        FROM produto
+        WHERE prostatus IS NOT NULL AND TRIM(prostatus) <> ''
+        ORDER BY prostatus
+    """)
+    options['status'] = [str(row[0]).strip() for row in cur.fetchall()]
+
+    cur.close()
+
+    return options
+
+
+def _stock_management_filters_to_query(filters):
+    params = []
+    for key in ['grupo', 'subgrupo', 'produto', 'tipo', 'fornecedor', 'status']:
+        values = filters.get(key) or []
+        for value in values:
+            params.append((key, value))
+    for value in filters.get('estoque_zero') or []:
+        params.append(('estoque_zero', value))
+    if filters.get('abaixo_minimo'):
+        params.append(('abaixo_minimo', '1'))
+    return urllib.parse.urlencode(params, doseq=True)
+
 # --- Rotas de Placeholder para o Menu (Estoque) ---
 @app.route('/stock_movements_list')
 @login_required
 def stock_movements_list():
     return render_template('placeholder.html', page_title="Movimentações de Estoque", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+
+@app.route('/stock_management')
+@login_required
+def stock_management():
+    conn = get_erp_db_connection()
+    if not conn:
+        flash("Nao foi possivel conectar ao banco de dados do ERP.", "danger")
+        return render_template('placeholder.html', page_title="Gestao do Estoque", system_version=SYSTEM_VERSION, usuario_logado=session.get('username', 'Convidado'))
+
+    rows = []
+    last_date = None
+    user_id = session.get('user_id')
+    has_query_filters = bool(request.args)
+    filters = _parse_stock_management_filters(request.args)
+    filter_options = {
+        'grupos': [],
+        'subgrupos': [],
+        'produtos': [],
+        'fornecedores': [],
+        'status': [],
+        'tipos': []
+    }
+    export_url = url_for('stock_management_export')
+    try:
+        if not has_query_filters and user_id:
+            saved_filters_raw = get_user_parameters(user_id, STOCK_MANAGEMENT_FILTERS_PARAM)
+            if saved_filters_raw:
+                try:
+                    saved_filters = json.loads(saved_filters_raw)
+                    if isinstance(saved_filters, dict):
+                        filters = {
+                            **_parse_stock_management_filters(request.args),
+                            **saved_filters
+                        }
+                except json.JSONDecodeError:
+                    pass
+            else:
+                filters['tipo'] = ['M', 'U']
+        filters = _normalize_stock_management_filters(filters)
+        cur = conn.cursor()
+        cur.execute("SELECT COALESCE(MAX(pridata::date), CURRENT_DATE) FROM toqmovi WHERE pridata::date <= CURRENT_DATE")
+        last_date = cur.fetchone()[0]
+        cur.close()
+        rows = _fetch_stock_management_rows(conn, filters)
+        filter_options = _fetch_stock_management_filter_options(conn)
+        query_string = request.query_string.decode('utf-8') if request.query_string else ''
+        if not query_string:
+            query_string = _stock_management_filters_to_query(filters)
+        if query_string:
+            export_url = f"{export_url}?{query_string}"
+    except Error as e:
+        print(f"Erro ao carregar gestao de estoque: {e}")
+        flash("Erro ao carregar gestao de estoque.", "danger")
+    finally:
+        conn.close()
+
+    return render_template(
+        'stock_management.html',
+        page_title="Gestao do Estoque",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
+        rows=rows,
+        last_date=last_date,
+        filters=filters,
+        filter_options=filter_options,
+        export_url=export_url,
+        save_filters_url=url_for('save_stock_management_filters')
+    )
+
+
+@app.route('/stock_management/export')
+@login_required
+def stock_management_export():
+    conn = get_erp_db_connection()
+    if not conn:
+        flash("Nao foi possivel conectar ao banco de dados do ERP.", "danger")
+        return redirect(url_for('stock_management'))
+
+    filters = _parse_stock_management_filters(request.args)
+
+    try:
+        rows = _fetch_stock_management_rows(conn, filters)
+    except Error as e:
+        print(f"Erro ao exportar gestao de estoque: {e}")
+        flash("Erro ao exportar gestao de estoque.", "danger")
+        conn.close()
+        return redirect(url_for('stock_management'))
+    finally:
+        conn.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Gestao do Estoque"
+
+    headers = [
+        'Codigo', 'Produto', 'UM', 'Estoque Minimo', 'Media Consumo',
+        'Media Consumo +50%', 'Estoque', 'Pedido Pendente', 'Simulacao Compra', 'Dias / Estoque'
+    ]
+    ws.append(headers)
+
+    header_fill = openpyxl.styles.PatternFill(start_color="1F3A5F", end_color="1F3A5F", fill_type="solid")
+    header_font = openpyxl.styles.Font(color="FFFFFF", bold=True)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for row in rows:
+        ws.append([
+            row.get('codigo'),
+            row.get('produto'),
+            row.get('um'),
+            row.get('estoque_minimo'),
+            row.get('media_consumo'),
+            row.get('media_consumo_50'),
+            row.get('estoque'),
+            row.get('pedido_pendente'),
+            row.get('simulacao_compra'),
+            row.get('dias_estoque'),
+        ])
+
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                value_length = len(str(cell.value)) if cell.value is not None else 0
+                if value_length > max_length:
+                    max_length = value_length
+            except Exception:
+                pass
+        ws.column_dimensions[column_letter].width = min(max_length + 2, 50)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"gestao_estoque_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/stock_management/save_filters', methods=['POST'])
+@login_required
+def save_stock_management_filters():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Usuario nao autenticado.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def sanitize_multi(field):
+        values = payload.get(field)
+        if values is None:
+            return []
+        if not isinstance(values, list):
+            values = [values]
+        cleaned = []
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                cleaned.append(text)
+        seen = set()
+        ordered = []
+        for value in cleaned:
+            if value in seen:
+                continue
+            seen.add(value)
+            ordered.append(value)
+        return ordered
+
+    raw_filters = {
+        'grupo': sanitize_multi('grupo'),
+        'subgrupo': sanitize_multi('subgrupo'),
+        'produto': sanitize_multi('produto'),
+        'tipo': sanitize_multi('tipo'),
+        'fornecedor': sanitize_multi('fornecedor'),
+        'status': sanitize_multi('status'),
+        'estoque_zero': sanitize_multi('estoque_zero'),
+        'abaixo_minimo': sanitize_multi('abaixo_minimo'),
+    }
+
+    filters = _normalize_stock_management_filters(raw_filters)
+
+    saved = save_user_parameters(user_id, STOCK_MANAGEMENT_FILTERS_PARAM, json.dumps(filters))
+    if saved:
+        return jsonify({'success': True, 'message': 'Filtros salvos com sucesso.'})
+    return jsonify({'success': False, 'message': 'Nao foi possivel salvar os filtros.'}), 500
+
+
+@app.route('/stock_management/photo/<path:produto_codigo>')
+@login_required
+def stock_management_photo(produto_codigo):
+    conn = get_erp_db_connection()
+    if not conn:
+        abort(404)
+
+    photo_path = None
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT proimgrot
+            FROM proimag1
+            WHERE proimgcod::text = %s
+            ORDER BY proimgseq ASC
+            LIMIT 1
+        """, (produto_codigo,))
+        row = cur.fetchone()
+        cur.close()
+        if row and row[0]:
+            photo_path = row[0]
+    except Error:
+        photo_path = None
+    finally:
+        conn.close()
+
+    if not photo_path:
+        abort(404)
+
+    photo_path = str(photo_path).strip()
+    if not photo_path or not os.path.isfile(photo_path):
+        abort(404)
+
+    return send_file(photo_path, mimetype=mimetypes.guess_type(photo_path)[0] or 'image/jpeg')
+
 
 @app.route('/product_batches_list')
 @login_required
@@ -22131,6 +22708,7 @@ def _get_access_control_pages():
             "category": "Estoque",
             "items": [
                 {"endpoint": "stock_movements_list", "label": "Movimentações de Estoque"},
+                {"endpoint": "stock_management", "label": "Gestao do Estoque"},
                 {"endpoint": "product_batches_list", "label": "Lotes de Produto"},
             ],
         },
@@ -25416,6 +25994,410 @@ def op_detail_export(tipo):
 
 # =====================================================
 # FIM DAS ROTAS OP
+# =====================================================
+
+
+# =====================================================
+# RELATÓRIO FICHA DE COMPONENTE
+# =====================================================
+
+@app.route('/mrp/report/ficha_componente')
+@login_required
+def mrp_report_ficha_componente():
+    """
+    Rota para exibir a tela de filtros da Ficha de Componente.
+    """
+    user_id = session.get('user_id')
+    conn_erp = get_erp_db_connection()
+    lotes_producao = []
+
+    if conn_erp:
+        try:
+            cur_erp = conn_erp.cursor()
+            cur_erp.execute("""
+                SELECT DISTINCT lotcod, lotdes, lotdtini
+                FROM loteprod
+                WHERE lotstatus IN ('EP', 'ES')
+                  AND lotdes ILIKE '%OP%'
+                ORDER BY lotdtini DESC
+                LIMIT 100
+            """)
+            lotes_producao = [{'codigo': row[0], 'descricao': row[1], 'data': row[2]} for row in cur_erp.fetchall()]
+            cur_erp.close()
+        except Error as e:
+            print(f"Erro ao buscar lotes para ficha componente: {e}")
+            flash(f"Erro ao carregar lotes: {e}", "danger")
+        finally:
+            if conn_erp:
+                conn_erp.close()
+
+    return render_template(
+        'mrp_report_ficha_componente.html',
+        page_title="Ficha de Componente",
+        system_version=SYSTEM_VERSION,
+        usuario_logado=session.get('username', 'Convidado'),
+        lotes_producao=lotes_producao
+    )
+
+
+@app.route('/mrp/report/ficha_componente/generate', methods=['POST'])
+@login_required
+def mrp_report_ficha_componente_generate():
+    """
+    API para gerar as Fichas de Componente.
+    Retorna lista de fichas com processos, QR codes e dimensões.
+    """
+    user_id = session.get('user_id')
+
+    try:
+        data = request.get_json()
+        lote_codigo = data.get('lote_codigo')
+        classificacao = data.get('classificacao', 'madeira')  # madeira | mdf | compensado | montados
+
+        if not lote_codigo:
+            return jsonify({'error': 'Selecione uma OP'}), 400
+
+        conn_erp = get_erp_db_connection()
+        if not conn_erp:
+            return jsonify({'error': 'Erro ao conectar ao banco de dados'}), 500
+
+        try:
+            cur_erp = conn_erp.cursor()
+
+            # --- Informações do lote ---
+            cur_erp.execute("""
+                SELECT lotcod, lotdes, lotdtini FROM loteprod WHERE lotcod = %s
+            """, (lote_codigo,))
+            lote_row = cur_erp.fetchone()
+            if not lote_row:
+                return jsonify({'error': 'Lote não encontrado'}), 404
+
+            lote_info = {
+                'codigo': lote_row[0],
+                'descricao': lote_row[1] or '',
+                'data_abertura': lote_row[2].strftime('%d/%m/%Y') if lote_row[2] else ''
+            }
+
+            # --- Todas as ordens abertas do lote ---
+            cur_erp.execute("""
+                SELECT
+                    o.ordem,
+                    TRIM(o.ordproduto) AS produto,
+                    TRIM(COALESCE(p.pronome, '')) AS pronome,
+                    o.ordquanti,
+                    TRIM(COALESCE(p.proorigem, '')) AS proorigem
+                FROM ordem o
+                INNER JOIN produto p ON TRIM(o.ordproduto) = TRIM(p.produto)
+                WHERE o.lotcod = %s
+                  AND (o.orddtence IS NULL OR o.orddtence = '0001-01-01')
+                ORDER BY o.ordem
+            """, (lote_codigo,))
+            all_orders = cur_erp.fetchall()
+
+            if not all_orders:
+                return jsonify({'success': True, 'fichas': [], 'lote': lote_info,
+                                'total': 0, 'classificacao': classificacao})
+
+            all_products = list(set([row[1] for row in all_orders if row[1]]))
+
+            # --- Filtrar por classificação + buscar dimensões ---
+            dim_info = {}   # produto -> {cod_secun, pronome_secun, brucomp, brularg, bruespe, fincomp, finlarg, finespe}
+            filtered_products = set()
+
+            if classificacao == 'montados':
+                # Montados: proorigem = 'F'
+                filtered_products = set(row[1] for row in all_orders if row[4] == 'F')
+                # Buscar dimensões (qualquer material, primeiro encontrado)
+                if filtered_products:
+                    cur_erp.execute("""
+                        SELECT DISTINCT ON (SPLIT_PART(TRIM(dimcodigo), ' ', 1))
+                            SPLIT_PART(TRIM(dimcodigo), ' ', 1)                   AS cod_princ,
+                            SUBSTRING(TRIM(dimcodigo) FROM '[^ ]+$')              AS cod_secun,
+                            TRIM(COALESCE(p.pronome, ''))                         AS pronome_secun,
+                            COALESCE(d.dimbrucomp, 0), COALESCE(d.dimbrularg, 0), COALESCE(d.dimbruespe, 0),
+                            COALESCE(d.dimfincomp, 0),  COALESCE(d.dimfinlarg, 0),  COALESCE(d.dimfinespe, 0)
+                        FROM dimensao d
+                        LEFT JOIN produto p ON TRIM(p.produto) = SUBSTRING(TRIM(d.dimcodigo) FROM '[^ ]+$')
+                        WHERE SPLIT_PART(TRIM(dimcodigo), ' ', 1) = ANY(%s)
+                        ORDER BY SPLIT_PART(TRIM(dimcodigo), ' ', 1), d.dimseq
+                    """, (list(filtered_products),))
+                    for row in cur_erp.fetchall():
+                        dim_info[row[0]] = {
+                            'cod_secun': row[1] or '', 'pronome_secun': row[2] or '',
+                            'brucomp': row[3], 'brularg': row[4], 'bruespe': row[5],
+                            'fincomp': row[6], 'finlarg': row[7], 'finespe': row[8]
+                        }
+            else:
+                # Madeira / MDF / Compensado: filtrar via dimensao → produto secundário
+                if classificacao == 'madeira':
+                    mat_filter = ("(p.pronome ILIKE '%%Tauari%%' OR p.pronome ILIKE '%%Cumaru%%'"
+                                  " OR p.pronome ILIKE '%%Pinus%%' OR p.pronome ILIKE '%%Eucalipto%%')")
+                elif classificacao == 'mdf':
+                    mat_filter = "(p.grupo = 10 AND p.subgrupo = 1)"
+                elif classificacao == 'compensado':
+                    mat_filter = "(p.grupo = 10 AND p.subgrupo = 2)"
+                else:
+                    mat_filter = "1=1"
+
+                cur_erp.execute(f"""
+                    SELECT DISTINCT ON (SPLIT_PART(TRIM(d.dimcodigo), ' ', 1))
+                        SPLIT_PART(TRIM(d.dimcodigo), ' ', 1)                    AS cod_princ,
+                        SUBSTRING(TRIM(d.dimcodigo) FROM '[^ ]+$')               AS cod_secun,
+                        TRIM(COALESCE(p.pronome, ''))                            AS pronome_secun,
+                        COALESCE(d.dimbrucomp, 0), COALESCE(d.dimbrularg, 0), COALESCE(d.dimbruespe, 0),
+                        COALESCE(d.dimfincomp, 0),  COALESCE(d.dimfinlarg, 0),  COALESCE(d.dimfinespe, 0)
+                    FROM dimensao d
+                    INNER JOIN produto p ON TRIM(p.produto) = SUBSTRING(TRIM(d.dimcodigo) FROM '[^ ]+$')
+                    WHERE SPLIT_PART(TRIM(d.dimcodigo), ' ', 1) = ANY(%s)
+                      AND {mat_filter}
+                    ORDER BY SPLIT_PART(TRIM(d.dimcodigo), ' ', 1), d.dimseq
+                """, (all_products,))
+
+                for row in cur_erp.fetchall():
+                    cod_princ = row[0]
+                    filtered_products.add(cod_princ)
+                    dim_info[cod_princ] = {
+                        'cod_secun': row[1] or '', 'pronome_secun': row[2] or '',
+                        'brucomp': row[3], 'brularg': row[4], 'bruespe': row[5],
+                        'fincomp': row[6], 'finlarg': row[7], 'finespe': row[8]
+                    }
+
+            # Filtrar ordens pelos produtos encontrados
+            filtered_orders = [row for row in all_orders if row[1] in filtered_products]
+            if not filtered_orders:
+                return jsonify({'success': True, 'fichas': [], 'lote': lote_info,
+                                'total': 0, 'classificacao': classificacao})
+
+            filtered_product_list = list(set(row[1] for row in filtered_orders))
+
+            # --- Localizações ---
+            localizacoes_dict = {}
+            if filtered_product_list:
+                cur_erp.execute("""
+                    SELECT TRIM(produto), STRING_AGG(locsaliza, ' | ' ORDER BY locsequ)
+                    FROM localiz1
+                    WHERE TRIM(produto) = ANY(%s)
+                    GROUP BY TRIM(produto)
+                """, (filtered_product_list,))
+                localizacoes_dict = {row[0]: row[1] for row in cur_erp.fetchall()}
+
+            # --- Classificação de prccodig → seção + slot QR ---
+            # Mapeamento direto por número de fase (prccodig inteiro):
+            #   05 → corte  QR1  |  07 → usinagem QR1  |  10 → prensa  QR1
+            #   13 → corte  QR2  |  15 → usinagem QR2  |  16 → prensa  QR2
+            # Fallback: tenta opproc por keyword na descrição.
+            FASE_SECTION = {5: 'corte', 7: 'usinagem', 10: 'prensa',
+                            13: 'corte', 15: 'usinagem', 16: 'prensa'}
+            FASE_SLOT    = {5: 'qr1', 7: 'qr1', 10: 'qr1',
+                            13: 'qr2', 15: 'qr2', 16: 'qr2'}
+
+            opproc_map = {}
+            try:
+                cur_erp.execute("SELECT oppcodi, UPPER(COALESCE(oppdesc, '')) FROM opproc ORDER BY oppcodi")
+                for row in cur_erp.fetchall():
+                    desc = row[1]
+                    if 'CORTE' in desc:
+                        opproc_map[str(row[0]).strip()] = 'corte'
+                    elif 'PRENSA' in desc:
+                        opproc_map[str(row[0]).strip()] = 'prensa'
+                    elif 'USIN' in desc:
+                        opproc_map[str(row[0]).strip()] = 'usinagem'
+            except Error as e:
+                print(f"Aviso: não foi possível carregar opproc: {e}")
+
+            def classify_fase(prccodig_str):
+                """Retorna (secao, slot_qr) para um prccodig. Ex: '05' → ('corte', 'qr1')."""
+                try:
+                    n = int(prccodig_str)
+                    if n in FASE_SECTION:
+                        return FASE_SECTION[n], FASE_SLOT[n]
+                except (ValueError, TypeError):
+                    pass
+                # fallback: opproc por keyword
+                cat = opproc_map.get(str(prccodig_str).strip(), 'outros')
+                # slot: QR1 por padrão via opproc (sem informação de fase 2)
+                return cat, 'qr1'
+
+            # --- Processos para todos os produtos filtrados ---
+            process_dict = {}
+            if filtered_product_list:
+                cur_erp.execute("""
+                    SELECT
+                        TRIM(pr.produto)                                    AS produto,
+                        pr.processo,
+                        COALESCE(pr.fase, 0)                                AS fase,
+                        TRIM(COALESCE(m.maqnome, pr.prcnome, ''))           AS nome_processo,
+                        TRIM(COALESCE(pr.maquina, ''))                      AS maquina
+                    FROM processo pr
+                    LEFT JOIN maquina m ON TRIM(pr.maquina) = TRIM(m.maquina)
+                    WHERE TRIM(pr.produto) = ANY(%s)
+                    ORDER BY pr.produto, pr.processo
+                """, (filtered_product_list,))
+
+                raw = {}
+                for row in cur_erp.fetchall():
+                    prod = row[0]
+                    if prod not in raw:
+                        raw[prod] = []
+                    raw[prod].append({
+                        'processo': row[1],
+                        'fase':     row[2],
+                        'nome':     row[3],
+                        'is_mq000': row[4].strip().upper() == 'MQ000'
+                    })
+
+                for prod, procs in raw.items():
+                    corte_procs, prensa_procs, usin_procs = [], [], []
+                    # qr_slots: {'corte': {'qr1': 'LAST_PROC', 'qr2': 'LAST_PROC'}, ...}
+                    # Usa pr.fase diretamente para classificar a seção.
+                    # MQ000 (contagem/movimentação) é sempre o último processo de cada fase:
+                    # tem fase preenchida igual aos demais da fase, então atualiza o QR slot
+                    # normalmente mas NÃO aparece na lista de exibição.
+                    qr_slots = {'corte': {}, 'prensa': {}, 'usinagem': {}}
+                    seq = 1
+                    for p in procs:
+                        fase_num = p.get('fase') or 0
+                        secao = FASE_SECTION.get(fase_num)
+                        slot  = FASE_SLOT.get(fase_num)
+                        if not secao:
+                            continue  # fase não mapeada, ignora
+
+                        # Todo processo da fase atualiza o QR slot (o último — MQ000 — vence)
+                        qr_slots[secao][slot] = str(p['processo'])
+
+                        # MQ000 não aparece na lista de processos impressa
+                        if not p['is_mq000']:
+                            entry = {'seq': seq, 'nome': p['nome']}
+                            seq += 1
+                            if secao == 'corte':
+                                corte_procs.append(entry)
+                            elif secao == 'prensa':
+                                prensa_procs.append(entry)
+                            elif secao == 'usinagem':
+                                usin_procs.append(entry)
+
+                    qr1c = qr_slots['corte'].get('qr1')
+                    qr2c = qr_slots['corte'].get('qr2')
+                    qr1p = qr_slots['prensa'].get('qr1')
+                    qr2p = qr_slots['prensa'].get('qr2')
+                    qr1u = qr_slots['usinagem'].get('qr1')
+                    qr2u = qr_slots['usinagem'].get('qr2')
+
+                    process_dict[prod] = {
+                        'corte': corte_procs, 'prensa': prensa_procs, 'usinagem': usin_procs,
+                        'qr1_corte': qr1c,    'qr2_corte': qr2c,
+                        'qr1_prensa': qr1p,   'qr2_prensa': qr2p,
+                        'qr1_usinagem': qr1u, 'qr2_usinagem': qr2u,
+                    }
+
+            # --- Montar fichas ---
+            def fmt_dim(comp, larg, espe):
+                parts = []
+                if comp: parts.append(f"C: {int(comp)}")
+                if larg: parts.append(f"L: {int(larg)}")
+                if espe: parts.append(f"E: {int(espe)}")
+                return ' x '.join(parts)
+
+            empty_procs = {'corte': [], 'prensa': [], 'usinagem': [],
+                           'qr1_corte': None, 'qr2_corte': None,
+                           'qr1_prensa': None, 'qr2_prensa': None,
+                           'qr1_usinagem': None, 'qr2_usinagem': None}
+
+            fichas = []
+            for row in filtered_orders:
+                ordem, produto, pronome, qtd, _ = row
+                dim  = dim_info.get(produto, {})
+                procs = process_dict.get(produto, empty_procs)
+                cod_secun    = dim.get('cod_secun', '')
+                pronome_secun = dim.get('pronome_secun', '')
+                mat_info = f"{cod_secun} - {pronome_secun}".strip(' -') if (cod_secun or pronome_secun) else ''
+
+                # QR code = número da ordem + código do último processo da fase
+                # Ex.: ordem 754725 + processo 018 → "754725018"
+                def make_qr(proc_code):
+                    if not proc_code:
+                        return None
+                    return f"{ordem}{proc_code}"
+
+                print(f"DEBUG QR | ordem={repr(ordem)} (tipo={type(ordem).__name__}) "
+                      f"| qr1_corte slot={repr(procs['qr1_corte'])} (tipo={type(procs['qr1_corte']).__name__}) "
+                      f"| resultado={repr(make_qr(procs['qr1_corte']))}")
+
+                fichas.append({
+                    'ordem':             ordem,
+                    'qtd':               int(qtd or 0),
+                    'lotcod':            lote_info['codigo'],
+                    'lote_desc':         lote_info['descricao'],
+                    'mat_info':          mat_info,
+                    'abertura':          lote_info['data_abertura'],
+                    'localizacao':       localizacoes_dict.get(produto, ''),
+                    'produto':           produto,
+                    'pronome':           pronome,
+                    'corte_bruto':       fmt_dim(dim.get('brucomp', 0), dim.get('brularg', 0), dim.get('bruespe', 0)),
+                    'corte_final':       fmt_dim(dim.get('fincomp', 0), dim.get('finlarg', 0), dim.get('finespe', 0)),
+                    'processos_corte':   procs['corte'],
+                    'processos_prensa':  procs['prensa'],
+                    'processos_usinagem':procs['usinagem'],
+                    'qr1_corte':         make_qr(procs['qr1_corte']),
+                    'qr2_corte':         make_qr(procs['qr2_corte']),
+                    'qr1_prensa':        make_qr(procs['qr1_prensa']),
+                    'qr2_prensa':        make_qr(procs['qr2_prensa']),
+                    'qr1_usinagem':      make_qr(procs['qr1_usinagem']),
+                    'qr2_usinagem':      make_qr(procs['qr2_usinagem']),
+                })
+
+            cur_erp.close()
+            return jsonify({
+                'success':    True,
+                'lote':       lote_info,
+                'classificacao': classificacao,
+                'fichas':     fichas,
+                'total':      len(fichas),
+                'generated_at': datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            })
+
+        except Error as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            if conn_erp:
+                conn_erp.close()
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/mrp/report/ficha_componente/photo/<path:produto_codigo>')
+@login_required
+def mrp_report_ficha_componente_photo(produto_codigo):
+    """
+    Rota para servir fotos dos componentes (usa o mesmo parâmetro de assembly_output).
+    """
+    user_id = session.get('user_id')
+    mrp_photos_path = get_user_parameters(user_id, MRP_COMPONENT_PHOTOS_PATH_PARAM) or ''
+
+    if not mrp_photos_path:
+        return abort(404)
+
+    extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+    base_path = Path(mrp_photos_path)
+
+    for ext in extensions:
+        photo_path = base_path / f"{produto_codigo}{ext}"
+        if photo_path.exists():
+            return send_file(str(photo_path), mimetype=mimetypes.guess_type(str(photo_path))[0] or 'image/jpeg')
+        photo_path_upper = base_path / f"{produto_codigo}{ext.upper()}"
+        if photo_path_upper.exists():
+            return send_file(str(photo_path_upper), mimetype=mimetypes.guess_type(str(photo_path_upper))[0] or 'image/jpeg')
+
+    return abort(404)
+
+
+# =====================================================
+# FIM RELATÓRIO FICHA DE COMPONENTE
 # =====================================================
 
 

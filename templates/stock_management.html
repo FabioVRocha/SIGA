@@ -1,0 +1,492 @@
+{% extends "base.html" %}
+
+{% block title %}Gestao do Estoque{% endblock %}
+
+{% block page_title %}Gestao do Estoque{% endblock %}
+
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-xl">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
+        <div>
+            <h2 class="text-2xl font-semibold text-dark-blue">Gestao do Estoque</h2>
+            <p class="text-sm text-gray-600">Tabela analitica com consumo, estoque e simulacao de compra.</p>
+        </div>
+        {% if last_date %}
+        <div class="text-sm text-gray-500">
+            <span class="font-semibold">Base de consumo:</span> {{ last_date }}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-3 mt-5 mb-6">
+        <div class="text-sm text-gray-500">
+            {{ rows | length if rows else 0 }} itens
+        </div>
+        <div class="flex space-x-2">
+            <button type="button" id="openFilterModal" class="btn-add flex items-center px-5 py-2 rounded-full">
+                <i class="fas fa-filter mr-2"></i> Filtrar
+            </button>
+            <a href="{{ export_url }}" class="btn-secondary flex items-center px-5 py-2 rounded-full">
+                <i class="fas fa-file-excel mr-2"></i> Exportar Excel
+            </a>
+        </div>
+    </div>
+
+    <div id="filterModal" class="modal">
+        <div class="modal-content p-6 md:p-8 rounded-xl space-y-4" style="max-width: 72rem; max-height: 85vh; overflow-y: auto;">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800">Filtros - Gestao do Estoque</h3>
+                    <p class="text-sm text-gray-500">Aplique um ou mais filtros para restringir os dados.</p>
+                </div>
+                <button type="button" id="closeFilterModal" class="close-button" aria-label="Fechar filtros">&times;</button>
+            </div>
+
+            <form id="stockFiltersForm" method="get" class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div class="relative" data-combobox>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Grupo</label>
+                    <button type="button" class="w-full form-input flex items-center justify-between gap-2" data-combobox-trigger>
+                        <span data-combobox-label data-placeholder="Selecionar grupos">Selecionar grupos</span>
+                        <span class="text-xs text-gray-400">▼</span>
+                    </button>
+                    <div class="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-3 hidden" data-combobox-panel>
+                        <input type="text" class="form-input w-full mb-2" placeholder="Pesquisar..." data-combobox-search>
+                        <div class="max-h-56 overflow-y-auto space-y-2">
+                            {% for option in filter_options.grupos %}
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="grupo" value="{{ option.code }}" class="form-checkbox" data-label="{{ option.label }}" {% if option.code in filters.grupo %}checked{% endif %}>
+                                <span>{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="relative" data-combobox>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Subgrupo</label>
+                    <button type="button" class="w-full form-input flex items-center justify-between gap-2" data-combobox-trigger>
+                        <span data-combobox-label data-placeholder="Selecionar subgrupos">Selecionar subgrupos</span>
+                        <span class="text-xs text-gray-400">▼</span>
+                    </button>
+                    <div class="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-3 hidden" data-combobox-panel>
+                        <input type="text" class="form-input w-full mb-2" placeholder="Pesquisar..." data-combobox-search>
+                        <div class="max-h-56 overflow-y-auto space-y-2">
+                            {% for option in filter_options.subgrupos %}
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="subgrupo" value="{{ option.code }}" class="form-checkbox" data-label="{{ option.label }}" {% if option.code in filters.subgrupo %}checked{% endif %}>
+                                <span>{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="relative" data-combobox>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Produto</label>
+                    <button type="button" class="w-full form-input flex items-center justify-between gap-2" data-combobox-trigger>
+                        <span data-combobox-label data-placeholder="Selecionar produtos">Selecionar produtos</span>
+                        <span class="text-xs text-gray-400">▼</span>
+                    </button>
+                    <div class="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-3 hidden" data-combobox-panel>
+                        <input type="text" class="form-input w-full mb-2" placeholder="Pesquisar..." data-combobox-search>
+                        <div class="max-h-56 overflow-y-auto space-y-2">
+                            {% for option in filter_options.produtos %}
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="produto" value="{{ option.code }}" class="form-checkbox" data-label="{{ option.label }}" {% if option.code in filters.produto %}checked{% endif %}>
+                                <span>{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="relative" data-combobox>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Tipo</label>
+                    <button type="button" class="w-full form-input flex items-center justify-between gap-2" data-combobox-trigger>
+                        <span data-combobox-label data-placeholder="Selecionar tipos">Selecionar tipos</span>
+                        <span class="text-xs text-gray-400">▼</span>
+                    </button>
+                    <div class="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-3 hidden" data-combobox-panel>
+                        <input type="text" class="form-input w-full mb-2" placeholder="Pesquisar..." data-combobox-search>
+                        <div class="max-h-56 overflow-y-auto space-y-2">
+                            {% for option in filter_options.tipos %}
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="tipo" value="{{ option.code }}" class="form-checkbox" data-label="{{ option.label }}" {% if option.code in filters.tipo %}checked{% endif %}>
+                                <span>{{ option.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="relative" data-combobox>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Fornecedor</label>
+                    <button type="button" class="w-full form-input flex items-center justify-between gap-2" data-combobox-trigger>
+                        <span data-combobox-label data-placeholder="Selecionar fornecedores">Selecionar fornecedores</span>
+                        <span class="text-xs text-gray-400">▼</span>
+                    </button>
+                    <div class="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-3 hidden" data-combobox-panel>
+                        <input type="text" class="form-input w-full mb-2" placeholder="Pesquisar..." data-combobox-search>
+                        <div class="max-h-56 overflow-y-auto space-y-2">
+                            {% for option in filter_options.fornecedores %}
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="fornecedor" value="{{ option }}" class="form-checkbox" data-label="{{ option }}" {% if option in filters.fornecedor %}checked{% endif %}>
+                                <span>{{ option }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="relative" data-combobox>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+                    <button type="button" class="w-full form-input flex items-center justify-between gap-2" data-combobox-trigger>
+                        <span data-combobox-label data-placeholder="Selecionar status">Selecionar status</span>
+                        <span class="text-xs text-gray-400">▼</span>
+                    </button>
+                    <div class="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-3 hidden" data-combobox-panel>
+                        <input type="text" class="form-input w-full mb-2" placeholder="Pesquisar..." data-combobox-search>
+                        <div class="max-h-56 overflow-y-auto space-y-2">
+                            {% for option in filter_options.status %}
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="status" value="{{ option }}" class="form-checkbox" data-label="{{ option }}" {% if option in filters.status %}checked{% endif %}>
+                                <span>{{ option }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="relative" data-combobox>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Estoque Zero</label>
+                    <button type="button" class="w-full form-input flex items-center justify-between gap-2" data-combobox-trigger>
+                        <span data-combobox-label data-placeholder="Selecionar opcoes">Selecionar opcoes</span>
+                        <span class="text-xs text-gray-400">▼</span>
+                    </button>
+                    <div class="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-3 hidden" data-combobox-panel>
+                        <input type="text" class="form-input w-full mb-2" placeholder="Pesquisar..." data-combobox-search>
+                        <div class="max-h-56 overflow-y-auto space-y-2">
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="estoque_zero" value="sim" class="form-checkbox" data-label="Sim" {% if 'sim' in filters.estoque_zero %}checked{% endif %}>
+                                <span>Sim</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="estoque_zero" value="nao" class="form-checkbox" data-label="Nao" {% if 'nao' in filters.estoque_zero %}checked{% endif %}>
+                                <span>Nao</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="relative" data-combobox>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Abaixo do Minimo</label>
+                    <button type="button" class="w-full form-input flex items-center justify-between gap-2" data-combobox-trigger>
+                        <span data-combobox-label data-placeholder="Selecionar opcoes">Selecionar opcoes</span>
+                        <span class="text-xs text-gray-400">▼</span>
+                    </button>
+                    <div class="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-3 hidden" data-combobox-panel>
+                        <input type="text" class="form-input w-full mb-2" placeholder="Pesquisar..." data-combobox-search>
+                        <div class="max-h-56 overflow-y-auto space-y-2">
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="abaixo_minimo" value="1" class="form-checkbox" data-label="Abaixo do Minimo" {% if filters.abaixo_minimo %}checked{% endif %}>
+                                <span>Abaixo do Minimo</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 md:col-span-3 xl:col-span-4 mt-2">
+                    <button type="submit" class="btn-primary px-4 py-2 rounded-lg">Aplicar</button>
+                    <a href="{{ url_for('stock_management') }}" class="btn-secondary px-4 py-2 rounded-lg">Limpar</a>
+                    <button type="button" id="saveFiltersBtn" class="btn-secondary px-4 py-2 rounded-lg">Salvar filtros</button>
+                    <span id="saveFiltersFeedback" class="text-sm text-gray-500"></span>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="overflow-x-auto hidden md:block">
+        <table class="min-w-full bg-white rounded-lg overflow-hidden">
+            <thead class="text-white" style="background-color: var(--clr-sidebar-bg);">
+                <tr>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-white">Foto</th>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-white">Codigo</th>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-white">Produto</th>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-white">UM</th>
+                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Estoque Minimo</th>
+                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Media Consumo</th>
+                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Media Consumo +50%</th>
+                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Estoque</th>
+                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Pedido Pendente</th>
+                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Simulacao Compra</th>
+                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Dias / Estoque</th>
+                </tr>
+                <tr>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="0">
+                    </th>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="1">
+                    </th>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="2">
+                    </th>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="3">
+                    </th>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="4">
+                    </th>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="5">
+                    </th>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="6">
+                    </th>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="7">
+                    </th>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="8">
+                    </th>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="9">
+                    </th>
+                    <th class="py-2 px-4">
+                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="10">
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="stock-tbody">
+                {% if rows %}
+                    {% for row in rows %}
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="py-3 px-4 text-sm text-gray-700">
+                            {% if row.codigo %}
+                            <img src="{{ url_for('stock_management_photo', produto_codigo=row.codigo) }}" alt="Foto {{ row.codigo }}" class="w-10 h-10 object-cover rounded bg-gray-100" loading="lazy" onerror="this.style.display='none'">
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 text-sm text-gray-700 whitespace-nowrap">{{ row.codigo }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ row.produto }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700 whitespace-nowrap">{{ row.um }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.estoque_minimo | format_decimal_br if row.estoque_minimo is not none else '' }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.media_consumo | format_decimal_br if row.media_consumo is not none else '' }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.media_consumo_50 | format_decimal_br if row.media_consumo_50 is not none else '' }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.estoque | format_decimal_br if row.estoque is not none else '' }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.pedido_pendente | format_decimal_br if row.pedido_pendente is not none else '' }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.simulacao_compra | format_decimal_br if row.simulacao_compra is not none else '' }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.dias_estoque | format_decimal_br if row.dias_estoque is not none else '' }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="11" class="py-6 px-4 text-center text-gray-600">
+                            Nenhum dado encontrado para gestao do estoque.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="md:hidden space-y-3">
+        {% if rows %}
+            {% for row in rows %}
+            <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                <div class="flex items-center gap-3 mb-3">
+                    {% if row.codigo %}
+                    <img src="{{ url_for('stock_management_photo', produto_codigo=row.codigo) }}" alt="Foto {{ row.codigo }}" class="w-12 h-12 object-cover rounded bg-gray-100" loading="lazy" onerror="this.style.display='none'">
+                    {% endif %}
+                    <div>
+                        <div class="text-sm font-semibold text-gray-800">{{ row.produto }}</div>
+                        <div class="text-xs text-gray-500">Codigo: {{ row.codigo }} | UM: {{ row.um }}</div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                    <div><span class="font-semibold">Estoque Minimo:</span> {{ row.estoque_minimo | format_decimal_br if row.estoque_minimo is not none else '' }}</div>
+                    <div><span class="font-semibold">Media Consumo:</span> {{ row.media_consumo | format_decimal_br if row.media_consumo is not none else '' }}</div>
+                    <div><span class="font-semibold">Media +50%:</span> {{ row.media_consumo_50 | format_decimal_br if row.media_consumo_50 is not none else '' }}</div>
+                    <div><span class="font-semibold">Estoque:</span> {{ row.estoque | format_decimal_br if row.estoque is not none else '' }}</div>
+                    <div><span class="font-semibold">Pedido Pendente:</span> {{ row.pedido_pendente | format_decimal_br if row.pedido_pendente is not none else '' }}</div>
+                    <div><span class="font-semibold">Simulacao Compra:</span> {{ row.simulacao_compra | format_decimal_br if row.simulacao_compra is not none else '' }}</div>
+                    <div><span class="font-semibold">Dias / Estoque:</span> {{ row.dias_estoque | format_decimal_br if row.dias_estoque is not none else '' }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="text-center text-gray-600 text-sm py-4">Nenhum dado encontrado para gestao do estoque.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('filterModal');
+    const openBtn = document.getElementById('openFilterModal');
+    const closeBtn = document.getElementById('closeFilterModal');
+    const saveBtn = document.getElementById('saveFiltersBtn');
+    const feedback = document.getElementById('saveFiltersFeedback');
+    const form = document.getElementById('stockFiltersForm');
+
+    const openModal = () => {
+        if (!modal) return;
+        modal.style.display = 'flex';
+        document.body.classList.add('overflow-hidden');
+    };
+
+    const closeModal = () => {
+        if (!modal) return;
+        modal.style.display = 'none';
+        document.body.classList.remove('overflow-hidden');
+    };
+
+    openBtn?.addEventListener('click', openModal);
+    closeBtn?.addEventListener('click', closeModal);
+    modal?.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            closeModal();
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && modal && modal.style.display === 'flex') {
+            closeModal();
+        }
+    });
+
+    const collectMulti = (name) => {
+        if (!form) return [];
+        return Array.from(form.querySelectorAll(`input[name="${name}"]:checked`)).map(opt => opt.value);
+    };
+
+    const setFeedback = (message, isError = false) => {
+        if (!feedback) return;
+        feedback.textContent = message;
+        feedback.className = isError ? 'text-sm text-red-600' : 'text-sm text-emerald-600';
+    };
+
+    saveBtn?.addEventListener('click', async () => {
+        if (!form) return;
+        const payload = {
+            grupo: collectMulti('grupo'),
+            subgrupo: collectMulti('subgrupo'),
+            produto: collectMulti('produto'),
+            tipo: collectMulti('tipo'),
+            fornecedor: collectMulti('fornecedor'),
+            status: collectMulti('status'),
+            estoque_zero: collectMulti('estoque_zero'),
+            abaixo_minimo: collectMulti('abaixo_minimo')
+        };
+
+        try {
+            const response = await fetch("{{ save_filters_url }}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (response.ok && result.success) {
+                setFeedback(result.message || 'Filtros salvos com sucesso.');
+            } else {
+                setFeedback(result.message || 'Nao foi possivel salvar os filtros.', true);
+            }
+        } catch (error) {
+            setFeedback('Erro ao salvar filtros.', true);
+        }
+    });
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const filters = document.querySelectorAll('.column-search');
+    const rows = document.querySelectorAll('#stock-tbody tr');
+
+    const filterTable = () => {
+        rows.forEach(row => {
+            let visible = true;
+            filters.forEach((input, index) => {
+                if (input.disabled) {
+                    return;
+                }
+                const filter = (input.value || '').toLowerCase();
+                const columnIndex = input.dataset.column ? Number(input.dataset.column) : index;
+                const cell = row.querySelectorAll('td')[columnIndex];
+                if (filter && cell && !cell.textContent.toLowerCase().includes(filter)) {
+                    visible = false;
+                }
+            });
+            row.style.display = visible ? '' : 'none';
+        });
+    };
+
+    filters.forEach(input => {
+        input.addEventListener('input', filterTable);
+        input.addEventListener('change', filterTable);
+    });
+
+    const comboboxes = document.querySelectorAll('[data-combobox]');
+
+    const updateLabel = (root) => {
+        const label = root.querySelector('[data-combobox-label]');
+        const placeholder = label?.dataset.placeholder || 'Selecionar';
+        const checked = Array.from(root.querySelectorAll('input[type="checkbox"]:checked'));
+        if (!label) return;
+        if (checked.length === 0) {
+            label.textContent = placeholder;
+            return;
+        }
+        if (checked.length === 1) {
+            label.textContent = checked[0].dataset.label || checked[0].value;
+            return;
+        }
+        label.textContent = `Selecionados (${checked.length})`;
+    };
+
+    const filterOptions = (root, term) => {
+        const filterText = (term || '').trim().toLowerCase();
+        const options = root.querySelectorAll('input[type="checkbox"]');
+        options.forEach((option) => {
+            const label = option.closest('label');
+            if (!label) return;
+            const text = (option.dataset.label || option.value || '').toLowerCase();
+            const shouldHide = filterText && !text.includes(filterText);
+            label.classList.toggle('hidden', shouldHide);
+        });
+    };
+
+    comboboxes.forEach((root) => {
+        const trigger = root.querySelector('[data-combobox-trigger]');
+        const panel = root.querySelector('[data-combobox-panel]');
+        const search = root.querySelector('[data-combobox-search]');
+        if (!trigger || !panel) return;
+
+        trigger.addEventListener('click', () => {
+            const willOpen = panel.classList.contains('hidden');
+            panel.classList.toggle('hidden');
+            if (willOpen) {
+                if (search) {
+                    search.value = '';
+                }
+                filterOptions(root, '');
+                search?.focus();
+            }
+        });
+
+        root.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+            checkbox.addEventListener('change', () => updateLabel(root));
+        });
+
+        search?.addEventListener('input', (event) => {
+            filterOptions(root, event.target.value);
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!root.contains(event.target)) {
+                panel.classList.add('hidden');
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                panel.classList.add('hidden');
+            }
+        });
+
+        updateLabel(root);
+    });
+});
+</script>
+{% endblock %}
