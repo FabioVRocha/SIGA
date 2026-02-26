@@ -62,9 +62,9 @@
             padding: 0 1.5rem;
             background: linear-gradient(135deg, var(--clr-sidebar-bg), #1a2f4b);
             color: var(--clr-white);
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
             align-items: center;
-            justify-content: space-between;
             box-shadow: 0 6px 16px rgba(15, 23, 42, 0.15);
         }
 
@@ -117,6 +117,19 @@
             background: rgba(255, 255, 255, 0.08);
             border-radius: 9999px;
             padding: 0.35rem 0.6rem 0.35rem 0.35rem;
+            justify-self: end;
+        }
+
+        .topbar-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--clr-white);
+            letter-spacing: 0.02em;
+            padding: 0 1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .menu-panel {
@@ -320,52 +333,6 @@
         .mobile-sidebar-toggle:hover {
             background-color: var(--clr-dark-blue);
             transform: translateY(-1px);
-        }
-
-        .main-header {
-            background-color: var(--clr-card-bg);
-            padding: 1.5rem 2rem;
-            border-radius: 0.75rem;
-            box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
-            margin-bottom: var(--header-gap);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .main-header-title {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .main-header h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: var(--clr-dark-blue);
-        }
-
-        .main-header .search-bar {
-            display: flex;
-            align-items: center;
-            border: 1px solid var(--clr-border);
-            border-radius: 0.5rem;
-            padding: 0.5rem 1rem;
-            background-color: var(--clr-light-gray);
-        }
-
-        .main-header .search-bar input {
-            border: none;
-            outline: none;
-            background: transparent;
-            font-size: 1rem;
-            color: var(--clr-text-main);
-        }
-
-        .main-header .search-bar i {
-            color: var(--clr-medium-gray);
-            margin-right: 0.5rem;
         }
 
         .sidebar-backdrop {
@@ -617,15 +584,6 @@
                 padding-top: var(--top-gap);
             }
 
-            .main-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .main-header .search-bar {
-                width: 100%;
-            }
-
             .submenu-panel {
                 position: fixed;
                 left: 1rem;
@@ -644,7 +602,7 @@
     </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="flex flex-col min-h-screen">
+<body class="flex flex-col min-h-screen {% block body_class %}{% endblock %}">
     <!-- Topbar -->
     <header class="topbar">
         <div class="topbar-left">
@@ -656,6 +614,7 @@
                 <span class="menu-text">SIGA</span>
             </div>
         </div>
+        <div class="topbar-title">{% block page_title %}{% endblock %}</div>
         <div class="topbar-user">
             <div class="sidebar-user-avatar">
                 {% if sidebar_user_photo %}
@@ -779,7 +738,6 @@
                     </div>
                     <ul id="estoque-submenu" class="ml-6 mt-1 hidden">
                         <li><a href="{{ url_for('stock_movements_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-exchange-alt"></i><span class="menu-text">Movimentações de Estoque</span></a></li>
-                        <li><a href="{{ url_for('stock_management') }}" class="sidebar-nav-item text-sm"><i class="fas fa-clipboard-list"></i><span class="menu-text">Gestao do Estoque</span></a></li>
                         <li><a href="{{ url_for('product_batches_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-boxes"></i><span class="menu-text">Lotes de Produto</span></a></li>
                     </ul>
                 </li>
@@ -837,19 +795,6 @@
 
     <!-- Main Content -->
     <div class="main-content">
-        <!-- Main Header -->
-        <div class="main-header">
-            <div class="main-header-title">
-                <h1>{% block page_title %}{% endblock %}</h1>
-            </div>
-            {% block header_action %}
-            <div class="search-bar">
-                <i class="fas fa-search"></i>
-                <input type="text" placeholder="Pesquisar...">
-            </div>
-            {% endblock %}
-        </div>
-
         <!-- Mensagens Flash -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}

@@ -16116,7 +16116,7 @@ def _build_stock_management_query(filters):
         ),
         base AS (
             SELECT
-                p.produto AS codigo,
+                TRIM(p.produto::text) AS codigo,
                 p.pronome AS produto,
                 p.unimedida AS um,
                 COALESCE(p.prosldmin, 0) AS estoque_minimo,
@@ -16157,7 +16157,7 @@ def _build_stock_management_query(filters):
             LEFT JOIN mov_quant ON mov_quant.produto = p.produto
             LEFT JOIN consumo ON consumo.produto = p.produto
             LEFT JOIN pedido_pendente ON pedido_pendente.produto = p.produto
-            LEFT JOIN produto_foto pf ON pf.proimgcod = p.produto::text
+            LEFT JOIN produto_foto pf ON pf.proimgcod = TRIM(p.produto::text)
         )
         SELECT
             codigo,
@@ -16535,6 +16535,7 @@ def save_stock_management_filters():
 @app.route('/stock_management/photo/<path:produto_codigo>')
 @login_required
 def stock_management_photo(produto_codigo):
+    produto_codigo = (produto_codigo or '').strip()
     conn = get_erp_db_connection()
     if not conn:
         abort(404)
@@ -16562,6 +16563,8 @@ def stock_management_photo(produto_codigo):
         abort(404)
 
     photo_path = str(photo_path).strip()
+    # Corrigir caminho "X:arquivo.ext" para "X:\\arquivo.ext" quando faltar a barra.
+    photo_path = re.sub(r'^([A-Za-z]):(?![\\/])', r'\1:\\\\', photo_path)
     if not photo_path or not os.path.isfile(photo_path):
         abort(404)
 

@@ -4,16 +4,261 @@
 
 {% block page_title %}Gestao do Estoque{% endblock %}
 
+{% block body_class %}page-list-standard page-list-has-cards{% endblock %}
+
+{% block extra_head %}
+<style>
+    body.page-list-standard {
+        background: radial-gradient(1200px 800px at 10% 10%, rgba(14, 165, 233, 0.12), transparent 55%),
+                    radial-gradient(900px 700px at 90% 20%, rgba(37, 99, 235, 0.14), transparent 60%),
+                    var(--clr-dashboard-bg);
+    }
+
+    body.page-list-standard .content-section {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.88));
+        border-radius: 1.2rem;
+        padding: 1.75rem;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        backdrop-filter: blur(12px);
+        margin-bottom: 1.75rem;
+    }
+
+    body.page-list-standard .btn-primary,
+    body.page-list-standard .btn-secondary,
+    body.page-list-standard .btn-add,
+    body.page-list-standard .btn-delete {
+        border-radius: 0.85rem;
+        box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+    }
+
+    body.page-list-standard .btn-primary {
+        background: linear-gradient(135deg, #1d4ed8, #2563eb);
+        color: var(--clr-white);
+    }
+
+    body.page-list-standard .btn-primary:hover { transform: translateY(-1px); }
+
+    body.page-list-standard .btn-secondary {
+        background: rgba(148, 163, 184, 0.85);
+        color: var(--clr-white);
+    }
+
+    body.page-list-standard .btn-secondary:hover { filter: brightness(0.95); transform: translateY(-1px); }
+
+    body.page-list-standard .table-elevated,
+    body.page-list-standard table {
+        border-radius: 1rem;
+        overflow: visible;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        box-shadow: 0 18px 30px rgba(15, 23, 42, 0.12);
+    }
+
+    body.page-list-standard .table-header-bg,
+    body.page-list-standard table thead {
+        background: linear-gradient(120deg, rgba(15, 23, 42, 0.95), rgba(37, 99, 235, 0.85));
+        color: var(--clr-white);
+    }
+
+    body.page-list-standard .table-header-bg tr,
+    body.page-list-standard table thead tr { background: transparent; }
+
+    body.page-list-standard .table-header-bg th,
+    body.page-list-standard table thead th {
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: 0;
+        border-bottom: none !important;
+    }
+
+    body.page-list-standard .table-filters { background: transparent; }
+    body.page-list-standard .table-filters th { border-bottom: none !important; }
+
+    body.page-list-standard .table-row-odd,
+    body.page-list-standard tbody tr:nth-child(odd) { background-color: rgba(255, 255, 255, 0.95); }
+
+    body.page-list-standard .table-row-even,
+    body.page-list-standard tbody tr:nth-child(even) { background-color: rgba(248, 250, 252, 0.9); }
+
+    body.page-list-standard .filter-input,
+    body.page-list-standard .filter-select,
+    body.page-list-standard .form-input,
+    body.page-list-standard .form-select {
+        border-color: rgba(148, 163, 184, 0.6);
+        color: var(--clr-text-main);
+        background-color: rgba(255, 255, 255, 0.85);
+        border-radius: 0.6rem;
+    }
+
+    body.page-list-standard .filter-input:focus,
+    body.page-list-standard .filter-select:focus,
+    body.page-list-standard .form-input:focus,
+    body.page-list-standard .form-select:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 1px #2563eb;
+        outline: none;
+    }
+
+    body.page-list-standard .table-overflow {
+        overflow: visible;
+    }
+
+    body.page-list-standard .mobile-cards {
+        display: none;
+        margin-top: 1rem;
+    }
+
+    body.page-list-standard .stock-card {
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 1rem;
+        padding: 1.25rem;
+        box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+    }
+
+    body.page-list-standard .stock-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    body.page-list-standard .stock-card-title {
+        font-weight: 600;
+        color: var(--clr-text-main);
+    }
+
+    body.page-list-standard .stock-card-meta {
+        font-size: 0.85rem;
+        color: #94a3b8;
+    }
+
+    body.page-list-standard .stock-card-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.65rem 1rem;
+        font-size: 0.9rem;
+        color: var(--clr-text-secondary);
+        margin-bottom: 0.9rem;
+    }
+
+    body.page-list-standard .stock-card-grid span {
+        display: block;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #94a3b8;
+        margin-bottom: 0.2rem;
+    }
+
+    @media (max-width: 768px) {
+        body.page-list-standard.page-list-has-cards .table-overflow,
+        body.page-list-standard.page-list-has-cards .overflow-x-auto { display: none; }
+        body.page-list-standard.page-list-has-cards .mobile-cards {
+            display: grid;
+            gap: 1rem;
+        }
+    }
+
+    body.page-list-standard .photo-tooltip {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    body.page-list-standard .photo-tooltip-panel {
+        position: absolute;
+        top: 50%;
+        left: calc(100% + 0.75rem);
+        transform: translateY(-50%);
+        width: 220px;
+        height: 220px;
+        padding: 0.5rem;
+        background: rgba(255, 255, 255, 0.98);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+        border-radius: 0.9rem;
+        z-index: 20;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+
+    body.page-list-standard .photo-tooltip-panel img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        border-radius: 0.6rem;
+        background: #f8fafc;
+    }
+
+    body.page-list-standard .photo-tooltip:hover .photo-tooltip-panel,
+    body.page-list-standard .photo-tooltip:focus-within .photo-tooltip-panel {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: translateY(-50%) translateX(2px);
+    }
+
+    @media (max-width: 1024px) {
+        body.page-list-standard .photo-tooltip-panel {
+            left: auto;
+            right: calc(100% + 0.75rem);
+        }
+    }
+
+    body.page-list-standard .sort-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        width: 100%;
+        justify-content: flex-start;
+        color: inherit;
+        background: transparent;
+        border: none;
+        padding: 0;
+        font: inherit;
+        cursor: pointer;
+        text-align: left;
+    }
+
+    body.page-list-standard .sort-button.justify-end {
+        justify-content: flex-end;
+    }
+
+    body.page-list-standard .sort-button.justify-center {
+        justify-content: center;
+    }
+
+    body.page-list-standard .sort-button:focus-visible {
+        outline: 2px solid rgba(59, 130, 246, 0.7);
+        outline-offset: 2px;
+        border-radius: 0.35rem;
+    }
+
+    body.page-list-standard .sort-icon {
+        font-size: 0.85rem;
+        opacity: 0.8;
+    }
+
+    body.page-list-standard .sort-button.active .sort-icon {
+        opacity: 1;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="bg-white p-6 rounded-lg shadow-xl">
+<div class="content-section">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
         <div>
-            <h2 class="text-2xl font-semibold text-dark-blue">Gestao do Estoque</h2>
-            <p class="text-sm text-gray-600">Tabela analitica com consumo, estoque e simulacao de compra.</p>
         </div>
         {% if last_date %}
         <div class="text-sm text-gray-500">
-            <span class="font-semibold">Base de consumo:</span> {{ last_date }}
         </div>
         {% endif %}
     </div>
@@ -23,12 +268,12 @@
             {{ rows | length if rows else 0 }} itens
         </div>
         <div class="flex space-x-2">
-            <button type="button" id="openFilterModal" class="btn-add flex items-center px-5 py-2 rounded-full">
-                <i class="fas fa-filter mr-2"></i> Filtrar
-            </button>
-            <a href="{{ export_url }}" class="btn-secondary flex items-center px-5 py-2 rounded-full">
+            <a href="{{ export_url }}" class="btn-secondary flex items-center px-5 py-2 rounded-lg">
                 <i class="fas fa-file-excel mr-2"></i> Exportar Excel
             </a>
+            <button type="button" id="openFilterModal" class="btn-primary flex items-center px-5 py-2 rounded-lg">
+                <i class="fas fa-filter mr-2"></i> Filtrar
+            </button>
         </div>
     </div>
 
@@ -198,77 +443,135 @@
         </div>
     </div>
 
-    <div class="overflow-x-auto hidden md:block">
-        <table class="min-w-full bg-white rounded-lg overflow-hidden">
-            <thead class="text-white" style="background-color: var(--clr-sidebar-bg);">
+    <div class="table-overflow table-wrapper hidden md:block">
+        <table class="min-w-full table-elevated">
+            <thead class="table-header-bg">
                 <tr>
-                    <th class="py-3 px-4 text-left text-sm font-semibold text-white">Foto</th>
-                    <th class="py-3 px-4 text-left text-sm font-semibold text-white">Codigo</th>
-                    <th class="py-3 px-4 text-left text-sm font-semibold text-white">Produto</th>
-                    <th class="py-3 px-4 text-left text-sm font-semibold text-white">UM</th>
-                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Estoque Minimo</th>
-                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Media Consumo</th>
-                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Media Consumo +50%</th>
-                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Estoque</th>
-                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Pedido Pendente</th>
-                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Simulacao Compra</th>
-                    <th class="py-3 px-4 text-right text-sm font-semibold text-white">Dias / Estoque</th>
+                    <th class="py-2 px-2 text-left text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                        <button type="button" class="sort-button" data-sort-index="0" data-sort-type="text">
+                            <span>Foto</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
+                    <th class="py-2 px-2 text-left text-sm font-semibold text-white leading-tight whitespace-nowrap w-20">
+                        <button type="button" class="sort-button" data-sort-index="1" data-sort-type="text">
+                            <span>Codigo</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
+                    <th class="py-2 px-2 text-left text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                        <button type="button" class="sort-button" data-sort-index="2" data-sort-type="text">
+                            <span>Produto</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
+                    <th class="py-2 px-2 text-center text-sm font-semibold text-white leading-tight whitespace-nowrap w-12">
+                        <button type="button" class="sort-button justify-center" data-sort-index="3" data-sort-type="text">
+                            <span>UM</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
+                    <th class="py-2 px-2 text-right text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                        <button type="button" class="sort-button justify-end" data-sort-index="4" data-sort-type="number">
+                            <span>Estoque Minimo</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
+                    <th class="py-2 px-2 text-right text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                        <button type="button" class="sort-button justify-end" data-sort-index="5" data-sort-type="number">
+                            <span>Media Consumo</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
+                    <th class="py-2 px-2 text-right text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                        <button type="button" class="sort-button justify-end" data-sort-index="6" data-sort-type="number">
+                            <span>Media Consumo +50%</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
+                    <th class="py-2 px-2 text-right text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                        <button type="button" class="sort-button justify-end" data-sort-index="7" data-sort-type="number">
+                            <span>Estoque</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
+                    <th class="py-2 px-2 text-right text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                        <button type="button" class="sort-button justify-end" data-sort-index="8" data-sort-type="number">
+                            <span>Pedido Pendente</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
+                    <th class="py-2 px-2 text-right text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                        <button type="button" class="sort-button justify-end" data-sort-index="9" data-sort-type="number">
+                            <span>Simulacao Compra</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
+                    <th class="py-2 px-2 text-right text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                        <button type="button" class="sort-button justify-end" data-sort-index="10" data-sort-type="number">
+                            <span>Dias / Estoque</span>
+                            <i class="fas fa-sort sort-icon"></i>
+                        </button>
+                    </th>
                 </tr>
-                <tr>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="0">
+                <tr class="table-filters">
+                    <th class="py-2 px-2"></th>
+                    <th class="py-2 px-2">
+                        <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="1">
                     </th>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="1">
+                    <th class="py-2 px-2">
+                        <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="2">
                     </th>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="2">
+                    <th class="py-2 px-2">
+                        <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="3">
                     </th>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="3">
+                    <th class="py-2 px-2">
+                        <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="4">
                     </th>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="4">
+                    <th class="py-2 px-2">
+                        <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="5">
                     </th>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="5">
+                    <th class="py-2 px-2">
+                        <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="6">
                     </th>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="6">
+                    <th class="py-2 px-2">
+                        <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="7">
                     </th>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="7">
+                    <th class="py-2 px-2">
+                        <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="8">
                     </th>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="8">
+                    <th class="py-2 px-2">
+                        <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="9">
                     </th>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="9">
-                    </th>
-                    <th class="py-2 px-4">
-                        <input type="text" class="form-input column-search w-full min-w-0" placeholder="Buscar" data-column="10">
+                    <th class="py-2 px-2">
+                        <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="10">
                     </th>
                 </tr>
             </thead>
             <tbody id="stock-tbody">
                 {% if rows %}
                     {% for row in rows %}
-                    <tr class="border-b border-gray-200 hover:bg-gray-50">
-                        <td class="py-3 px-4 text-sm text-gray-700">
+                    <tr class="border-b border-gray-200 hover:bg-gray-50 {% if loop.index is odd %}table-row-odd{% else %}table-row-even{% endif %}">
+                        <td class="py-3 px-2 text-xs text-gray-700">
                             {% if row.codigo %}
-                            <img src="{{ url_for('stock_management_photo', produto_codigo=row.codigo) }}" alt="Foto {{ row.codigo }}" class="w-10 h-10 object-cover rounded bg-gray-100" loading="lazy" onerror="this.style.display='none'">
+                            <div class="photo-tooltip">
+                                <img src="{{ url_for('stock_management_photo', produto_codigo=row.codigo) }}" alt="Foto {{ row.codigo }}" class="w-10 h-10 object-cover rounded bg-gray-100 cursor-pointer" loading="lazy" onerror="this.style.display='none'">
+                                <div class="photo-tooltip-panel">
+                                    <img src="{{ url_for('stock_management_photo', produto_codigo=row.codigo) }}" alt="Foto ampliada {{ row.codigo }}" loading="lazy" onerror="this.style.display='none'">
+                                </div>
+                            </div>
                             {% endif %}
                         </td>
-                        <td class="py-3 px-4 text-sm text-gray-700 whitespace-nowrap">{{ row.codigo }}</td>
-                        <td class="py-3 px-4 text-sm text-gray-700">{{ row.produto }}</td>
-                        <td class="py-3 px-4 text-sm text-gray-700 whitespace-nowrap">{{ row.um }}</td>
-                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.estoque_minimo | format_decimal_br if row.estoque_minimo is not none else '' }}</td>
-                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.media_consumo | format_decimal_br if row.media_consumo is not none else '' }}</td>
-                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.media_consumo_50 | format_decimal_br if row.media_consumo_50 is not none else '' }}</td>
-                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.estoque | format_decimal_br if row.estoque is not none else '' }}</td>
-                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.pedido_pendente | format_decimal_br if row.pedido_pendente is not none else '' }}</td>
-                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.simulacao_compra | format_decimal_br if row.simulacao_compra is not none else '' }}</td>
-                        <td class="py-3 px-4 text-sm text-gray-700 text-right">{{ row.dias_estoque | format_decimal_br if row.dias_estoque is not none else '' }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700 whitespace-nowrap w-20">{{ row.codigo }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700">{{ row.produto }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700 whitespace-nowrap text-center w-12">{{ row.um }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.estoque_minimo | format_decimal_br if row.estoque_minimo is not none else '' }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.media_consumo | format_decimal_br if row.media_consumo is not none else '' }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.media_consumo_50 | format_decimal_br if row.media_consumo_50 is not none else '' }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.estoque | format_decimal_br if row.estoque is not none else '' }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.pedido_pendente | format_decimal_br if row.pedido_pendente is not none else '' }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.simulacao_compra | format_decimal_br if row.simulacao_compra is not none else '' }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.dias_estoque | format_decimal_br if row.dias_estoque is not none else '' }}</td>
                     </tr>
                     {% endfor %}
                 {% else %}
@@ -282,27 +585,53 @@
         </table>
     </div>
 
-    <div class="md:hidden space-y-3">
+    <div class="mobile-cards">
         {% if rows %}
             {% for row in rows %}
-            <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                <div class="flex items-center gap-3 mb-3">
+            <div class="stock-card">
+                <div class="stock-card-header">
                     {% if row.codigo %}
-                    <img src="{{ url_for('stock_management_photo', produto_codigo=row.codigo) }}" alt="Foto {{ row.codigo }}" class="w-12 h-12 object-cover rounded bg-gray-100" loading="lazy" onerror="this.style.display='none'">
+                    <div class="photo-tooltip">
+                        <img src="{{ url_for('stock_management_photo', produto_codigo=row.codigo) }}" alt="Foto {{ row.codigo }}" class="w-12 h-12 object-cover rounded bg-gray-100 cursor-pointer" loading="lazy" onerror="this.style.display='none'">
+                        <div class="photo-tooltip-panel">
+                            <img src="{{ url_for('stock_management_photo', produto_codigo=row.codigo) }}" alt="Foto ampliada {{ row.codigo }}" loading="lazy" onerror="this.style.display='none'">
+                        </div>
+                    </div>
                     {% endif %}
                     <div>
-                        <div class="text-sm font-semibold text-gray-800">{{ row.produto }}</div>
-                        <div class="text-xs text-gray-500">Codigo: {{ row.codigo }} | UM: {{ row.um }}</div>
+                        <div class="stock-card-title">{{ row.produto }}</div>
+                        <div class="stock-card-meta">Codigo: {{ row.codigo }} | UM: {{ row.um }}</div>
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                    <div><span class="font-semibold">Estoque Minimo:</span> {{ row.estoque_minimo | format_decimal_br if row.estoque_minimo is not none else '' }}</div>
-                    <div><span class="font-semibold">Media Consumo:</span> {{ row.media_consumo | format_decimal_br if row.media_consumo is not none else '' }}</div>
-                    <div><span class="font-semibold">Media +50%:</span> {{ row.media_consumo_50 | format_decimal_br if row.media_consumo_50 is not none else '' }}</div>
-                    <div><span class="font-semibold">Estoque:</span> {{ row.estoque | format_decimal_br if row.estoque is not none else '' }}</div>
-                    <div><span class="font-semibold">Pedido Pendente:</span> {{ row.pedido_pendente | format_decimal_br if row.pedido_pendente is not none else '' }}</div>
-                    <div><span class="font-semibold">Simulacao Compra:</span> {{ row.simulacao_compra | format_decimal_br if row.simulacao_compra is not none else '' }}</div>
-                    <div><span class="font-semibold">Dias / Estoque:</span> {{ row.dias_estoque | format_decimal_br if row.dias_estoque is not none else '' }}</div>
+                <div class="stock-card-grid">
+                    <div>
+                        <span>Estoque Minimo</span>
+                        {{ row.estoque_minimo | format_decimal_br if row.estoque_minimo is not none else '' }}
+                    </div>
+                    <div>
+                        <span>Media Consumo</span>
+                        {{ row.media_consumo | format_decimal_br if row.media_consumo is not none else '' }}
+                    </div>
+                    <div>
+                        <span>Media +50%</span>
+                        {{ row.media_consumo_50 | format_decimal_br if row.media_consumo_50 is not none else '' }}
+                    </div>
+                    <div>
+                        <span>Estoque</span>
+                        {{ row.estoque | format_decimal_br if row.estoque is not none else '' }}
+                    </div>
+                    <div>
+                        <span>Pedido Pendente</span>
+                        {{ row.pedido_pendente | format_decimal_br if row.pedido_pendente is not none else '' }}
+                    </div>
+                    <div>
+                        <span>Simulacao Compra</span>
+                        {{ row.simulacao_compra | format_decimal_br if row.simulacao_compra is not none else '' }}
+                    </div>
+                    <div>
+                        <span>Dias / Estoque</span>
+                        {{ row.dias_estoque | format_decimal_br if row.dias_estoque is not none else '' }}
+                    </div>
                 </div>
             </div>
             {% endfor %}
@@ -391,6 +720,91 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+    const sortButtons = document.querySelectorAll('[data-sort-index]');
+    const tableBody = document.getElementById('stock-tbody');
+
+    const parseNumericValue = (value) => {
+        if (typeof value !== 'string') {
+            return Number.isFinite(value) ? value : 0;
+        }
+        const normalized = value
+            .toString()
+            .replace(/\./g, '')
+            .replace(/\s/g, '')
+            .replace(',', '.')
+            .replace(/[^\d.-]/g, '');
+        const parsed = parseFloat(normalized);
+        return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    const textCollator = (typeof Intl !== 'undefined' && typeof Intl.Collator === 'function')
+        ? new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' })
+        : null;
+
+    const compareValues = (valueA, valueB, isNumeric) => {
+        if (isNumeric) {
+            const numericA = parseNumericValue(valueA);
+            const numericB = parseNumericValue(valueB);
+            if (numericA < numericB) return -1;
+            if (numericA > numericB) return 1;
+            return 0;
+        }
+        const textA = (valueA || '').toString().trim();
+        const textB = (valueB || '').toString().trim();
+        if (textCollator) {
+            return textCollator.compare(textA, textB);
+        }
+        if (textA < textB) return -1;
+        if (textA > textB) return 1;
+        return 0;
+    };
+
+    const updateSortIndicators = (activeButton, order) => {
+        sortButtons.forEach((button) => {
+            const icon = button.querySelector('.sort-icon');
+            const isActive = button === activeButton;
+            button.classList.toggle('active', isActive);
+            if (!icon) return;
+            icon.classList.remove('fa-sort', 'fa-sort-up', 'fa-sort-down');
+            if (!isActive) {
+                icon.classList.add('fa-sort');
+            } else if (order === 'asc') {
+                icon.classList.add('fa-sort-up');
+            } else {
+                icon.classList.add('fa-sort-down');
+            }
+        });
+    };
+
+    const sortRows = (columnIndex, order, isNumeric) => {
+        if (!tableBody) return;
+        const rows = Array.from(tableBody.querySelectorAll('tr')).filter((row) => row.querySelectorAll('td').length > 1);
+        rows.sort((rowA, rowB) => {
+            const cellA = rowA.querySelectorAll('td')[columnIndex];
+            const cellB = rowB.querySelectorAll('td')[columnIndex];
+            const comparison = compareValues(cellA?.textContent, cellB?.textContent, isNumeric);
+            return order === 'asc' ? comparison : -comparison;
+        });
+
+        rows.forEach((row) => tableBody.appendChild(row));
+    };
+
+    sortButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const columnIndex = Number(button.dataset.sortIndex || 0);
+            const isNumeric = button.dataset.sortType === 'number';
+            const currentOrder = button.dataset.sortOrder || 'none';
+            const nextOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+
+            sortButtons.forEach((otherButton) => {
+                otherButton.dataset.sortOrder = otherButton === button ? nextOrder : 'none';
+            });
+
+            sortRows(columnIndex, nextOrder, isNumeric);
+            updateSortIndicators(button, nextOrder);
+        });
+    });
+
     const filters = document.querySelectorAll('.column-search');
     const rows = document.querySelectorAll('#stock-tbody tr');
 
