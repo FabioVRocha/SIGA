@@ -83,6 +83,14 @@
     body.page-list-standard .table-row-even,
     body.page-list-standard tbody tr:nth-child(even) { background-color: rgba(248, 250, 252, 0.9); }
 
+    body.page-list-standard table tbody tr.stock-kpi-0 .kpi-text { color: #059669; font-weight: 700; }
+    body.page-list-standard table tbody tr.stock-kpi-1 .kpi-text { color: #d97706; font-weight: 700; }
+    body.page-list-standard table tbody tr.stock-kpi-2 .kpi-text { color: #dc2626; font-weight: 700; }
+
+    body.page-list-standard .stock-card.stock-kpi-0 .kpi-text { color: #059669; font-weight: 700; }
+    body.page-list-standard .stock-card.stock-kpi-1 .kpi-text { color: #d97706; font-weight: 700; }
+    body.page-list-standard .stock-card.stock-kpi-2 .kpi-text { color: #dc2626; font-weight: 700; }
+
     body.page-list-standard .filter-input,
     body.page-list-standard .filter-select,
     body.page-list-standard .form-input,
@@ -248,6 +256,73 @@
 
     body.page-list-standard .sort-button.active .sort-icon {
         opacity: 1;
+    }
+
+    body.page-list-standard .history-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+        gap: 1.5rem;
+    }
+
+    body.page-list-standard .history-photo {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        border-radius: 1rem;
+        overflow: hidden;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    body.page-list-standard .history-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
+    body.page-list-standard .history-photo-fallback {
+        font-size: 0.85rem;
+        color: #94a3b8;
+        text-align: center;
+        padding: 0.5rem;
+    }
+
+    body.page-list-standard .history-metrics {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem 1.25rem;
+    }
+
+    body.page-list-standard .history-metric {
+        padding: 0.65rem 0.85rem;
+        border-radius: 0.85rem;
+        background: rgba(248, 250, 252, 0.9);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    body.page-list-standard .history-metric span {
+        display: block;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #94a3b8;
+        margin-bottom: 0.35rem;
+    }
+
+    body.page-list-standard .history-metric strong {
+        font-size: 1rem;
+        color: var(--clr-text-main);
+    }
+
+    @media (max-width: 768px) {
+        body.page-list-standard .history-grid {
+            grid-template-columns: 1fr;
+        }
+        body.page-list-standard .history-metrics {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 {% endblock %}
@@ -513,6 +588,9 @@
                             <i class="fas fa-sort sort-icon"></i>
                         </button>
                     </th>
+                    <th class="py-2 px-2 text-center text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                        Acoes
+                    </th>
                 </tr>
                 <tr class="table-filters">
                     <th class="py-2 px-2"></th>
@@ -546,12 +624,13 @@
                     <th class="py-2 px-2">
                         <input type="text" class="form-input filter-input column-search w-full min-w-0" placeholder="Buscar" data-column="10">
                     </th>
+                    <th class="py-2 px-2"></th>
                 </tr>
             </thead>
             <tbody id="stock-tbody">
                 {% if rows %}
                     {% for row in rows %}
-                    <tr class="border-b border-gray-200 hover:bg-gray-50 {% if loop.index is odd %}table-row-odd{% else %}table-row-even{% endif %}">
+                    <tr class="border-b border-gray-200 hover:bg-gray-50 {% if loop.index is odd %}table-row-odd{% else %}table-row-even{% endif %}{% if row.kpi is not none %} stock-kpi-{{ row.kpi }}{% endif %}">
                         <td class="py-3 px-2 text-xs text-gray-700">
                             {% if row.codigo %}
                             <div class="photo-tooltip">
@@ -571,12 +650,38 @@
                         <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.estoque | format_decimal_br if row.estoque is not none else '' }}</td>
                         <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.pedido_pendente | format_decimal_br if row.pedido_pendente is not none else '' }}</td>
                         <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.simulacao_compra | format_decimal_br if row.simulacao_compra is not none else '' }}</td>
-                        <td class="py-3 px-2 text-xs text-gray-700 text-right">{{ row.dias_estoque | format_decimal_br if row.dias_estoque is not none else '' }}</td>
+                        <td class="py-3 px-2 text-xs text-gray-700 text-right">
+                            <span class="kpi-text">{{ row.dias_estoque | format_decimal_br if row.dias_estoque is not none else '' }}</span>
+                        </td>
+                        <td class="py-3 px-2 text-xs text-gray-700 text-center">
+                            <button
+                                type="button"
+                                class="icon-button"
+                                data-action="stock-history"
+                                data-codigo="{{ row.codigo }}"
+                                data-produto="{{ row.produto }}"
+                                data-um="{{ row.um }}"
+                                data-saida-12m="{{ row.saida_12m }}"
+                                data-entrada-12m="{{ row.entrada_12m }}"
+                                data-estoque="{{ row.estoque }}"
+                                data-media-consumo="{{ row.media_consumo }}"
+                                data-pedido-pendente="{{ row.pedido_pendente }}"
+                                data-fornecedores="{{ row.fornecedor }}"
+                                data-status="{{ row.status }}"
+                                data-grupo="{{ row.grupo }}"
+                                data-subgrupo="{{ row.subgrupo }}"
+                                data-foto-url="{{ url_for('stock_management_photo', produto_codigo=row.codigo) }}"
+                                aria-label="Visualizar historico do produto {{ row.codigo }}"
+                                title="Visualizar historico"
+                            >
+                                <i class="fas fa-eye text-blue-600 hover:text-blue-800"></i>
+                            </button>
+                        </td>
                     </tr>
                     {% endfor %}
                 {% else %}
                     <tr>
-                        <td colspan="11" class="py-6 px-4 text-center text-gray-600">
+                        <td colspan="12" class="py-6 px-4 text-center text-gray-600">
                             Nenhum dado encontrado para gestao do estoque.
                         </td>
                     </tr>
@@ -588,7 +693,7 @@
     <div class="mobile-cards">
         {% if rows %}
             {% for row in rows %}
-            <div class="stock-card">
+            <div class="stock-card{% if row.kpi is not none %} stock-kpi-{{ row.kpi }}{% endif %}">
                 <div class="stock-card-header">
                     {% if row.codigo %}
                     <div class="photo-tooltip">
@@ -630,14 +735,96 @@
                     </div>
                     <div>
                         <span>Dias / Estoque</span>
-                        {{ row.dias_estoque | format_decimal_br if row.dias_estoque is not none else '' }}
+                        <span class="kpi-text">{{ row.dias_estoque | format_decimal_br if row.dias_estoque is not none else '' }}</span>
                     </div>
+                </div>
+                <div>
+                    <button
+                        type="button"
+                        class="icon-button"
+                        data-action="stock-history"
+                        data-codigo="{{ row.codigo }}"
+                        data-produto="{{ row.produto }}"
+                        data-um="{{ row.um }}"
+                        data-saida-12m="{{ row.saida_12m }}"
+                        data-entrada-12m="{{ row.entrada_12m }}"
+                        data-estoque="{{ row.estoque }}"
+                        data-media-consumo="{{ row.media_consumo }}"
+                        data-pedido-pendente="{{ row.pedido_pendente }}"
+                        data-fornecedores="{{ row.fornecedor }}"
+                        data-status="{{ row.status }}"
+                        data-grupo="{{ row.grupo }}"
+                        data-subgrupo="{{ row.subgrupo }}"
+                        data-foto-url="{{ url_for('stock_management_photo', produto_codigo=row.codigo) }}"
+                        aria-label="Visualizar historico do produto {{ row.codigo }}"
+                        title="Visualizar historico"
+                    >
+                        <i class="fas fa-eye text-blue-600 hover:text-blue-800"></i>
+                    </button>
                 </div>
             </div>
             {% endfor %}
         {% else %}
             <div class="text-center text-gray-600 text-sm py-4">Nenhum dado encontrado para gestao do estoque.</div>
         {% endif %}
+    </div>
+
+    <div id="stockHistoryModal" class="modal">
+        <div class="modal-content p-6 md:p-8 rounded-xl space-y-5" style="max-width: 64rem; max-height: 85vh; overflow-y: auto;">
+            <div class="flex justify-between items-start gap-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800" id="historyTitle">Historico do Produto</h3>
+                    <p class="text-sm text-gray-500" id="historySubtitle"></p>
+                </div>
+                <button type="button" id="closeStockHistoryModal" class="close-button" aria-label="Fechar historico">&times;</button>
+            </div>
+            <div class="history-grid">
+                <div>
+                    <div class="history-photo">
+                        <img id="historyPhoto" src="" alt="Foto do produto" onerror="this.classList.add('hidden'); document.getElementById('historyPhotoFallback').classList.remove('hidden');">
+                        <div id="historyPhotoFallback" class="history-photo-fallback hidden">Sem foto do produto</div>
+                    </div>
+                </div>
+                <div class="history-metrics">
+                    <div class="history-metric">
+                        <span>Saida ultimos 12 meses</span>
+                        <strong id="historySaida12m">-</strong>
+                    </div>
+                    <div class="history-metric">
+                        <span>Entrada ultimos 12 meses</span>
+                        <strong id="historyEntrada12m">-</strong>
+                    </div>
+                    <div class="history-metric">
+                        <span>Estoque</span>
+                        <strong id="historyEstoque">-</strong>
+                    </div>
+                    <div class="history-metric">
+                        <span>Media Consumo Mensal</span>
+                        <strong id="historyMediaConsumo">-</strong>
+                    </div>
+                    <div class="history-metric">
+                        <span>Pedido Pendente</span>
+                        <strong id="historyPedidoPendente">-</strong>
+                    </div>
+                    <div class="history-metric">
+                        <span>Fornecedor(es)</span>
+                        <strong id="historyFornecedores">-</strong>
+                    </div>
+                    <div class="history-metric">
+                        <span>Status</span>
+                        <strong id="historyStatus">-</strong>
+                    </div>
+                    <div class="history-metric">
+                        <span>Grupo</span>
+                        <strong id="historyGrupo">-</strong>
+                    </div>
+                    <div class="history-metric">
+                        <span>Subgrupo</span>
+                        <strong id="historySubgrupo">-</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -900,6 +1087,117 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         updateLabel(root);
+    });
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const historyModal = document.getElementById('stockHistoryModal');
+    const closeHistoryBtn = document.getElementById('closeStockHistoryModal');
+    const titleEl = document.getElementById('historyTitle');
+    const subtitleEl = document.getElementById('historySubtitle');
+    const photoEl = document.getElementById('historyPhoto');
+    const photoFallback = document.getElementById('historyPhotoFallback');
+    const saidaEl = document.getElementById('historySaida12m');
+    const entradaEl = document.getElementById('historyEntrada12m');
+    const estoqueEl = document.getElementById('historyEstoque');
+    const mediaEl = document.getElementById('historyMediaConsumo');
+    const pedidoEl = document.getElementById('historyPedidoPendente');
+    const fornecedoresEl = document.getElementById('historyFornecedores');
+    const statusEl = document.getElementById('historyStatus');
+    const grupoEl = document.getElementById('historyGrupo');
+    const subgrupoEl = document.getElementById('historySubgrupo');
+
+    const formatter = (typeof Intl !== 'undefined' && Intl.NumberFormat)
+        ? new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+        : null;
+
+    const formatValue = (value) => {
+        if (value === null || value === undefined || value === '') {
+            return '-';
+        }
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) {
+            return String(value);
+        }
+        return formatter ? formatter.format(parsed) : parsed.toFixed(2);
+    };
+
+    const formatSequence = (value) => {
+        if (!value) return '-';
+        const normalized = String(value)
+            .split(/[,;|]/)
+            .map(item => item.trim())
+            .filter(Boolean);
+        if (!normalized.length) return '-';
+        return normalized.join(' / ');
+    };
+
+    const openHistoryModal = (button) => {
+        if (!historyModal || !button) return;
+        const codigo = button.dataset.codigo || '';
+        const produto = button.dataset.produto || '';
+        const um = button.dataset.um || '';
+        const fotoUrl = button.dataset.fotoUrl || '';
+
+        if (titleEl) {
+            titleEl.textContent = 'Historico do Produto';
+        }
+        if (subtitleEl) {
+            const parts = [];
+            if (produto) parts.push(produto);
+            if (codigo) parts.push(`Codigo: ${codigo}`);
+            if (um) parts.push(`UM: ${um}`);
+            subtitleEl.textContent = parts.join(' | ');
+        }
+
+        if (photoEl) {
+            if (fotoUrl) {
+                photoEl.classList.remove('hidden');
+                photoEl.src = fotoUrl;
+            } else {
+                photoEl.classList.add('hidden');
+            }
+        }
+        if (photoFallback) {
+            photoFallback.classList.toggle('hidden', Boolean(fotoUrl));
+        }
+
+        if (saidaEl) saidaEl.textContent = formatValue(button.dataset.saida12m);
+        if (entradaEl) entradaEl.textContent = formatValue(button.dataset.entrada12m);
+        if (estoqueEl) estoqueEl.textContent = formatValue(button.dataset.estoque);
+        if (mediaEl) mediaEl.textContent = formatValue(button.dataset.mediaConsumo);
+        if (pedidoEl) pedidoEl.textContent = formatValue(button.dataset.pedidoPendente);
+        if (fornecedoresEl) fornecedoresEl.textContent = formatSequence(button.dataset.fornecedores);
+        if (statusEl) statusEl.textContent = button.dataset.status || '-';
+        if (grupoEl) grupoEl.textContent = button.dataset.grupo || '-';
+        if (subgrupoEl) subgrupoEl.textContent = button.dataset.subgrupo || '-';
+
+        historyModal.style.display = 'flex';
+        document.body.classList.add('overflow-hidden');
+    };
+
+    const closeHistoryModal = () => {
+        if (!historyModal) return;
+        historyModal.style.display = 'none';
+        document.body.classList.remove('overflow-hidden');
+    };
+
+    document.addEventListener('click', (event) => {
+        const trigger = event.target.closest('[data-action="stock-history"]');
+        if (!trigger) return;
+        openHistoryModal(trigger);
+    });
+
+    closeHistoryBtn?.addEventListener('click', closeHistoryModal);
+    historyModal?.addEventListener('click', (event) => {
+        if (event.target === historyModal) {
+            closeHistoryModal();
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && historyModal && historyModal.style.display === 'flex') {
+            closeHistoryModal();
+        }
     });
 });
 </script>

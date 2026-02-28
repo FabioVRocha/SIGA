@@ -1,0 +1,985 @@
+<style>
+    /* Chat Styles */
+    #chat-fab {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 60px;
+        height: 60px;
+        background-color: var(--clr-success);
+        /* Inspired by WhatsApp */
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 9999;
+        transition: transform 0.2s, background-color 0.2s;
+    }
+
+    #chat-fab:hover {
+        transform: scale(1.05);
+        background-color: color-mix(in srgb, var(--clr-success) 80%, black);
+    }
+
+    #chat-fab-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background-color: var(--clr-error);
+        color: white;
+        font-size: 12px;
+        font-weight: bold;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: blink 1.5s infinite;
+        display: none;
+    }
+
+    @keyframes blink {
+        0% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.4;
+        }
+
+        100% {
+            opacity: 1;
+        }
+    }
+
+    #chat-wrapper {
+        position: fixed;
+        bottom: 90px;
+        right: 24px;
+        z-index: 9998;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        pointer-events: none;
+    }
+
+    #chat-wrapper>* {
+        pointer-events: auto;
+    }
+
+    /* Main Popup Window */
+    #chat-popup {
+        width: 320px;
+        height: 450px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--clr-border);
+    }
+
+    .chat-header {
+        background-color: var(--clr-dark-blue);
+        color: white;
+        padding: 12px 16px;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    .chat-header .header-action-btn {
+        cursor: pointer;
+        color: rgba(255, 255, 255, 0.8);
+        transition: color 0.2s;
+        font-size: 16px;
+        padding: 4px;
+    }
+
+    .chat-header .header-action-btn:hover {
+        color: white;
+    }
+
+    .chat-header-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+
+    /* View: Contacts */
+    #chat-view-contacts {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        overflow: hidden;
+    }
+
+    #chat-contacts-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px 0;
+    }
+
+    .chat-contact-item {
+        padding: 10px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        position: relative;
+    }
+
+    .chat-contact-item:hover {
+        background-color: var(--clr-light-gray);
+    }
+
+    .chat-contact-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background-color: var(--clr-light-blue);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 14px;
+    }
+
+    .chat-contact-name {
+        flex: 1;
+        font-size: 14px;
+        color: var(--clr-text-main);
+    }
+
+    .chat-contact-badge {
+        background-color: var(--clr-error);
+        color: white;
+        font-size: 11px;
+        font-weight: bold;
+        padding: 2px 6px;
+        border-radius: 10px;
+        display: none;
+    }
+
+    /* View: Conversation */
+    #chat-view-conversation {
+        display: none;
+        flex-direction: column;
+        flex: 1;
+        overflow: hidden;
+        background-color: #E5DDD5;
+        /* WhatsApp background */
+    }
+
+    .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .chat-message {
+        max-width: 80%;
+        padding: 8px 32px 8px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        position: relative;
+        word-wrap: break-word;
+    }
+
+    .chat-message.sent {
+        align-self: flex-end;
+        background-color: #DCF8C6;
+        border-bottom-right-radius: 0;
+    }
+
+    .chat-message.received {
+        align-self: flex-start;
+        background-color: white;
+        border-bottom-left-radius: 0;
+    }
+
+    .chat-reply-btn {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 22px;
+        height: 22px;
+        background-color: rgba(255, 255, 255, 0.9);
+        border: 1px solid #ddd;
+        border-radius: 50%;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: #666;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+        z-index: 10;
+        transition: color 0.2s, background-color 0.2s;
+    }
+
+    .chat-reply-btn:hover {
+        background-color: #fff;
+        color: #333;
+    }
+
+    .chat-message:hover .chat-reply-btn {
+        display: flex;
+    }
+
+    .chat-replied-block {
+        background-color: rgba(0, 0, 0, 0.05);
+        border-left: 4px solid var(--clr-dark-blue);
+        border-radius: 4px;
+        padding: 6px 8px;
+        margin-bottom: 6px;
+        font-size: 11px;
+        color: #555;
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        transition: background-color 0.2s;
+    }
+
+    .chat-replied-block:hover {
+        background-color: rgba(0, 0, 0, 0.1);
+    }
+
+    #chat-reply-preview {
+        padding: 8px 12px;
+        background-color: #f7f7f7;
+        border-top: 1px solid var(--clr-border);
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        color: #555;
+    }
+
+    #chat-reply-preview .chat-replied-block {
+        margin-bottom: 0;
+        flex: 1;
+        margin-right: 12px;
+        max-width: none;
+        cursor: default;
+    }
+
+    .chat-message-time {
+        font-size: 10px;
+        color: #999;
+        text-align: right;
+        margin-top: 4px;
+        display: block;
+    }
+
+    .chat-input-area {
+        padding: 12px;
+        background: white;
+        display: flex;
+        gap: 8px;
+        border-top: 1px solid var(--clr-border);
+        flex-shrink: 0;
+        box-sizing: border-box;
+    }
+
+    .chat-input {
+        flex: 1;
+        min-width: 0;
+        /* Previne overflow do flex item */
+        box-sizing: border-box;
+        border: 1px solid var(--clr-border);
+        border-radius: 20px;
+        padding: 8px 14px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+
+    .chat-input:focus {
+        border-color: var(--clr-light-blue);
+    }
+
+    .chat-send-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background-color: var(--clr-light-blue);
+        color: white;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.2s;
+        flex-shrink: 0;
+    }
+
+    .chat-send-btn:hover {
+        background-color: var(--clr-dark-blue);
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: #ccc;
+        border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #bbb;
+    }
+</style>
+
+<!-- Login check to avoid chat for non-logged users -->
+{% if session.get('username') %}
+
+<div id="chat-fab" title="Conversas" onclick="togglePopup()">
+    <i class="fas fa-comment"></i>
+    <div id="chat-fab-badge">0</div>
+</div>
+
+<div id="chat-wrapper">
+    <div id="chat-popup">
+
+        <!-- View: Contacts List -->
+        <div id="chat-view-contacts">
+            <div class="chat-header">
+                <span class="chat-header-title">Contatos SIGA</span>
+                <i class="fas fa-search header-action-btn" onclick="toggleGlobalSearch()" style="margin-right:8px;"
+                    title="Buscar Mensagens"></i>
+                <i class="fas fa-times header-action-btn" onclick="togglePopup()"></i>
+            </div>
+            <div id="chat-global-search-container"
+                style="display:none; padding: 8px; border-bottom: 1px solid var(--clr-border);">
+                <input type="text" id="chat-global-search-input" placeholder="Pesquisar mensagens/contatos..."
+                    class="chat-input" style="width:100%; border-radius: 4px;" autocomplete="off"
+                    oninput="performGlobalSearch()">
+            </div>
+            <div id="chat-contacts-list">
+                <div style="padding: 16px; text-align: center; color: #666; font-size: 14px;">Carregando...</div>
+            </div>
+        </div>
+
+        <!-- View: Active Conversation -->
+        <div id="chat-view-conversation">
+            <div class="chat-header">
+                <i class="fas fa-arrow-left header-action-btn" style="margin-right:8px;" onclick="backToContacts()"></i>
+                <div class="chat-header-title" id="chat-conversation-title">
+                    <!-- Avatar and Name injected here -->
+                </div>
+                <i class="fas fa-search header-action-btn" onclick="toggleLocalSearch()" style="margin-right:8px;"
+                    title="Buscar nesta conversa"></i>
+                <i class="fas fa-times header-action-btn" onclick="togglePopup()"></i>
+            </div>
+            <div id="chat-local-search-container"
+                style="display:none; padding: 8px; border-bottom: 1px solid var(--clr-border);">
+                <input type="text" id="chat-local-search-input" placeholder="Pesquisar nesta conversa..."
+                    class="chat-input" style="width:100%; border-radius: 4px;" autocomplete="off"
+                    oninput="performLocalSearch()">
+            </div>
+            <div class="chat-messages" id="chat-messages-container">
+                <div style="text-align:center; font-size:12px; color:#999; margin-top:20px;">Carregando histórico...
+                </div>
+            </div>
+            <div id="chat-reply-preview">
+                <div class="chat-replied-block" id="chat-reply-preview-content">
+                    <!-- Dynamic Content -->
+                </div>
+                <i class="fas fa-times" style="cursor:pointer;" onclick="cancelReply()"></i>
+            </div>
+            <div class="chat-input-area">
+                <input type="file" id="chat-file-input" style="display:none" onchange="sendFile(this)">
+                <button class="chat-send-btn"
+                    style="background-color: var(--clr-light-gray); color: var(--clr-text-main);"
+                    onclick="document.getElementById('chat-file-input').click()" title="Anexar arquivo">
+                    <i class="fas fa-paperclip"></i>
+                </button>
+                <input type="text" class="chat-input" id="chat-input-field" placeholder="Mensagem..."
+                    autocomplete="off">
+                <button class="chat-send-btn" onclick="sendMessage()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    const currentUser = "{{ session.get('username') }}";
+    const originalPageTitle = document.title;
+    let activeChatUsername = null;
+    let contactsData = [];
+    let unreadData = {};
+    let searchTimeout = null;
+    let replyingToMsgId = null;
+    let replyingToSender = null;
+    let replyingToSnippet = null;
+
+    document.getElementById('chat-input-field').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    function toggleGlobalSearch() {
+        const container = document.getElementById('chat-global-search-container');
+        const input = document.getElementById('chat-global-search-input');
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            input.focus();
+            input.value = '';
+        } else {
+            container.style.display = 'none';
+            input.value = '';
+            renderContacts();
+        }
+    }
+
+    function toggleLocalSearch() {
+        const container = document.getElementById('chat-local-search-container');
+        const input = document.getElementById('chat-local-search-input');
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            input.focus();
+            input.value = '';
+        } else {
+            container.style.display = 'none';
+            input.value = '';
+            loadMessages(activeChatUsername);
+        }
+    }
+
+    function performGlobalSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+            const query = document.getElementById('chat-global-search-input').value.trim();
+            if (!query) {
+                renderContacts();
+                return;
+            }
+            try {
+                const res = await fetch(`/api/chat/search?q=${encodeURIComponent(query)}`);
+                if (res.ok) {
+                    const results = await res.json();
+                    renderGlobalSearchResults(results);
+                }
+            } catch (e) { console.error("Erro na busca", e); }
+        }, 500);
+    }
+
+    function performLocalSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+            if (!activeChatUsername) return;
+            const query = document.getElementById('chat-local-search-input').value.trim();
+            if (!query) {
+                loadMessages(activeChatUsername);
+                return;
+            }
+            try {
+                const res = await fetch(`/api/chat/search?contact=${encodeURIComponent(activeChatUsername)}&q=${encodeURIComponent(query)}`);
+                if (res.ok) {
+                    const results = await res.json();
+                    renderLocalSearchResults(results);
+                }
+            } catch (e) { console.error("Erro na busca local", e); }
+        }, 500);
+    }
+
+    function renderGlobalSearchResults(results) {
+        const listEl = document.getElementById('chat-contacts-list');
+        listEl.innerHTML = '<div style="padding: 8px 16px; font-weight: bold; font-size: 12px; color: #666; background-color: #f0f0f0;">Resultados da Busca</div>';
+
+        if (results.length === 0) {
+            listEl.innerHTML += '<div style="padding: 16px; text-align: center; color: #666; font-size: 14px;">Nada encontrado.</div>';
+            return;
+        }
+
+        results.forEach(msg => {
+            let contactUser = contactsData.find(c => c.username === msg.with);
+            let displayName = contactUser ? (contactUser.nome_completo || contactUser.username) : msg.with;
+            let initial = displayName.charAt(0).toUpperCase();
+
+            let isSent = msg.sender === currentUser;
+            let iconHTML = isSent ? `<i class="fas fa-check" style="color:#aaa;font-size:10px;"></i> ` : '';
+
+            let displayMessage = "";
+            let safeMessage = msg.message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            if (safeMessage.startsWith('[FILE]|')) {
+                const parts = safeMessage.split('|');
+                const filename = parts.length > 2 ? parts[2] : 'Arquivo';
+                displayMessage = `<i class="fas fa-file"></i> ${filename}`;
+            } else {
+                displayMessage = safeMessage;
+            }
+
+            let snippet = displayMessage.substring(0, 35) + (displayMessage.length > 35 ? '...' : '');
+
+            const item = document.createElement('div');
+            item.className = 'chat-contact-item';
+            item.onclick = () => {
+                document.getElementById('chat-global-search-container').style.display = 'none';
+                document.getElementById('chat-global-search-input').value = '';
+                openChat(msg.with, displayName, msg.id);
+            };
+
+            item.innerHTML = `
+                <div class="chat-contact-avatar">${initial}</div>
+                <div style="flex: 1; display:flex; flex-direction:column; overflow:hidden;">
+                     <div style="display:flex; justify-content:space-between;">
+                          <div class="chat-contact-name" style="font-weight:600;">${displayName}</div>
+                          <div style="font-size:10px; color:#999;">${msg.timestamp}</div>
+                     </div>
+                     <div style="font-size:12px; color:#666; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                          ${iconHTML}${snippet}
+                     </div>
+                </div>
+            `;
+            listEl.appendChild(item);
+        });
+    }
+
+    function renderLocalSearchResults(results) {
+        const container = document.getElementById('chat-messages-container');
+        container.innerHTML = '<div style="padding: 8px 16px; font-weight: bold; font-size: 12px; color: #666; background-color: #f0f0f0; text-align: center;">Resultados na Conversa</div>';
+
+        if (results.length === 0) {
+            container.innerHTML += '<div style="padding: 16px; text-align: center; color: #666; font-size: 14px;">Nada encontrado.</div>';
+            return;
+        }
+
+        results.forEach(msg => {
+            let isSent = msg.sender === currentUser;
+            let iconHTML = isSent ? `<i class="fas fa-check" style="color:#aaa;font-size:10px;"></i> ` : '';
+
+            let displayMessage = "";
+            let safeMessage = msg.message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            if (safeMessage.startsWith('[FILE]|')) {
+                const parts = safeMessage.split('|');
+                const filename = parts.length > 2 ? parts[2] : 'Arquivo';
+                displayMessage = `<i class="fas fa-file"></i> ${filename}`;
+            } else {
+                displayMessage = safeMessage;
+            }
+
+            let snippet = displayMessage.substring(0, 50) + (displayMessage.length > 50 ? '...' : '');
+
+            const item = document.createElement('div');
+            item.className = 'chat-contact-item';
+            item.style.backgroundColor = 'white';
+            item.style.borderBottom = '1px solid #eee';
+            item.onclick = () => {
+                document.getElementById('chat-local-search-container').style.display = 'none';
+                document.getElementById('chat-local-search-input').value = '';
+                loadMessages(activeChatUsername, msg.id);
+            };
+
+            item.innerHTML = `
+                <div style="flex: 1; display:flex; flex-direction:column; overflow:hidden;">
+                     <div style="display:flex; justify-content:space-between;">
+                          <div style="font-size:10px; color:#999;">${msg.timestamp}</div>
+                     </div>
+                     <div style="font-size:12px; color:#666; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                          ${iconHTML}${snippet}
+                     </div>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    function togglePopup() {
+        const popup = document.getElementById('chat-popup');
+        if (popup.style.display === 'flex') {
+            popup.style.display = 'none';
+        } else {
+            popup.style.display = 'flex';
+            if (!activeChatUsername) {
+                showContactsView();
+                loadContacts();
+            } else {
+                showConversationView();
+                // Check if any read status was updated while it was closed
+                loadMessages(activeChatUsername);
+            }
+        }
+    }
+
+    function showContactsView() {
+        document.getElementById('chat-view-contacts').style.display = 'flex';
+        document.getElementById('chat-view-conversation').style.display = 'none';
+    }
+
+    function showConversationView() {
+        document.getElementById('chat-view-contacts').style.display = 'none';
+        document.getElementById('chat-view-conversation').style.display = 'flex';
+    }
+
+    function backToContacts() {
+        activeChatUsername = null;
+        showContactsView();
+        loadContacts();
+    }
+
+    async function loadContacts() {
+        try {
+            const res = await fetch('/api/chat/users');
+            if (res.ok) {
+                contactsData = await res.json();
+                renderContacts();
+            }
+        } catch (e) { console.error("Erro carregando contatos:", e); }
+    }
+
+    function renderContacts() {
+        const globalSearchInput = document.getElementById('chat-global-search-input');
+        if (globalSearchInput && globalSearchInput.value.trim() !== '') return;
+
+        const listEl = document.getElementById('chat-contacts-list');
+        listEl.innerHTML = '';
+        if (contactsData.length === 0) {
+            listEl.innerHTML = '<div style="padding: 16px; text-align: center; color: #666; font-size: 14px;">Nenhum usuário ativo.</div>';
+            return;
+        }
+
+        contactsData.forEach(user => {
+            const unreadCount = unreadData[user.username] || 0;
+            const displayName = user.nome_completo || user.username;
+            const initial = displayName.charAt(0).toUpperCase();
+
+            const item = document.createElement('div');
+            item.className = 'chat-contact-item';
+            item.onclick = () => openChat(user.username, displayName);
+
+            item.innerHTML = `
+                <div class="chat-contact-avatar">${initial}</div>
+                <div class="chat-contact-name">${displayName}</div>
+                <div class="chat-contact-badge" style="display: ${unreadCount > 0 ? 'inline-block' : 'none'}">${unreadCount}</div>
+            `;
+            listEl.appendChild(item);
+        });
+    }
+
+    function openChat(username, displayName, targetMsgId = null) {
+        activeChatUsername = username;
+
+        // Update Header
+        const initial = displayName.charAt(0).toUpperCase();
+        document.getElementById('chat-conversation-title').innerHTML = `
+             <div class="chat-contact-avatar" style="width:28px;height:28px;font-size:12px;">${initial}</div>
+             <div style="font-size: 14px;">${displayName}</div>
+        `;
+
+        // Clear old messages and prepare input
+        document.getElementById('chat-messages-container').innerHTML = '<div style="text-align:center; font-size:12px; color:#999; margin-top:20px;">Carregando histórico...</div>';
+        document.getElementById('chat-input-field').value = '';
+
+        showConversationView();
+
+        // Wait for transition before focusing
+        setTimeout(() => {
+            document.getElementById('chat-input-field').focus();
+        }, 100);
+
+        loadMessages(username, targetMsgId);
+    }
+
+    async function loadMessages(username, targetMsgId = null) {
+        if (activeChatUsername !== username) return; // Prevent late load
+        const searchInput = document.getElementById('chat-local-search-input');
+        if (searchInput && searchInput.value.trim() !== '' && !targetMsgId) return;
+        try {
+            const res = await fetch(`/api/chat/messages/${encodeURIComponent(username)}`);
+            if (res.ok) {
+                const msgs = await res.json();
+                renderMessages(username, msgs, targetMsgId);
+                markAsRead(username);
+            }
+        } catch (e) { console.error("Erro carregando mensagens:", e); }
+    }
+
+    function renderMessages(username, msgs, targetMsgId = null) {
+        if (activeChatUsername !== username) return;
+
+        const container = document.getElementById('chat-messages-container');
+
+        const wasAtBottom = Math.abs((container.scrollHeight - container.scrollTop) - container.clientHeight) < 50;
+        const wasAtTop = container.scrollTop === 0;
+
+        // Timeout to ensure DOM is ready for scroll calculations
+        setTimeout(() => {
+            container.innerHTML = '';
+
+            if (msgs.length === 0) {
+                container.innerHTML = '<div style="text-align:center; font-size:12px; color:#999; margin-top:20px;">Comece uma conversa agora!</div>';
+            }
+
+            let targetElement = null;
+
+            msgs.forEach(msg => {
+                const isSent = msg.sender === currentUser;
+                const senderName = isSent ? 'Você' : (contactsData.find(c => c.username === msg.sender)?.nome_completo || msg.sender);
+                const div = document.createElement('div');
+                div.className = `chat-message ${isSent ? 'sent' : 'received'}`;
+                div.id = `chat-msg-${msg.id}`;
+
+                let safeMessage = msg.message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                let messageHTML = '';
+
+                if (safeMessage.startsWith('[REPLY|')) {
+                    const endIdx = safeMessage.indexOf(']|');
+                    if (endIdx !== -1) {
+                        const replyPart = safeMessage.substring(7, endIdx);
+                        const parts = replyPart.split('|');
+                        const rId = parts[0];
+                        const rSender = parts[1];
+                        const rSnippet = parts.slice(2).join('|');
+                        messageHTML += `
+                            <div class="chat-replied-block" onclick="loadMessages(activeChatUsername, ${rId})" title="Ver mensagem">
+                                <strong>${rSender}</strong><br>
+                                <span>${rSnippet}</span>
+                            </div>
+                        `;
+                        safeMessage = safeMessage.substring(endIdx + 2);
+                    }
+                }
+
+                if (safeMessage.startsWith('[FILE]|')) {
+                    const parts = safeMessage.split('|');
+                    const fileUrl = parts[1];
+                    const filename = parts.length > 2 ? parts[2] : 'Arquivo';
+                    messageHTML += `
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <i class="fas fa-file-alt" style="font-size:24px; color:#666;"></i>
+                            <a href="${fileUrl}" target="_blank" download style="color:var(--clr-dark-blue); font-weight:bold; text-decoration:none; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                ${filename}
+                            </a>
+                        </div>
+                    `;
+                } else {
+                    messageHTML += safeMessage;
+                }
+
+                let statusIcon = '';
+                if (isSent) {
+                    statusIcon = msg.is_read
+                        ? '<i class="fas fa-check-double" title="Lida" style="color:#34B7F1; margin-left:4px; font-size: 11px;"></i>'
+                        : '<i class="fas fa-check" title="Enviada" style="color:#aaa; margin-left:4px; font-size: 11px;"></i>';
+                }
+
+                // Usamos textContent como um 'sanitizer' seguro
+                let extractedText = document.createElement('div');
+                extractedText.innerHTML = messageHTML;
+                let rawText = extractedText.textContent || extractedText.innerText || "";
+                let plainSnippet = rawText.substring(0, 50).replace(/(\r\n|\n|\r)/gm, " ") + (rawText.length > 50 ? '...' : '');
+
+                div.innerHTML = `
+                    <div class="chat-reply-btn" onclick="setReply(${msg.id}, '${senderName}', '${plainSnippet.replace(/'/g, "\\'")}')" title="Responder">
+                        <i class="fas fa-reply"></i>
+                    </div>
+                    ${messageHTML}
+                    <span class="chat-message-time" style="display:flex; align-items:center; justify-content:flex-end; gap:4px;">
+                        ${msg.timestamp} ${statusIcon}
+                    </span>
+                `;
+                container.appendChild(div);
+
+                if (targetMsgId && msg.id === targetMsgId) {
+                    targetElement = div;
+                }
+            });
+
+            if (targetElement) {
+                targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                targetElement.style.transition = 'background-color 1.5s';
+                targetElement.style.backgroundColor = '#ffff99';
+                setTimeout(() => {
+                    targetElement.style.backgroundColor = '';
+                }, 2000);
+            } else if (!targetMsgId && (wasAtBottom || wasAtTop)) {
+                // Auto scroll logic (was at top guarantees scroll to bottom only on first load)
+                container.scrollTop = container.scrollHeight;
+            }
+        }, 10);
+    }
+
+    async function sendMessage() {
+        if (!activeChatUsername) return;
+        const input = document.getElementById('chat-input-field');
+        const text = input.value.trim();
+        if (!text) return;
+
+        input.value = '';
+        input.focus();
+
+        const username = activeChatUsername;
+        let internalMessage = text;
+
+        if (replyingToMsgId) {
+            let safeSnippet = replyingToSnippet.replace(/\|/g, " ");
+            internalMessage = `[REPLY|${replyingToMsgId}|${replyingToSender}|${safeSnippet}]|` + internalMessage;
+            cancelReply();
+        }
+
+        try {
+            const res = await fetch('/api/chat/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipient: username, message: internalMessage })
+            });
+            if (res.ok) {
+                loadMessages(username);
+            }
+        } catch (e) { console.error("Erro ao enviar:", e); }
+    }
+
+    function setReply(msgId, sender, snippet) {
+        replyingToMsgId = msgId;
+        replyingToSender = sender;
+        replyingToSnippet = snippet;
+
+        const previewBlock = document.getElementById('chat-reply-preview');
+        const previewContent = document.getElementById('chat-reply-preview-content');
+
+        previewContent.innerHTML = `
+            <strong>${sender}</strong><br>
+            <span>${snippet}</span>
+        `;
+        previewBlock.style.display = 'flex';
+        document.getElementById('chat-input-field').focus();
+    }
+
+    function cancelReply() {
+        replyingToMsgId = null;
+        replyingToSender = null;
+        replyingToSnippet = null;
+        document.getElementById('chat-reply-preview').style.display = 'none';
+        document.getElementById('chat-reply-preview-content').innerHTML = '';
+        document.getElementById('chat-input-field').focus();
+    }
+
+    async function sendFile(inputElement) {
+        if (!activeChatUsername || !inputElement.files || inputElement.files.length === 0) return;
+
+        const file = inputElement.files[0];
+        const username = activeChatUsername;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('recipient', username);
+
+        // Limpa o input imediatamente após a captura, assim o onchange dispara sempre
+        inputElement.value = '';
+
+        try {
+            const res = await fetch('/api/chat/upload', {
+                method: 'POST',
+                body: formData
+            });
+            if (res.ok) {
+                loadMessages(username);
+            } else {
+                console.error("Falha ao enviar arquivo.");
+            }
+        } catch (e) { console.error("Erro no upload:", e); }
+    }
+
+    async function markAsRead(username) {
+        try {
+            await fetch('/api/chat/read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sender: username })
+            });
+            checkUnread(); // Update badges instantly
+        } catch (e) { }
+    }
+
+    let pollTimeout;
+
+    async function checkUnread() {
+        try {
+            const res = await fetch('/api/chat/unread');
+            if (res.ok) {
+                const data = await res.json();
+                unreadData = data.by_sender;
+
+                const badge = document.getElementById('chat-fab-badge');
+                if (data.total > 0) {
+                    badge.style.display = 'flex';
+                    badge.textContent = data.total > 99 ? '99+' : data.total;
+                    document.title = `(${data.total}) ${originalPageTitle}`;
+                } else {
+                    badge.style.display = 'none';
+                    document.title = originalPageTitle;
+                }
+
+                const popup = document.getElementById('chat-popup');
+                if (popup && popup.style.display === 'flex') {
+                    if (!activeChatUsername) {
+                        renderContacts();
+                    } else if (unreadData[activeChatUsername]) {
+                        // We have an open chat and new messages from this user!
+                        loadMessages(activeChatUsername);
+                    }
+                }
+            }
+        } catch (e) { } finally {
+            scheduleNextPoll();
+        }
+    }
+
+    function scheduleNextPoll() {
+        clearTimeout(pollTimeout);
+        let interval = 12000;
+
+        const popup = document.getElementById('chat-popup');
+        const isPopupOpen = popup && popup.style.display === 'flex';
+        const isDocumentVisible = document.visibilityState === 'visible';
+
+        if (isPopupOpen && isDocumentVisible) {
+            interval = 3500; // Fast: Lendo a janela de chat com o site aberto
+        } else if (isDocumentVisible) {
+            interval = 10000; // Medium: Usando o site mas o chat tá fechado
+        } else {
+            interval = 30000; // Slow: Janela/Aba do site está em segundo plano
+        }
+
+        pollTimeout = setTimeout(checkUnread, interval);
+    }
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === 'visible') {
+            checkUnread();
+        }
+    });
+
+    // Iniciar Polling Inteligente
+    setTimeout(checkUnread, 1500);
+
+</script>
+{% endif %}

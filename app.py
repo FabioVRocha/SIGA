@@ -2,6 +2,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file, abort
 # Importa o módulo para conectar ao PostgreSQL
 import psycopg2
+import psycopg2.extras
 # Importa o módulo para lidar com erros de banco de dados
 from psycopg2 import Error
 from psycopg2.errors import UndefinedColumn
@@ -82,6 +83,16 @@ def _ensure_user_photo_directory():
     except OSError:
         pass
 
+import logging
+log = logging.getLogger('werkzeug')
+class ChatPollingFilter(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        if '/api/chat/unread' in msg or '/api/chat/messages' in msg:
+            return False
+        return True
+
+log.addFilter(ChatPollingFilter())
 
 _ensure_user_photo_directory()
 
@@ -16082,6 +16093,24 @@ def _build_stock_management_query(filters):
                    SUM(
                        CASE
                            WHEN tm.pritransac IN (11,12,14)
+                                AND tm.pridata::date > (ld.last_date - INTERVAL '12 months')
+                                AND tm.pridata::date <= ld.last_date
+                           THEN tm.priquanti
+                           ELSE 0
+                       END
+                   ) AS saida_12m,
+                   SUM(
+                       CASE
+                           WHEN tm.pritransac IN (1,2,3,4,6,9)
+                                AND tm.pridata::date > (ld.last_date - INTERVAL '12 months')
+                                AND tm.pridata::date <= ld.last_date
+                           THEN tm.priquanti
+                           ELSE 0
+                       END
+                   ) AS entrada_12m,
+                   SUM(
+                       CASE
+                           WHEN tm.pritransac IN (11,12,14)
                                 AND tm.pridata::date > (ld.last_date - INTERVAL '7 months')
                                 AND tm.pridata::date <= ld.last_date
                            THEN tm.priquanti
@@ -16120,6 +16149,8 @@ def _build_stock_management_query(filters):
                 p.pronome AS produto,
                 p.unimedida AS um,
                 COALESCE(p.prosldmin, 0) AS estoque_minimo,
+                COALESCE(consumo.saida_12m, 0) AS saida_12m,
+                COALESCE(consumo.entrada_12m, 0) AS entrada_12m,
                 (COALESCE(consumo.saida_7m, 0) - COALESCE(consumo.saida_1m, 0)) / 6.0 AS media_consumo,
                 ((COALESCE(consumo.saida_7m, 0) - COALESCE(consumo.saida_1m, 0)) / 6.0) * 1.5 AS media_consumo_50,
                 COALESCE(posicao.posicao, 0) + COALESCE(mov_quant.entrada, 0) - COALESCE(mov_quant.saida_geral, 0) AS estoque,
@@ -16164,13 +16195,19 @@ def _build_stock_management_query(filters):
             produto,
             um,
             estoque_minimo,
+            saida_12m,
+            entrada_12m,
             media_consumo,
             media_consumo_50,
             estoque,
             pedido_pendente,
             simulacao_compra,
             dias_estoque,
-            foto_path
+            foto_path,
+            fornecedor,
+            status,
+            grupo,
+            subgrupo
         FROM base
         WHERE 1=1
     """
@@ -16234,7 +16271,35 @@ def _fetch_stock_management_rows(conn, filters):
     columns = [desc[0] for desc in cur.description]
     rows = [dict(zip(columns, row)) for row in cur.fetchall()]
     cur.close()
+    for row in rows:
+        row['kpi'] = _calc_stock_management_kpi(row)
     return rows
+
+
+def _to_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _calc_stock_management_kpi(row):
+    estoque = row.get('estoque')
+    if estoque is None:
+        return None
+    media_50 = row.get('media_consumo_50')
+    if media_50 is None:
+        return 1
+    dias = _to_float(row.get('dias_estoque'))
+    if dias is None:
+        return None
+    if dias > 46:
+        return 0
+    if 31 <= dias <= 45:
+        return 1
+    if dias <= 30.99:
+        return 2
+    return None
 
 
 def _fetch_stock_management_filter_options(conn):
@@ -26108,8 +26173,17 @@ def mrp_report_ficha_componente_generate():
             filtered_products = set()
 
             if classificacao == 'montados':
-                # Montados: proorigem = 'F'
-                filtered_products = set(row[1] for row in all_orders if row[4] == 'F')
+                # Montados: produtos pais na estrutura que possuem filhos (componentes) cujo código começa com '9'
+                if all_products:
+                    cur_erp.execute("""
+                        SELECT DISTINCT TRIM(estproduto)
+                        FROM estrutur
+                        WHERE TRIM(estproduto) = ANY(%s)
+                          AND TRIM(estfilho) LIKE '9%%'
+                    """, (all_products,))
+                    filtered_products = set(row[0] for row in cur_erp.fetchall())
+                else:
+                    filtered_products = set()
                 # Buscar dimensões (qualquer material, primeiro encontrado)
                 if filtered_products:
                     cur_erp.execute("""
@@ -26246,7 +26320,7 @@ def mrp_report_ficha_componente_generate():
                         'processo': row[1],
                         'fase':     row[2],
                         'nome':     row[3],
-                        'is_mq000': row[4].strip().upper() == 'MQ000'
+                        'is_mq000': row[4].strip().upper() in ('MQ000', 'MQ999')
                     })
 
                 for prod, procs in raw.items():
@@ -26321,10 +26395,6 @@ def mrp_report_ficha_componente_generate():
                     if not proc_code:
                         return None
                     return f"{ordem}{proc_code}"
-
-                print(f"DEBUG QR | ordem={repr(ordem)} (tipo={type(ordem).__name__}) "
-                      f"| qr1_corte slot={repr(procs['qr1_corte'])} (tipo={type(procs['qr1_corte']).__name__}) "
-                      f"| resultado={repr(make_qr(procs['qr1_corte']))}")
 
                 fichas.append({
                     'ordem':             ordem,
@@ -26402,6 +26472,270 @@ def mrp_report_ficha_componente_photo(produto_codigo):
 # =====================================================
 # FIM RELATÓRIO FICHA DE COMPONENTE
 # =====================================================
+
+
+# =====================================================
+# CHAT API ROUTES
+# =====================================================
+
+@app.route('/api/chat/users', methods=['GET'])
+@login_required
+def chat_get_users():
+    conn = get_siga_db_connection()
+    if not conn:
+        return jsonify({'error': 'Erro de conexão com o BD'}), 500
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        current_user = session.get('username')
+        cur.execute("SELECT id, username, username as nome_completo FROM users WHERE username != %s ORDER BY username", (current_user,))
+        users = cur.fetchall()
+        cur.close()
+        return jsonify(users)
+    except Exception as e:
+        print(f"Erro ao buscar contatos: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/chat/messages/<contact_username>', methods=['GET'])
+@login_required
+def chat_get_messages(contact_username):
+    conn = get_siga_db_connection()
+    if not conn:
+        return jsonify({'error': 'Erro de conexão'}), 500
+    try:
+        current_user = session.get('username')
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT id, sender, recipient, message, timestamp, is_read 
+            FROM chat_messages 
+            WHERE (sender = %s AND recipient = %s) OR (sender = %s AND recipient = %s)
+            ORDER BY timestamp ASC
+        """, (current_user, contact_username, contact_username, current_user))
+        messages = cur.fetchall()
+        
+        for msg in messages:
+            msg['timestamp'] = msg['timestamp'].strftime('%d/%m %H:%M')
+
+        cur.close()
+        return jsonify(messages)
+    except Exception as e:
+        print(f"Erro ao buscar mensagens: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/chat/send', methods=['POST'])
+@login_required
+def chat_send_message():
+    data = request.get_json()
+    recipient = data.get('recipient')
+    message = data.get('message')
+    if not recipient or not message:
+        return jsonify({'error': 'Dados incompletos'}), 400
+
+    current_user = session.get('username')
+    conn = get_siga_db_connection()
+    if not conn:
+        return jsonify({'error': 'Erro de conexão'}), 500
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            INSERT INTO chat_messages (sender, recipient, message)
+            VALUES (%s, %s, %s) RETURNING id, timestamp
+        """, (current_user, recipient, message))
+        result = cur.fetchone()
+        conn.commit()
+        cur.close()
+        return jsonify({
+            'success': True,
+            'id': result['id'],
+            'timestamp': result['timestamp'].strftime('%d/%m %H:%M')
+        })
+    except Exception as e:
+        print(f"Erro ao enviar mensagem: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/chat/unread', methods=['GET'])
+@login_required
+def chat_get_unread():
+    current_user = session.get('username')
+    conn = get_siga_db_connection()
+    if not conn:
+        return jsonify({'error': 'Erro de conexão'}), 500
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT sender, COUNT(*) as count
+            FROM chat_messages
+            WHERE recipient = %s AND is_read = FALSE
+            GROUP BY sender
+        """, (current_user,))
+        unread_counts = {row[0]: row[1] for row in cur.fetchall()}
+        
+        cur.execute("SELECT COUNT(*) FROM chat_messages WHERE recipient = %s AND is_read = FALSE", (current_user,))
+        row = cur.fetchone()
+        total_unread = row[0] if row else 0
+        
+        cur.close()
+        return jsonify({
+            'total': total_unread,
+            'by_sender': unread_counts
+        })
+    except Exception as e:
+        print(f"Erro ao buscar não lidas: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/chat/read', methods=['POST'])
+@login_required
+def chat_mark_read():
+    data = request.get_json()
+    sender = data.get('sender')
+    if not sender:
+        return jsonify({'error': 'Remetente não informado'}), 400
+
+    current_user = session.get('username')
+    conn = get_siga_db_connection()
+    if not conn:
+        return jsonify({'error': 'Erro de conexão'}), 500
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE chat_messages
+            SET is_read = TRUE
+            WHERE recipient = %s AND sender = %s AND is_read = FALSE
+        """, (current_user, sender))
+        conn.commit()
+        cur.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Erro ao marcar lidas: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/chat/search', methods=['GET'])
+@login_required
+def chat_search():
+    query = request.args.get('q', '').strip()
+    contact = request.args.get('contact', '').strip()
+    
+    if not query:
+        return jsonify([])
+
+    current_user = session.get('username')
+    conn = get_siga_db_connection()
+    if not conn:
+        return jsonify({'error': 'Erro de conexão'}), 500
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        search_pattern = f"%{query}%"
+
+        if contact:
+            cur.execute("""
+                SELECT id, sender, recipient, message, timestamp
+                FROM chat_messages
+                WHERE ((sender = %s AND recipient = %s) OR (sender = %s AND recipient = %s))
+                AND message ILIKE %s
+                ORDER BY timestamp DESC
+                LIMIT 50
+            """, (current_user, contact, contact, current_user, search_pattern))
+        else:
+            cur.execute("""
+                SELECT id, sender, recipient, message, timestamp
+                FROM chat_messages
+                WHERE (sender = %s OR recipient = %s)
+                AND message ILIKE %s
+                ORDER BY timestamp DESC
+                LIMIT 50
+            """, (current_user, current_user, search_pattern))
+            
+        messages = cur.fetchall()
+        for msg in messages:
+            msg['timestamp'] = msg['timestamp'].strftime('%d/%m %H:%M')
+            if msg['sender'] == current_user:
+                msg['with'] = msg['recipient']
+            else:
+                msg['with'] = msg['sender']
+
+        cur.close()
+        return jsonify(messages)
+    except Exception as e:
+        print(f"Erro na busca do chat: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+import os, time
+from werkzeug.utils import secure_filename
+
+@app.route('/api/chat/upload', methods=['POST'])
+@login_required
+def chat_upload():
+    if 'file' not in request.files:
+        return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+    
+    file = request.files['file']
+    recipient = request.form.get('recipient')
+    
+    if file.filename == '' or not recipient:
+        return jsonify({'error': 'Dados incompletos'}), 400
+
+    current_user = session.get('username')
+    
+    # Criar diretório se não existir
+    upload_folder = os.path.join(app.root_path, 'static', 'chat_uploads')
+    os.makedirs(upload_folder, exist_ok=True)
+    
+    # Gerar nome único
+    original_filename = secure_filename(file.filename)
+    unique_filename = f"{int(time.time())}_{original_filename}"
+    file_path = os.path.join(upload_folder, unique_filename)
+    
+    file.save(file_path)
+    
+    # Gerar a mensagem estruturada
+    # Formato interno: [FILE]|/static/chat_uploads/unique_filename|original_filename
+    file_url = f"/static/chat_uploads/{unique_filename}"
+    message_content = f"[FILE]|{file_url}|{original_filename}"
+    
+    conn = get_siga_db_connection()
+    if not conn:
+        return jsonify({'error': 'Erro de conexão no envio.'}), 500
+    
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO chat_messages (sender, recipient, message) VALUES (%s, %s, %s) RETURNING id, timestamp",
+            (current_user, recipient, message_content)
+        )
+        msg_id, timestamp = cur.fetchone()
+        conn.commit()
+        cur.close()
+        return jsonify({
+            'success': True,
+            'id': msg_id,
+            'timestamp': timestamp.strftime('%d/%m %H:%M'),
+            'sender': current_user,
+            'recipient': recipient,
+            'message': message_content
+        })
+    except Exception as e:
+        print(f"Erro ao salvar arquivo no DB: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
 
 
 # Adiciona um print para depuração do mapa de URLs

@@ -737,6 +737,7 @@
                         <i class="fas fa-chevron-right arrow-icon"></i>
                     </div>
                     <ul id="estoque-submenu" class="ml-6 mt-1 hidden">
+                        <li><a href="{{ url_for('stock_management') }}" class="sidebar-nav-item text-sm"><i class="fas fa-clipboard-list"></i><span class="menu-text">Gestão de Estoque</span></a></li>
                         <li><a href="{{ url_for('stock_movements_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-exchange-alt"></i><span class="menu-text">Movimentações de Estoque</span></a></li>
                         <li><a href="{{ url_for('product_batches_list') }}" class="sidebar-nav-item text-sm"><i class="fas fa-boxes"></i><span class="menu-text">Lotes de Produto</span></a></li>
                     </ul>
@@ -1093,5 +1094,6 @@
     {% block scripts %}
     <!-- Scripts específicos de cada página serão inseridos aqui -->
     {% endblock %}
+{% include 'chat.html' %}
 </body>
 </html>
