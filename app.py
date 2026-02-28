@@ -16023,6 +16023,7 @@ def _parse_stock_management_filters(args):
         'fornecedor': args.getlist('fornecedor'),
         'status': args.getlist('status'),
         'estoque_zero': args.getlist('estoque_zero'),
+        'itens_sem_movimentos': args.getlist('itens_sem_movimentos'),
         'abaixo_minimo': args.getlist('abaixo_minimo')
     })
 
@@ -16039,6 +16040,13 @@ def _normalize_stock_management_filters(raw_filters):
     else:
         text = str(estoque_zero).strip().lower() if estoque_zero is not None else ''
         normalized['estoque_zero'] = [text] if text else []
+
+    itens_sem_movimentos = raw_filters.get('itens_sem_movimentos')
+    if isinstance(itens_sem_movimentos, list):
+        normalized['itens_sem_movimentos'] = _normalize_filter_list(itens_sem_movimentos)
+    else:
+        text = str(itens_sem_movimentos).strip().lower() if itens_sem_movimentos is not None else ''
+        normalized['itens_sem_movimentos'] = [text] if text else []
 
     abaixo_minimo = raw_filters.get('abaixo_minimo')
     if isinstance(abaixo_minimo, list):
@@ -16253,6 +16261,22 @@ def _build_stock_management_query(filters):
     elif 'nao' in estoque_zero:
         clauses.append("estoque <> 0")
 
+    itens_sem_movimentos = _normalize_filter_list(filters.get('itens_sem_movimentos') or [])
+    if 'sim' in itens_sem_movimentos and 'nao' in itens_sem_movimentos:
+        pass
+    elif 'nao' in itens_sem_movimentos:
+        clauses.append(
+            "NOT ("
+            "COALESCE(estoque_minimo, 0) = 0 "
+            "AND COALESCE(media_consumo, 0) = 0 "
+            "AND COALESCE(media_consumo_50, 0) = 0 "
+            "AND COALESCE(estoque, 0) = 0 "
+            "AND COALESCE(pedido_pendente, 0) = 0 "
+            "AND COALESCE(simulacao_compra, 0) = 0 "
+            "AND COALESCE(dias_estoque, 0) = 0"
+            ")"
+        )
+
     if filters.get('abaixo_minimo'):
         clauses.append("estoque < estoque_minimo")
 
@@ -16392,6 +16416,8 @@ def _stock_management_filters_to_query(filters):
             params.append((key, value))
     for value in filters.get('estoque_zero') or []:
         params.append(('estoque_zero', value))
+    for value in filters.get('itens_sem_movimentos') or []:
+        params.append(('itens_sem_movimentos', value))
     if filters.get('abaixo_minimo'):
         params.append(('abaixo_minimo', '1'))
     return urllib.parse.urlencode(params, doseq=True)
@@ -16586,6 +16612,7 @@ def save_stock_management_filters():
         'fornecedor': sanitize_multi('fornecedor'),
         'status': sanitize_multi('status'),
         'estoque_zero': sanitize_multi('estoque_zero'),
+        'itens_sem_movimentos': sanitize_multi('itens_sem_movimentos'),
         'abaixo_minimo': sanitize_multi('abaixo_minimo'),
     }
 
